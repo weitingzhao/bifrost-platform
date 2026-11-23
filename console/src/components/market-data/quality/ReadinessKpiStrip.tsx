@@ -90,7 +90,7 @@ export function ReadinessKpiStrip({
         <KpiCell
           label="Date coverage"
           loading={loading}
-          value={lowCoverageDates === 0 ? 'OK' : fmt(lowCoverageDates)}
+          value={lowCoverageDates === 0 ? 'ok' : fmt(lowCoverageDates)}
           detail={lowCoverageDates === 0 ? 'no low-coverage dates' : 'low-coverage dates'}
         />
       </div>

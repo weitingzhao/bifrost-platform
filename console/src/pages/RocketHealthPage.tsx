@@ -100,9 +100,9 @@ export function RocketHealthPage({
     verdictTagVariant = 'neutral'
     verdictSummary = 'Loading control-plane self-health…'
   } else if (selfHealthQuery.isError) {
-    verdictLamp = 'fail'
-    verdictTag = 'ERROR'
-    verdictTagVariant = 'danger'
+    verdictLamp = 'unknown'
+    verdictTag = 'unknown' // our read failed, so nothing can be judged (state vocabulary, 2026-11-23)
+    verdictTagVariant = 'neutral'
     verdictSummary =
       selfHealthQuery.error instanceof Error
         ? selfHealthQuery.error.message

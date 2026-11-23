@@ -9,7 +9,7 @@ import {
 function CheckRow({ item }: { item: ReadinessCheck }) {
   return (
     <div className="flex flex-wrap items-start gap-2">
-      <DenseTag variant={item.ok ? 'success' : 'danger'}>{item.ok ? 'PASS' : 'FAIL'}</DenseTag>
+      <DenseTag variant={item.ok ? 'success' : 'danger'} title={item.ok ? 'PASS' : 'FAIL'}>{item.ok ? 'ok' : 'fail'}</DenseTag>
       <div className="min-w-0 flex-1">
         <p className="m-0 text-[var(--text-dense-label)] font-medium">{item.label}</p>
         <p className="m-0 mt-0.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
@@ -41,17 +41,18 @@ export function ReadinessVerdictSection({
         : checks.length === 0
           ? 'unknown'
           : 'fail'
+  // The engine's seven words (箭10 2026-11-23): every probe failing is a read that failed, so unknown, not a finding.
   const tagLabel = loading
-    ? 'LOADING'
+    ? '…'
     : allProbesFailed
-      ? 'ERROR'
+      ? 'unknown'
       : overall.pass
-        ? 'PASS'
+        ? 'ok'
         : checks.length === 0
-          ? 'UNKNOWN'
-          : 'FAIL'
+          ? 'unknown'
+          : 'fail'
   const tagVariant =
-    tagLabel === 'PASS' ? 'success' : tagLabel === 'FAIL' || tagLabel === 'ERROR' ? 'danger' : 'neutral'
+    tagLabel === 'ok' ? 'success' : tagLabel === 'fail' ? 'danger' : 'neutral'
 
   return (
     <div className="flex flex-col gap-3">

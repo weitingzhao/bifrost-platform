@@ -102,7 +102,7 @@ export function verdictLabel(v: GapVerdict): string {
     case 'unknown':
       return 'Cannot check'
     case 'ok':
-      return 'OK'
+      return 'ok'
     case 'void':
       return 'Vendor void'
     case 'gaps':

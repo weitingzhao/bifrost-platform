@@ -27,7 +27,7 @@ function isWeekendGapWindow(now = new Date()): boolean {
 }
 
 export function classifyVitalText(text: string): VitalKind {
-  if (text === 'Today OK' || text === 'Session OK') return 'ok'
+  if (text === 'Today ok' || text === 'Session ok') return 'ok'
   if (text.startsWith('Scheduled')) return 'scheduled'
   if (text === 'Missing') return 'missing'
   if (text === PENDING.text) return 'pending'
@@ -72,17 +72,17 @@ export function computeVerdict(
     // Ran for that session or later. A slot that fired after the session closed
     // is current, whatever the calendar has since done.
     if (lastDate && lastDate >= session) {
-      return { text: 'Session OK', kind: 'ok' }
+      return { text: 'Session ok', kind: 'ok' }
     }
   } else if (lastDate && lastDate === utcToday(now)) {
-    return { text: 'Today OK', kind: 'ok' }
+    return { text: 'Today ok', kind: 'ok' }
   }
   if (lastRunAt?.trim() && isWeekendGapWindow(now)) {
     const lastMs = new Date(lastRunAt).getTime()
     if (Number.isFinite(lastMs)) {
       const age = now.getTime() - lastMs
       if (age >= 0 && age <= SESSION_GAP_MAX_AGE_MS) {
-        return { text: 'Session OK', kind: 'ok' }
+        return { text: 'Session ok', kind: 'ok' }
       }
     }
   }
@@ -127,7 +127,7 @@ export function countByKind(kinds: VitalKind[]): {
   unknown: number
 } {
   // `unknown` used to be counted as missing. On a hard reload the header read
-  // `missing 4` at four seconds and `4/4 Session OK` at twenty-four, on the same
+  // `missing 4` at four seconds and `4/4 Session ok` at twenty-four, on the same
   // data: the four cards had simply not loaded yet (2026-09-11, 16:5x UTC).
   return {
     ok: kinds.filter(k => k === 'ok').length,

@@ -74,13 +74,13 @@ export function flexKpiCardMeta(tone: FlexKpiTone): {
 } {
   switch (tone) {
     case 'ok':
-      return { pass: true, tag: 'PASS', tagVariant: 'success', ringBucket: 'ready' }
+      return { pass: true, tag: 'ok', tagVariant: 'success', ringBucket: 'ready' }
     case 'scheduled':
-      return { pass: false, tag: 'WARN', tagVariant: 'warning', ringBucket: 'thin' }
+      return { pass: false, tag: 'warn', tagVariant: 'warning', ringBucket: 'thin' }
     case 'missing':
-      return { pass: false, tag: 'FAIL', tagVariant: 'danger', ringBucket: 'blocked' }
+      return { pass: false, tag: 'fail', tagVariant: 'danger', ringBucket: 'blocked' }
     default:
-      return { pass: false, tag: 'N/A', tagVariant: 'neutral', ringBucket: 'unknown' }
+      return { pass: false, tag: 'unknown', tagVariant: 'neutral', ringBucket: 'unknown' }
   }
 }
 

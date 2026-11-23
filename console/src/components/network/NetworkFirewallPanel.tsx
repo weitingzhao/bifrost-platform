@@ -39,7 +39,7 @@ export function NetworkFirewallPanel() {
       <div className="flex flex-wrap items-center gap-2">
         <StatusLamp value={liveProbe.probeReach} kind="reach" />
         <DenseTag variant={classificationVariant(audit?.classification)}>
-          {audit?.classification ?? (liveProbe.isLoading ? 'AUDIT…' : 'UNKNOWN')}
+          {audit?.classification ?? (liveProbe.isLoading ? '…' : 'unknown')}
         </DenseTag>
         <DenseTag variant="info">L1 apply</DenseTag>
         <code className="text-[var(--text-dense-caption)] font-mono">

@@ -8,10 +8,12 @@ import {
 } from '@/components/market-data/dataVitalsModel'
 
 describe('dataVitalsModel', () => {
-  it('marks last_run today as Today OK', () => {
+  // 2026-11-23 UI / Console: the tile printed `Session OK` in capitals beside the engine's lower-case
+  // words on the same page; the word inside the tile is the engine's `ok` now.
+  it('marks last_run today as Today ok', () => {
     const now = new Date('2026-08-22T15:00:00.000Z')
     expect(computeVerdict('2026-08-22T12:00:00.000Z', undefined, now)).toEqual({
-      text: 'Today OK',
+      text: 'Today ok',
       kind: 'ok',
     })
   })
@@ -31,10 +33,10 @@ describe('dataVitalsModel', () => {
     expect(computeVerdict('2026-08-20T05:00:00.000Z', next, now).kind).toBe('scheduled')
   })
 
-  it('marks Fri EOD on Monday morning as Session OK', () => {
+  it('marks Fri EOD on Monday morning as Session ok', () => {
     const now = new Date('2026-08-31T15:00:00.000Z') // Monday
     expect(computeVerdict('2026-08-30T05:31:00.000Z', '2026-08-31T22:00:00.000Z', now)).toEqual({
-      text: 'Session OK',
+      text: 'Session ok',
       kind: 'ok',
     })
   })
@@ -63,7 +65,7 @@ describe('dataVitalsModel', () => {
       pending: 0,
       unknown: 0,
     })
-    expect(classifyVitalText('Today OK')).toBe('ok')
+    expect(classifyVitalText('Today ok')).toBe('ok')
     expect(vitalFill('ok')).toBe(100)
     expect(vitalFill('missing')).toBe(0)
   })

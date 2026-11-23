@@ -200,7 +200,7 @@ function StatusCell({ row }: { row: DepthRow }) {
     )
   }
   if (row.status === 'ok' || row.missingDays === 0) {
-    return <DenseTag variant="success">OK</DenseTag>
+    return <DenseTag variant="success">ok</DenseTag>
   }
   const n = row.missingDays ?? 0
   return <DenseTag variant="warning">{n} gaps</DenseTag>

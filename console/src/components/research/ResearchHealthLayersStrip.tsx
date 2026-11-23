@@ -1,6 +1,7 @@
 import { StatusLamp, cn } from '@bifrost/ui'
 import {
   layerVerdictToLamp,
+  layerWord,
   type ResearchHealthLayerView,
 } from '@/lib/research/researchHealthCopy'
 
@@ -50,8 +51,8 @@ function LayerBody({ layer }: { layer: ResearchHealthLayerView }) {
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
           <span className="text-dense-label font-medium text-foreground">{layer.label}</span>
-          <span className="font-mono text-dense-micro uppercase text-muted-foreground">
-            {layer.verdict}
+          <span className="font-mono text-dense-micro text-muted-foreground" title={layer.verdict}>
+            {layerWord(layer.verdict)}
           </span>
         </span>
         <span className="mt-0.5 block text-dense-caption text-muted-foreground">{layer.meta}</span>

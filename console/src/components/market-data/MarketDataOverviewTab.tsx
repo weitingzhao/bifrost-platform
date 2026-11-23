@@ -1,4 +1,5 @@
-import { reachTag } from '@/lib/shell/stateWords'
+import { reachTag, TAG_VARIANT } from '@/lib/shell/stateWords'
+import { statusOfWord } from '@bifrost/ui/city/world'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
@@ -79,8 +80,8 @@ export function MarketDataOverviewTab({
               title="Coverage → Quality Score"
               onClick={() => onOpenCoverage?.('quality')}
             >
-              <DenseTag variant={qualitySummary === 'PASS' ? 'success' : 'danger'}>
-                Quality {qualitySummary}
+              <DenseTag variant={TAG_VARIANT[statusOfWord(qualitySummary)]} title={`Quality ${qualitySummary}`}>
+                Quality {statusOfWord(qualitySummary)}
               </DenseTag>
             </button>
           ) : null

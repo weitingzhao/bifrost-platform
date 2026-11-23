@@ -1,18 +1,14 @@
-import { Button, DenseTag, type DenseTagVariant } from '@bifrost/ui'
+import { Button, DenseTag } from '@bifrost/ui'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { fetchDataHusbandry, type HusbandryLaneView } from '@/api/dataHusbandry'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { useOrchestrationStatus } from '@/domains/tenant/orchestration/useOrchestrationStatus'
 import { formatSchedulesSummary } from '@/lib/research/researchHealthCopy'
+import { statusOfWord } from '@bifrost/ui/city/world'
 import { massiveReadinessHref } from '@/lib/research/massiveNav'
 
-function verdictVariant(v: string): DenseTagVariant {
-  if (v === 'healthy') return 'success'
-  if (v === 'due' || v === 'draining' || v === 'caution') return 'warning'
-  if (v === 'missed' || v === 'degraded') return 'danger'
-  return 'neutral'
-}
 
 function LaneChip({ lane }: { lane: HusbandryLaneView }) {
   return (
@@ -20,7 +16,8 @@ function LaneChip({ lane }: { lane: HusbandryLaneView }) {
       className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
       title={lane.detail}
     >
-      <DenseTag variant={verdictVariant(lane.verdict)}>{lane.verdict.toUpperCase()}</DenseTag>
+      {/* The engine's seven words (the engine's statusOfWord); the lane's own verdict is in the hover. */}
+      <DenseTag variant={TAG_VARIANT[statusOfWord(lane.verdict)]} title={lane.verdict}>{statusOfWord(lane.verdict)}</DenseTag>
       <span className="text-dense-caption font-medium text-foreground">{lane.label}</span>
       {lane.source != null && lane.source !== '' ? (
         <span className="text-dense-micro text-muted-foreground">src={lane.source}</span>

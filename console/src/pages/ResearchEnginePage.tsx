@@ -51,6 +51,8 @@ import {
 } from '@/lib/research/researchEngineLanding'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { buildResearchVerdictCopy } from '@/lib/research/researchHealthCopy'
+import { statusOfWord } from '@bifrost/ui/city/world'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import {
   formatReadinessRollupLine,
   openFlexManage,
@@ -644,8 +646,8 @@ export function ResearchEnginePage({
                     title={lane.detail}
                   >
                     <StatusLamp value={laneLamp(lane.verdict)} kind="reach" />
-                    <DenseTag variant={lane.verdict === 'healthy' ? 'success' : lane.verdict === 'degraded' || lane.verdict === 'missed' ? 'danger' : 'warning'}>
-                      {lane.verdict.toUpperCase()}
+                    <DenseTag variant={TAG_VARIANT[statusOfWord(lane.verdict)]} title={lane.verdict}>
+                      {statusOfWord(lane.verdict)}
                     </DenseTag>
                     <span className="text-dense-caption font-medium">{lane.label}</span>
                     <span className="text-dense-micro text-muted-foreground">{lane.detail}</span>
@@ -689,7 +691,7 @@ export function ResearchEnginePage({
                       value={laneLamp(orchestration?.verdict)}
                       kind="reach"
                     />
-                    {orchestration?.verdict?.toUpperCase() ?? '—'}
+                    {orchestration?.verdict != null ? statusOfWord(orchestration.verdict) : '—'}
                   </span>
                 }
                 detail={orchestrationErr || orchestration?.detail || 'GET /research/orchestration/status'}
@@ -725,7 +727,7 @@ export function ResearchEnginePage({
               <ul className="mt-2 m-0 list-none space-y-1 p-0 text-dense-caption text-muted-foreground">
                 {orchestration.recent_failures.map(f => (
                   <li key={f.name} className="font-mono">
-                    FAIL {f.name}
+                    fail {f.name}
                     {f.last_run_status ? ` · ${f.last_run_status}` : ''}
                     {f.last_run_ended_at ? ` · ${formatWhen(f.last_run_ended_at)}` : ''}
                   </li>
@@ -733,7 +735,7 @@ export function ResearchEnginePage({
               </ul>
             ) : null}
             <p className="mt-2 m-0 text-dense-micro text-muted-foreground">
-              research_olap: {researchLane?.verdict?.toUpperCase() ?? '—'}
+              research_olap: {researchLane?.verdict != null ? statusOfWord(researchLane.verdict) : '—'}
               {researchLane?.detail ? ` · ${researchLane.detail}` : ''}
             </p>
           </OpsSection>
@@ -742,7 +744,7 @@ export function ResearchEnginePage({
             <div className="mb-2 grid gap-2 text-dense-body sm:grid-cols-2 lg:grid-cols-4">
               <Metric
                 label="Overall"
-                value={signalHealth?.overall?.toUpperCase() ?? '—'}
+                value={signalHealth?.overall != null ? statusOfWord(signalHealth.overall) : '—'}
                 detail={
                   signalHealthErr ||
                   (freshnessStack.total > 0

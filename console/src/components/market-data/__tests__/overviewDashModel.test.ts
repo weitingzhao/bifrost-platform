@@ -10,6 +10,6 @@ describe('tickRank', () => {
   it('ranks status words for color direction', () => {
     expect(tickRank('ok')).toBeGreaterThan(tickRank('degraded') ?? -1)
     expect(tickRank('fail')).toBe(0)
-    expect(tickRank('Today OK')).toBe(2)
+    expect(tickRank('Today ok')).toBe(2)
   })
 })

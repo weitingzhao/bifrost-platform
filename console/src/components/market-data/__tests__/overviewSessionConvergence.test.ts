@@ -12,7 +12,7 @@ const AFTER_EOD_UTC_ROLLED_OVER = new Date('2026-09-11T01:52:00Z')
 describe('the session, not the calendar day', () => {
   it('calls a feed that ran for the session current, whatever the date has done', () => {
     const v = computeVerdict('2026-09-10T22:00:12Z', undefined, AFTER_EOD_UTC_ROLLED_OVER, '2026-09-10')
-    expect(v).toEqual({ text: 'Session OK', kind: 'ok' })
+    expect(v).toEqual({ text: 'Session ok', kind: 'ok' })
   })
 
   it('is exactly the reading that used to say Missing', () => {

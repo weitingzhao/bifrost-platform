@@ -179,9 +179,9 @@ export function SatelliteTelemetryPage({
     verdictTagVariant = 'neutral'
     verdictSummary = `Loading telemetry for ${ns}…`
   } else if (telemetryUnavailable || telemetryError) {
-    verdictLamp = 'fail'
-    verdictTag = 'ERROR'
-    verdictTagVariant = 'danger'
+    verdictLamp = 'unknown'
+    verdictTag = 'unknown' // our read failed, so nothing can be judged (state vocabulary, 2026-11-23)
+    verdictTagVariant = 'neutral'
     verdictSummary = telemetryUnavailable
       ? 'Prometheus unavailable — configure observability_urls.prometheus or PLATFORM_PROMETHEUS_URL.'
       : telemetryQuery.error instanceof Error

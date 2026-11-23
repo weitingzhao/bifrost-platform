@@ -12,6 +12,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { flexEnqueueBlockReason } from '@/lib/flex-query/flexEnqueueGuards'
 import { analyzeFlexProbe } from '@/lib/flex-query/flexQueryRemediation'
+import { reachTag } from '@/lib/shell/stateWords'
 
 type FlexRemediationPanelProps = {
   status: MarketDataStatusResponse | undefined
@@ -114,8 +115,8 @@ export function FlexRemediationPanel({
       defaultCollapsed={false}
       headerExtra={
         probeReach !== 'ok' ? (
-          <DenseTag variant={probeReach === 'fail' ? 'danger' : 'warning'}>
-            {probeReach.toUpperCase()}
+          <DenseTag variant={reachTag(probeReach).tagVariant} title={probeReach}>
+            {reachTag(probeReach).tagLabel}
           </DenseTag>
         ) : null
       }

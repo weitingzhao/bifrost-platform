@@ -116,7 +116,7 @@ function ClusterFacilityPolicyPanel({
               </DenseTableCell>
               <DenseTableCell>
                 <StatusLamp value={rule.reachability} kind="reach" />{' '}
-                {rule.satisfied ? 'OK' : 'Gap'}
+                {rule.satisfied ? 'ok' : 'Gap'}
               </DenseTableCell>
               <DenseTableCell className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 <span className="inline-flex flex-wrap items-center gap-2">

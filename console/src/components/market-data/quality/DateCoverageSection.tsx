@@ -47,7 +47,7 @@ export function DateCoverageSection({
         <div className="flex items-center gap-2">
           {loading || error != null ? null : (
             <DenseTag variant={ok ? 'success' : 'warning'}>
-              {ok ? 'OK' : `${count} dates`}
+              {ok ? 'ok' : `${count} dates`}
             </DenseTag>
           )}
           {action}

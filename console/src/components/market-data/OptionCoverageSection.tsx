@@ -148,7 +148,7 @@ function GreeksStatusCell({ row }: { row: JoinedRow }) {
   }
   const pct = Math.round(row.greeksPct)
   if (pct >= 100) {
-    return <DenseTag variant="success">OK</DenseTag>
+    return <DenseTag variant="success">ok</DenseTag>
   }
   if (pct > 80) {
     return <DenseTag variant="warning">{pct}%</DenseTag>

@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { statusOfWord } from '@bifrost/ui/city/world'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { DenseTag } from '@bifrost/ui'
 import {
   fetchQualityScore,
@@ -27,9 +29,10 @@ function CheckCard({ item }: { item: QualityCheckItem }) {
   return (
     <DashCard
       title={qualityCheckLabel(item.check)}
-      tag={pass ? 'PASS' : 'FAIL'}
+      // The engine's seven words (箭10 2026-11-23, Market Data slice); the check's own verdict is PASS / FAIL.
+      tag={pass ? 'ok' : 'fail'}
       tagVariant={pass ? 'success' : 'danger'}
-      value={pass ? 'OK' : `${Math.round(fill)}%`}
+      value={pass ? 'ok' : `${Math.round(fill)}%`}
       rawValue={fill}
       invertFlash={!pass}
       caption={qualityCheckCaption(item)}
@@ -75,14 +78,13 @@ export function QualityScoreSection() {
   const checks: QualityCheckItem[] = score?.checks ?? []
   const passed = checks.filter(c => c.ok).length
   const failed = checks.length - passed
-  const overallPass = summary === 'PASS'
 
   return (
     <OpsSection
       title="Data quality score"
       headerExtra={
         q.isLoading || err != null || summary == null ? null : (
-          <DenseTag variant={overallPass ? 'success' : 'danger'}>{summary}</DenseTag>
+          <DenseTag variant={TAG_VARIANT[statusOfWord(summary)]} title={summary}>{statusOfWord(summary)}</DenseTag>
         )
       }
       bodyPadding="compact"

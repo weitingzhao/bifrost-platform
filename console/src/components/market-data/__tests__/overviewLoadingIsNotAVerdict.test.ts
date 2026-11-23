@@ -9,7 +9,7 @@ import {
 /**
  * 2026-09-11, a hard reload of the Massive Overview on data that held the
  * session: at 4 s the Stock summary read `missing 4`, at 14 s `missing 3`, at
- * 24 s `4/4 Session OK`; Analytics demand read `thin 5 · 0/6` at 14 s and
+ * 24 s `4/4 Session ok`; Analytics demand read `thin 5 · 0/6` at 14 s and
  * `ready 4 · thin 1` once loaded. Nothing about the data changed — the page was
  * stating verdicts about values that had not arrived yet.
  */
@@ -56,7 +56,7 @@ describe('Stock summary: a value that has not arrived is not a finding', () => {
 
   it('judges the session once both are in', () => {
     const v = judgeVital(RAN_FOR_SESSION, undefined, { inputs: 'arrived', session: SESSION, schedule: 'arrived' }, NOON_NY)
-    expect(v).toEqual({ text: 'Session OK', kind: 'ok' })
+    expect(v).toEqual({ text: 'Session ok', kind: 'ok' })
   })
 
   it('holds a Missing until the read that could make it Scheduled is in', () => {

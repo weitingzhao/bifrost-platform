@@ -1,3 +1,4 @@
+import { statusOfWord } from '@bifrost/ui/city/world'
 import { STATE_WORD, TAG_VARIANT, type StatusWord } from '@/lib/shell/stateWords'
 /**
  * Human-readable Research Engine health copy — shared by page strip + sidebar tooltip.
@@ -127,13 +128,26 @@ function batchHumanMeta(input: ResearchHealthCopyInput, verdict: HealthLayerVerd
   return sla
 }
 
-function feedstockMeta(market: HealthLayerVerdict, flex: HealthLayerVerdict): string {
+/**
+ * Why a layer the Console derived as degraded is a failure, said in the sentence (箭10 2026-11-23): the label is fail,
+ * never degraded, so degraded keeps one meaning city-wide (a source's own warn).
+ */
+function failReason(raw: string | null | undefined, fallback: string): string {
+  const x = (raw ?? '').toLowerCase().trim()
+  return x === 'empty' ? 'empty' : x === 'stale' ? 'stale' : fallback
+}
+
+function feedstockPart(label: string, v: HealthLayerVerdict, raw: string | null | undefined): string {
+  return v === 'degraded' ? `${label} fail · ${failReason(raw, 'stale')}` : `${label} ${layerWord(v)}`
+}
+
+function feedstockMeta(input: ResearchHealthCopyInput, market: HealthLayerVerdict, flex: HealthLayerVerdict): string {
   const parts: string[] = []
   if (market !== 'healthy' && market !== 'unknown') {
-    parts.push(`Market ${market.toUpperCase()}`)
+    parts.push(feedstockPart('Market', market, input.marketVerdict))
   }
   if (flex !== 'healthy' && flex !== 'unknown') {
-    parts.push(`Flex ${flex.toUpperCase()}`)
+    parts.push(feedstockPart('Flex', flex, input.flexVerdict))
   }
   if (parts.length === 0) {
     if (market === 'unknown' && flex === 'unknown') return 'upstream unprobed'
@@ -142,10 +156,10 @@ function feedstockMeta(market: HealthLayerVerdict, flex: HealthLayerVerdict): st
   return `${parts.join(' · ')} (upstream)`
 }
 
-function layerPhrase(label: string, verdict: HealthLayerVerdict): string {
-  if (verdict === 'healthy') return `${label} OK`
+function layerPhrase(label: string, verdict: HealthLayerVerdict, reason?: string): string {
   if (verdict === 'unknown') return `${label} unprobed`
-  return `${label} ${verdict.toUpperCase()}`
+  if (verdict === 'degraded' && reason) return `${label} fail · ${reason}`
+  return `${label} ${layerWord(verdict)}`
 }
 
 function toLamp(v: HealthLayerVerdict): ResearchVerdictCopy['lamp'] {
@@ -154,16 +168,20 @@ function toLamp(v: HealthLayerVerdict): ResearchVerdictCopy['lamp'] {
   return 'fail'
 }
 
+/**
+ * A layer verdict in the engine's seven words: the engine's one table (statusOfWord), with one exception. The Console
+ * derives its own `degraded` from a stale or empty layer or a failed trading-day run (worse() / layerFromStatus above),
+ * so here it is a failure, not the engine's degraded = warn (stale counts as fail, 箭10 2026-11-23).
+ */
+export function layerWord(v: HealthLayerVerdict): StatusWord {
+  return v === 'degraded' ? 'fail' : statusOfWord(v)
+}
+
 function toTag(v: HealthLayerVerdict): {
   tagLabel: string
   tagVariant: ResearchVerdictCopy['tagVariant']
 } {
-  // The engine's seven words (lib/shell/stateWords, 箭10 2026-11-23): due is the next run not come yet
-  // (boundary), draining / caution / degraded need attention (warn), a missed run is a failure (fail).
-  const word: StatusWord =
-    // degraded is where a stale or empty layer lands, and it already ranks and lights as a failure here:
-    // its word is fail too (stale is older than its declared freshness, 箭10 2026-11-23).
-    v === 'healthy' ? 'ok' : v === 'due' ? 'boundary' : v === 'unknown' ? 'unknown' : v === 'missed' || v === 'degraded' ? 'fail' : 'warn'
+  const word = layerWord(v)
   return { tagLabel: word, tagVariant: TAG_VARIANT[word] }
 }
 
@@ -192,7 +210,7 @@ function buildResearchHealthLayers(
       id: 'feedstock',
       label: 'Feedstock',
       verdict: feedstock,
-      meta: feedstockMeta(market, flex),
+      meta: feedstockMeta(input, market, flex),
     },
     {
       id: 'batch',
@@ -208,7 +226,7 @@ function buildResearchHealthLayers(
         product === 'healthy'
           ? 'signal-health tables fresh'
           : product === 'degraded'
-            ? 'feature tables stale or missing'
+            ? `feature tables ${failReason(input.productOverall, 'stale')}`
             : 'signal-health unprobed',
     },
   ]
@@ -244,8 +262,8 @@ export function buildResearchVerdictCopy(input: ResearchHealthCopyInput): Resear
   const { tagLabel, tagVariant } = toTag(rollup)
 
   const human = [
-    layerPhrase('Product', product),
-    layerPhrase('Batch', batch),
+    layerPhrase('Product', product, failReason(input.productOverall, 'stale')),
+    layerPhrase('Batch', batch, failReason(input.batchVerdict, 'run failed')),
     feedstock.verdict !== 'healthy' && feedstock.verdict !== 'unknown'
       ? feedstock.meta
       : null,

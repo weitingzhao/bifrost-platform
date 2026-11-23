@@ -6,13 +6,13 @@ describe('flexKpiCardMeta', () => {
   it('maps tones to pass tags and ring buckets', () => {
     expect(flexKpiCardMeta('ok')).toEqual({
       pass: true,
-      tag: 'PASS',
+      tag: 'ok', // 2026-11-23 (箭10, Market Data slice): the engine's seven words, not PASS / FAIL
       tagVariant: 'success',
       ringBucket: 'ready',
     })
-    expect(flexKpiCardMeta('scheduled').tag).toBe('WARN')
-    expect(flexKpiCardMeta('missing').tag).toBe('FAIL')
-    expect(flexKpiCardMeta('unknown').tag).toBe('N/A')
+    expect(flexKpiCardMeta('scheduled').tag).toBe('warn')
+    expect(flexKpiCardMeta('missing').tag).toBe('fail')
+    expect(flexKpiCardMeta('unknown').tag).toBe('unknown')
   })
 })
 

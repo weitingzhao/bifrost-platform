@@ -3,6 +3,7 @@ import type { MarketDataReachability } from '@/api/satelliteBusTypes'
 import { DashCard, Meter, ScoreRing } from '@/components/market-data/overviewDash'
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { WORD_OF_REACH } from '@/lib/shell/stateWords'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
 
 function reachLevel(
@@ -103,9 +104,9 @@ export function ApiReachabilityPanel({
             <DashCard
               key={p.id}
               title={p.title}
-              tag={p.reach}
+              tag={WORD_OF_REACH[p.reach]}
               tagVariant={reachTagVariant(p.reach)}
-              value={p.reach.toUpperCase()}
+              value={WORD_OF_REACH[p.reach]}
               rawValue={p.reach}
               caption={p.path}
             >
