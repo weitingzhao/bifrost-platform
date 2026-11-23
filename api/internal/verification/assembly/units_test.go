@@ -1,6 +1,6 @@
-//bifrost:owner verification
+// Moved from server (units_scope_test.go) on 2026-11-23, with UnitConfig.
 
-package server
+package assembly
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/unitexec"
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
 // scopeTrees serves commits by name from files by path, as unitplan reads them.
-func scopeTrees(t *testing.T, commits map[string]map[string]string) unitTreesFunc {
+func scopeTrees(t *testing.T, commits map[string]map[string]string) unitexec.TreesFunc {
 	t.Helper()
 	return func(_ context.Context, repo, commit string) (*unitplan.Tree, error) {
 		files, ok := commits[commit]
@@ -71,7 +72,7 @@ modules:
 		"svc/a/a.go": "package a\n", "svc/a/a_test.go": "package a\n", "svc/b/b.go": "package b\n", "svc/b/b_test.go": "package b\n",
 		"svc/c/c.go": "package c\n", "svc/c/c_test.go": "package c\n", "web/index.ts": "1"}
 	c := strings.Repeat("c", 40)
-	got, err := unitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c)
+	got, err := UnitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c)
 	if err != nil || !got.Declared || got.Note != "" || len(got.Modules) != 2 {
 		t.Fatalf("declared: %+v %v", got, err)
 	}
@@ -84,11 +85,11 @@ modules:
 		t.Errorf("web: %+v", web)
 	}
 	delete(files, "bifrost.units.yaml")
-	if got, err = unitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c); err != nil || got.Declared || len(got.Modules) != 0 || !strings.Contains(got.Note, "one block") {
+	if got, err = UnitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c); err != nil || got.Declared || len(got.Modules) != 0 || !strings.Contains(got.Note, "one block") {
 		t.Errorf("no declaration: %+v %v", got, err)
 	}
 	files["bifrost.units.yaml"] = "version: 7\n"
-	if got, err = unitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c); err != nil || !got.Declared || len(got.Modules) != 0 || !strings.Contains(got.Note, "does not read") {
+	if got, err = UnitConfig(context.Background(), scopeTrees(t, map[string]map[string]string{c: files}), "r", c); err != nil || !got.Declared || len(got.Modules) != 0 || !strings.Contains(got.Note, "does not read") {
 		t.Errorf("a declaration that does not read: %+v %v", got, err)
 	}
 }

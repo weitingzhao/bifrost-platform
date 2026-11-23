@@ -107,6 +107,10 @@ modules:
       api/internal/agentrt/artifact: ["api/internal/agentrt/artifact", "api/internal/bus/registry/ledger"]
       # 2026-11-18: the full-CI check's test compares its answer with the Console's contract file.
       api/internal/agentrt/fullci: ["api/internal/agentrt/fullci", "api/internal/server/testdata/contract/units"]
+      # 2026-11-23: the unit configuration's tests moved here from server; they
+      # compare with the Console's contract files and walk the api tree against
+      # the ownership table (TestDomainOwnershipCatalog).
+      api/internal/verification/assembly: ["api", "config/domain-ownership.json"]
       # 2026-11-17: TestFullCINotedIsRegistered reads the event register.
       api/internal/agentrt/evidence: ["api/internal/agentrt/evidence", "api/internal/bus/registry/ledger"]
       # 2026-11-17: TestNotedTypeIsRegistered reads the event register.

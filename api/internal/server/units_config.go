@@ -5,21 +5,18 @@ import (
 	"net/http"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciconfig"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 )
 
-// GET /api/v1/units/config (ciconfig.Route); this file hands it Gitea.
-
-// Storage and HTTP remain adapters; CI configuration projection owns its model.
-func unitConfig(ctx context.Context, trees unitTreesFunc, repo, commit string) (ciconfig.Answer, error) {
-	return ciconfig.Read(ctx, ciconfig.Trees(trees), repo, commit)
-}
+// GET /api/v1/units/config (ciconfig.Route, read by
+// verificationassembly.UnitConfig); this file hands it Gitea.
 
 func (s *Server) handleUnitConfig(w http.ResponseWriter, r *http.Request) {
 	ciconfig.Route{RepoOK: giteaName.MatchString, CommitOK: commitID.MatchString,
 		Available: func() bool { return s.delivery != nil },
 		MainHead:  s.mainHead,
 		Read: func(ctx context.Context, repo, commit string) (ciconfig.Answer, error) {
-			return unitConfig(ctx, s.unitTreesOf(), repo, commit)
+			return verificationassembly.UnitConfig(ctx, s.unitTreesOf(), repo, commit)
 		}}.ServeHTTP(w, r)
 }
 
