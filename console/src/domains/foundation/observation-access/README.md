@@ -59,6 +59,23 @@ Mocked transport tests cover one concurrent capture, remount cache reuse,
 GET-only scope, failure recovery, unchanged pinned data, true zero, stale/unknown
 time and cancellation. Browser testing uses real telemetry, not mocked messages.
 
+## Shared observation context (UI 0.32.0)
+
+`@bifrost/ui/city/observationContext` now provides `useObservationContext`.
+It retains one optional pinned snapshot reference, full selected path, metrics
+visibility and observation time. Keep it above navigation; pass the returned
+snapshot/context to engine projections. World navigation owns where it lives;
+Ledger owns precise reading projections. This host access directory still owns
+only reading/caching, not UI state or a second copy of the hook.
+
+The local acceptance entry uses this hook with the existing readingView and
+statusView. Real capture 2026-11-23T03:40:06.532Z remained fixed at observation
+time 03:40:13.393Z while incoming advanced to 03:40:37.034Z. Selecting another
+real device from the second projection and returning from the first preserved
+source evidence exactly. Resume used incoming data and retained the selection.
+These are recorded acceptance facts, not current production state. Formal
+Signals/Console/City controlled-prop adoption remains with each consumer owner.
+
 ## Independent domain status
 
 `domainStatusObservationOptions()` and `useDomainStatusObservation()` opt in to

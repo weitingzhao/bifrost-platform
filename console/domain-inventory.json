@@ -1987,6 +1987,7 @@
       "files": [
         "console/src/domains/foundation/observation-access/README.md",
         "console/src/domains/foundation/observation-access/access.test.tsx",
+        "console/src/domains/foundation/observation-access/context.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.ts",
         "console/src/domains/foundation/observation-access/index.ts"
@@ -2003,6 +2004,7 @@
       ],
       "external_imports": [
         "@bifrost/ui/city/observation",
+        "@bifrost/ui/city/observationContext",
         "@tanstack/react-query",
         "@testing-library/react",
         "vitest"
