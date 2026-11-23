@@ -24,7 +24,7 @@ import {
 } from '@/lib/shell/consoleRoutes'
 
 const ENTRIES = ['Command', 'Crew', 'Work', 'Services', 'System']
-const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'Collaboration', 'City', 'Records']
+const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Bus', 'Collaboration', 'Observation', 'City', 'Records']
 
 describe('shell navigation', () => {
   it('has four entries, For you first, then the detail pages with Records last', () => {
