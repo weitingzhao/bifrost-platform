@@ -1,14 +1,21 @@
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState } from 'react'
-import { ObservationSurface, anomalyLayer, type ObservationSnapshot } from '@bifrost/ui/city/observation'
+import { ObservationSurface, RuntimeWorld, anomalyLayer, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 import { captureReads, snapshotOf } from './read'
 import { qualityFixture } from './qualityFixture'
+import { readOperations } from '../../src/domains/foundation/runtime-observation/operations'
 
 /** Standalone read-only entry. No Console route or other team's transport is modified. */
 export function Preview() {
   const [snapshot, setSnapshot] = useState<ObservationSnapshot>()
   const [error, setError] = useState('')
   useEffect(() => {
+    if (new URLSearchParams(location.search).get('scenario') === 'village') {
+      let active = true
+      const get = async (path: string) => { const r = await fetch(path === '/api/v1/catalog/status' ? '/.observation-cache/domain-status-recorded.json' : path); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() }
+      void Promise.all([captureReads(get).then(r=>snapshotOf(r,'recorded')),readOperations(get)]).then(([base,ops])=>{if(active)setSnapshot({...base,capturedAt:new Date().toISOString(),evidence:{...base.evidence,...ops.evidence},layerPanels:ops.panels})}).catch(e=>{if(active)setError(String(e))})
+      return ()=>{active=false}
+    }
     if (new URLSearchParams(location.search).get('scenario') === 'quality') { setSnapshot(qualityFixture()); return }
     if (new URLSearchParams(location.search).get('scenario') === 'communication') {
       let active = true
@@ -33,6 +40,7 @@ export function Preview() {
     void read()
     return () => { cancelled = true; controller.abort(); clearTimeout(timer) }
   }, [])
+  if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'village') return <RuntimeWorld snapshot={snapshot}/>
   return <>{error && <p role="alert">Read failed: {error}</p>}{snapshot ? <ObservationSurface snapshot={snapshot} initialSelection={snapshot.provenance === 'fixture' ? [] : ['utilities']} layers={[anomalyLayer, { id: 'communication', label: 'Communication', unavailable: snapshot.layerPanels?.communication ? undefined : 'Live communication is not connected in this slice.', present: s => s.layerPanels?.communication ?? [] }]} /> : <p>Reading the existing platform telemetry contract…</p>}</>
 }
 createRoot(document.getElementById('root')!).render(<Preview />)

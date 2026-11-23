@@ -4,14 +4,16 @@ import { authedFetch } from '@/api/client'
 import { useCommunication } from '@/domains/coordination/communication/useCommunication'
 import { captureReads, snapshotOf } from './read'
 import { communicationPanels } from './communication'
+import { readOperations } from './operations'
 
 /** Both readers remain mounted when a display layer, animation, skin or view is switched. */
 export default function RuntimeObservation() {
   const communication = useCommunication()
   const readings = useQuery({ queryKey: ['runtime-observation', 'hardware'], queryFn: async ({ signal }) => snapshotOf(await captureReads(async path => (await authedFetch('Runtime observation', path, { signal })).json()), 'live'), refetchInterval: 30000 })
+  const operations = useQuery({ queryKey: ['runtime-observation', 'operations'], queryFn: ({ signal }) => readOperations(async path => (await authedFetch('Signal source', path, { signal })).json()), refetchInterval: 30000 })
   if (!readings.data) return <p role="status">{readings.error ? 'Read failed: ' + String(readings.error) : 'Reading platform telemetry…'}</p>
   // The composite is pinned atomically by the engine; background transport is independent.
   const capturedAt = new Date().toISOString()
-  const snapshot = { ...readings.data, id: readings.data.id + ':' + capturedAt, capturedAt, layerPanels: { communication: communicationPanels(communication, capturedAt) } }
+  const snapshot = { ...readings.data, id: readings.data.id + ':' + capturedAt, capturedAt, evidence: { ...readings.data.evidence, ...operations.data?.evidence }, layerPanels: { ...operations.data?.panels, communication: communicationPanels(communication, capturedAt) } }
   return <RuntimeWorld snapshot={snapshot} links={[{label: 'Agents', href: '#collaboration'}, {label: 'City', href: '#city'}, {label: 'Console', href: '#system'}]} />
 }

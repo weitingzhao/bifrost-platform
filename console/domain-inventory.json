@@ -2176,15 +2176,21 @@
         "console/src/domains/foundation/runtime-observation/RuntimeObservation.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/communication-contract.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/lifecycle.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/operations.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
+        "console/src/domains/foundation/runtime-observation/operations.ts",
         "console/src/domains/foundation/runtime-observation/read.ts"
       ],
       "imports": [
+        "console/src",
         "console/src/api/client.ts",
         "console/src/domains/coordination/communication",
-        "console/src/domains/owner/city"
+        "console/src/domains/delivery/api",
+        "console/src/domains/owner/city",
+        "console/src/domains/tenant/husbandry/api",
+        "console/src/lib/delivery"
       ],
       "test_imports": [],
       "external_imports": [
