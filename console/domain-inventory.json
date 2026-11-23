@@ -2768,6 +2768,7 @@
         "console/src/api/approvals.ts",
         "console/src/api/cluster.ts",
         "console/src/hooks/platformAuthContext.ts",
+        "console/src/lib",
         "console/src/lib/platformAuth.ts"
       ],
       "test_imports": [],
@@ -2963,13 +2964,16 @@
         "console/src/lib/__tests__/signInError.test.ts",
         "console/src/lib/__tests__/tradeFrontendUrls.test.ts",
         "console/src/lib/envVisual.ts",
+        "console/src/lib/harnessSession.ts",
         "console/src/lib/patrol/cronSchedule.ts",
         "console/src/lib/patrol/logLanguage.ts",
         "console/src/lib/patrol/usePatrolOutputLanguage.ts"
       ],
       "imports": [
+        "console/src/api/serverContact.ts",
         "console/src/domains/foundation/patrol-view",
-        "console/src/domains/tenant/environment"
+        "console/src/domains/tenant/environment",
+        "console/src/lib/platformAuth.ts"
       ],
       "test_imports": [
         "console/src/lib/signInError.ts",
@@ -5006,6 +5010,7 @@
         "console/src/hooks/useIbGatewayLiveProbe.ts",
         "console/src/hooks/useMarketDataLiveProbe.ts",
         "console/src/hooks/usePlatformAuth.ts",
+        "console/src/lib",
         "console/src/lib/observability",
         "console/src/lib/shell",
         "console/src/pages/SatelliteHealthPage.tsx",

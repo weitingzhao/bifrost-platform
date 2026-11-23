@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/harnesssession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
@@ -37,6 +38,7 @@ func (s *Server) mountFoundation(r chi.Router) {
 	r.Get("/self-health", s.selfhealth.HandleSelfHealth)
 	r.Get("/context", s.promote.HandleOpsContext(s.cfg.OpsContext))
 	r.Get("/auth/capabilities", s.auth.Capabilities)
+	r.With(s.auth.RequireAny(actuation.RoleAdmin)).Post("/harness-preview/grants", harnesssession.IssueForAdmin)
 	r.Get("/audit", s.audit.HandleList)
 	r.Get("/mcp/tools", s.mcp.HandleTools)
 	r.Get("/mcp/status", s.mcp.HandleStatus)

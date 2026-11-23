@@ -18,9 +18,9 @@ export function useServerContact(): number | null {
 }
 
 /** Records response headers, including errors; never records a failed/aborted fetch. */
-export async function serverFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function serverFetch(input: RequestInfo | URL, init?: RequestInit, options: { observe?: boolean } = {}): Promise<Response> {
   const response = await fetch(input, init)
-  if (!init?.signal?.aborted) recordServerContact()
+  if (options.observe !== false && !init?.signal?.aborted) recordServerContact()
   return response
 }
 

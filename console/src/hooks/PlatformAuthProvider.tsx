@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchAuthCapabilities } from '@/api/cluster'
 import { CAPABILITIES_QUERY_KEY, PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
+import { revokeHarnessSessions } from '@/lib/harnessSession'
 import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
 
 /** The routine role re-read. */
@@ -74,6 +75,7 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
         // page would keep the removed answer and nothing would read it again): it is reset and read again now.
         refreshCapabilities()
       } else {
+        revokeHarnessSessions()
         discardCapabilities()
       }
       setTokenState(saved)
@@ -83,6 +85,7 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(() => {
+    revokeHarnessSessions()
     discardCapabilities()
     setPlatformOperatorToken('')
     savedToken.current = ''

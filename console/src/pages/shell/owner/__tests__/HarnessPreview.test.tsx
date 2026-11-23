@@ -3,6 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { shellSelfHealthQuery } from '@/domains/foundation/shell/useShellStatusLine'
+const authFake = vi.hoisted(() => ({canAdmin: true, capsError: false, token: 'admin-test'}))
+vi.mock('@/hooks/usePlatformAuth', () => ({usePlatformAuth: () => authFake}))
+
 import { HarnessPreview } from '../HarnessPreview'
 
 function renderPreview(viewerEnvironment: string, config: Response) {
@@ -17,9 +20,32 @@ function renderPreview(viewerEnvironment: string, config: Response) {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  authFake.canAdmin = true
+  window.localStorage.clear()
 })
 
 describe('Ops Harness preview', () => {
+  it('hides the launcher from a Guest without fetching the preview config', () => {
+    authFake.canAdmin = false
+    const fetchConfig = renderPreview('prod', Response.json({ opencode: 'https://opencode-preview.ops.bifrost.lan/' }))
+    expect(screen.queryByRole('region', {name: 'Local harnesses'})).toBeNull()
+    expect(fetchConfig).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Ops bearer on Ops and redeems only the scoped grant at the native origin', async () => {
+    window.localStorage.setItem('platform_operator_token', authFake.token)
+    const opencode = 'https://opencode-preview.ops.bifrost.lan/project/session'
+    const requests = renderPreview('prod', Response.json({ opencode, authorization: 'ops-session' }))
+    requests
+      .mockResolvedValueOnce(Response.json({ grant: 'one.time' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    fireEvent.click(await screen.findByRole('button', { name: 'OpenCode' }))
+    await waitFor(() => expect(screen.getByTitle('OpenCode')).toHaveAttribute('src', opencode))
+    expect(requests).toHaveBeenNthCalledWith(2, '/api/v1/harness-preview/grants', expect.objectContaining({ headers: expect.objectContaining({Authorization:'Bearer admin-test'}) }))
+    expect(requests).toHaveBeenNthCalledWith(3, 'https://opencode-preview.ops.bifrost.lan/.bifrost/session', expect.objectContaining({ body: new URLSearchParams({grant:'one.time'}), credentials:'include' }))
+    expect(requests.mock.calls[2][1]).not.toHaveProperty('headers')
+  })
+
   // 2026-11-22: the phone needs an HTTPS native origin; the Mac loopback preview only worked on the Mac.
   it('opens the configured production origin with a native new-tab fallback', async () => {
     const opencode = 'https://opencode-preview.ops.bifrost.lan/project/session'

@@ -149,6 +149,7 @@ deny	GET /api/v1/governance/instruments
 deny	GET /api/v1/gitops/apps
 deny	POST /api/v1/gitops/apps/{name}/rollback
 deny	POST /api/v1/gitops/apps/{name}/sync
+deny	POST /api/v1/harness-preview/grants
 deny	GET /api/v1/home/layout
 deny	PUT /api/v1/home/layout
 deny	GET /api/v1/lineage

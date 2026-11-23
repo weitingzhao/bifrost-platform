@@ -13,10 +13,10 @@
         {"id": "network", "paths": ["api/internal/network", "api/internal/netobservations", "api/internal/probe"]},
         {"id": "observe", "paths": ["api/internal/telemetry", "api/internal/httpmetrics", "api/internal/checklist", "api/internal/opsagent"]},
         {"id": "config", "paths": ["api/internal/config", "api/internal/opscontext", "api/internal/versionedread", "api/internal/storedurability", "api/internal/outsideinput"]},
-        {"id": "identity", "paths": ["api/internal/actuation", "api/internal/notice", "api/internal/maintainer"]},
+        {"id": "identity", "paths": ["api/internal/actuation", "api/internal/notice", "api/internal/maintainer", "api/internal/harnesssession"]},
         {"id": "guards", "paths": ["api/internal/codeguard", "api/internal/repoguard", "api/internal/modtidy", "api/internal/localpath", "api/internal/safego", "api/internal/tradevocab"]},
         {"id": "map", "paths": ["api/internal/catalog", "api/internal/ownershiptable"]},
-        {"id": "entry", "paths": ["api/cmd/platform-api", "api/cmd/operator-plane"]}
+        {"id": "entry", "paths": ["api/cmd/platform-api", "api/cmd/operator-plane", "api/cmd/harness-preview-gateway"]}
       ],
       "source": "domains/0-foundation-decouple/charter.md",
       "contracts": {
@@ -70,6 +70,7 @@
           {"method": "GET", "path": "/api/v1/audit", "handler": "api/internal/actuation.HandleList", "consumers": ["console", "mcp", "trade-infra"]},
           {"method": "POST", "path": "/api/v1/audit/append", "handler": "api/internal/actuation.HandleAppend", "consumers": ["trade-api"]},
           {"method": "GET", "path": "/api/v1/auth/capabilities", "handler": "api/internal/actuation.Capabilities", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/harness-preview/grants", "handler": "api/internal/harnesssession.IssueForAdmin", "consumers": ["console"]},
           {"method": "GET", "path": "/api/v1/bus/clients", "handler": "api/internal/bus/gate.HandleClients", "consumers": ["console", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/bus/contract", "handler": "api/internal/bus/registry.HandleContract", "consumers": ["console", "trade-infra"]},
           {"method": "GET", "path": "/api/v1/bus/events", "handler": "api/internal/bus/gate.HandleEvents", "consumers": ["console", "mcp", "trade-infra"]},
@@ -1414,6 +1415,16 @@
       ],
       "status": "assigned",
       "basis": "2026-11-19: the choice of a node for a task moved in from delivery at the CI line's ask, semantics unchanged: TaskProfile (a task's needs: CPU, memory, disk tier, spread, and the node labels it excludes, since that day by label instead of node name), the node measurements and their Prometheus reader (PromNodeMetrics, JoinNodeMetrics, WorseLatency; delivery's node_metrics_read.go), and the choice itself (Placer.Place: node profiles, disk tiers, full nodes, spread); delivery keeps its task values (CITask, CIRunTask, UnitTask) and writes the chosen node into its runs, handing Placer the Kubernetes client and the metrics reader. Imports only foundation (kubemetrics, telemetry, probe, kubeapi). Earlier, 2026-11-16 source and caller audit: node-capability pools and workload placement observations consumed by cluster/delivery; compute charter owns placement, preflight decisions unchanged"
+    },
+    "api/cmd/harness-preview-gateway": {
+      "domains": ["foundation"],
+      "status": "assigned",
+      "basis": "Verified, isolated reverse proxy for the two native Harness interfaces"
+    },
+    "api/internal/harnesssession": {
+      "domains": ["foundation"],
+      "status": "assigned",
+      "basis": "Session grants for existing Ops Admin identities"
     },
     "api/cmd/platform-api": {
       "domains": [

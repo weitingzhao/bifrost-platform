@@ -86,6 +86,9 @@ func exempt(reason string, keys ...string) {
 var exemptions = map[string]string{}
 
 func init() {
+	exempt("authentication workflow: an existing Ops Admin receives a short-lived grant for one native Harness; issuance changes no cluster resources",
+		"POST /api/v1/harness-preview/grants",
+	)
 	exempt("owner question workflow, not a catalog action",
 		"POST /api/v1/questions",
 		"POST /api/v1/questions/{id}/answer",
