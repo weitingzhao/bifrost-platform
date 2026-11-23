@@ -7,6 +7,7 @@
       "files": [
         "console/src/App.tsx",
         "console/src/domains/foundation/catalog/api/domainStatus.ts",
+        "console/src/domains/foundation/ledger/__tests__/ledger.test.tsx",
         "console/src/index.css",
         "console/src/main.tsx",
         "console/src/vite-env.d.ts"
@@ -22,12 +23,20 @@
       ],
       "test_imports": [],
       "external_imports": [
+        "@bifrost/ui/city/cards",
+        "@bifrost/ui/city/ledger",
+        "@bifrost/ui/city/observation",
         "@tanstack/react-query",
+        "@testing-library/react",
         "react",
-        "react-dom/client"
+        "react-dom/client",
+        "vitest"
       ],
       "source_inputs": [],
-      "test_inputs": [],
+      "test_inputs": [
+        "console/fixtures/ledger/HardwareLedger.tsx",
+        "console/fixtures/observation/qualityFixture.ts"
+      ],
       "unresolved_imports": []
     },
     {

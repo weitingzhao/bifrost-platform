@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LedgerGrid, LedgerEvidence } from '@bifrost/ui/city/ledger'
 import { readingView, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 import type { Block } from '@bifrost/ui/city/cards'
+import { HardwareLedger } from '../../../../../fixtures/ledger/HardwareLedger'
 import { qualityFixture } from '../../../../../fixtures/observation/qualityFixture'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers() })
 const tableOf = (snapshot: ObservationSnapshot) => readingView.present(snapshot, { selected: [], at: snapshot.capturedAt, metrics: true })[0].blocks[0] as Extract<Block, {kind:'table'}>
 // 2026-11-22 Ledger task: separate surfaces must preserve original evidence, zero and uncertainty.
 describe('Ledger public snapshot consumption', () => {
@@ -56,4 +57,30 @@ describe('Ledger public snapshot consumption', () => {
     expect(screen.getByText('Selected: gone')).toBeTruthy()
     expect(screen.getByText('2000-01-01T00:00:00Z')).toBeTruthy()
   })
+})
+
+// 2026-11-22 chief follow-up: use the engine context across carriers; incoming data cannot rewrite fixed evidence.
+it('keeps one engine snapshot, time and selection across carriers and resumes the latest input', () => {
+  vi.useFakeTimers()
+  const first = qualityFixture()
+  first.id = 'first-snapshot'
+  const next = structuredClone(first)
+  next.id = 'next-snapshot'
+  next.content.tree.children[0].children[0].meter!.used = 4
+  const { rerender } = render(<HardwareLedger latest={first} />)
+  fireEvent.change(screen.getByLabelText('Filter supplied rows'), {target:{value:'zero/cpu'}})
+  fireEvent.click(within(screen.getByRole('region',{name:'Ledger grid'})).getByRole('button',{name:'CPU'}))
+  fireEvent.click(screen.getByRole('button',{name:'Fix shared snapshot'}))
+  const detail = () => within(screen.getByRole('region',{name:'Ledger object evidence'}))
+  const fixed = screen.getByRole('region',{name:'Ledger object evidence'}).textContent
+  rerender(<HardwareLedger latest={next} />)
+  fireEvent.click(screen.getByRole('button',{name:'Embed beside details'}))
+  expect(screen.getByRole('region',{name:'Ledger object evidence'}).textContent).toBe(fixed)
+  expect(detail().getByText('first-snapshot')).toBeTruthy()
+  expect((screen.getByLabelText('Filter supplied rows') as HTMLInputElement).value).toBe('zero/cpu')
+  expect(screen.getByText('Selected: zero/cpu')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button',{name:'Resume latest snapshot'}))
+  expect(detail().getByText('next-snapshot')).toBeTruthy()
+  expect(detail().getByText('4 / 8 cores')).toBeTruthy()
+  expect(screen.getByText('Selected: zero/cpu')).toBeTruthy()
 })
