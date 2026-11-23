@@ -32,3 +32,41 @@ describe('communication evidence', () => {
     expect(ms[0].memberships).toHaveLength(2); expect(ms[1].memberships).toEqual([])
   })
 })
+
+// 2026-11-22: Owner asks for actual letter round trips, not inferred answers or implicit read receipts.
+describe('explicit letter round trips', () => {
+  const original = { ...fact('sent', 'sent'), from: 'a', to: 'b' }
+  const reply = { ...fact('sent', 'reply'), communication: 'm_2', from: 'b', to: 'a', replyTo: 'm_1', evidence: { id: 'reply', source: 'test', at: '2026-11-22T12:02:00Z' } }
+  it('links an out-of-order reply while preserving its own delivery and ACK', () => {
+    const rows = exchangesOf([reply, original, reply])
+    const parent = rows.find(x => x.id === 'm_1')!
+    expect(parent.replies?.map(x => x.id)).toEqual(['m_2'])
+    expect(parent.stages.replied).toHaveLength(1)
+    expect(parent.stages.opened).toBeUndefined()
+    expect(rows.find(x => x.id === 'm_2')?.stages.acknowledged).toBeUndefined()
+    const past = evidenceThrough(rows, '2026-11-22T12:01:00Z')
+    expect(past).toHaveLength(1)
+    expect(past[0].replies).toEqual([])
+    expect(past[0].stages.replied).toBeUndefined()
+  })
+  it('does not invent replies from message kinds, strangers, or self references', () => {
+    for (const candidate of [{ ...reply, replyTo: undefined, label: 'answer' }, { ...reply, from: 'stranger' }, { ...reply, replyTo: 'm_2' }]) {
+      expect(exchangesOf([original, candidate]).find(x => x.id === 'm_1')?.stages.replied).toBeUndefined()
+    }
+  })
+})
+
+import { messageFacts } from '../adapter'
+import { replyObservation } from '@bifrost/ui/communication'
+import type { RuntimeEventRow } from '@/api/agentRuntimeEvents'
+// 2026-11-22 source audit: seat.mail.arrived records inbox arrival, never opening or ACK.
+it('maps actual mailbox arrival separately from receipt by the reader and freezes elapsed time at last read', () => {
+  const row = { event_id: 8, event_type: 'seat.mail.arrived', actor_id: 'a', body: { message_id: 'm_1', to: 'b', kind: 'ask' }, at: '2026-11-22T12:00:01Z' } as RuntimeEventRow
+  const [delivery] = messageFacts([row])
+  expect(delivery.stage).toBe('delivered')
+  const [x] = exchangesOf([{ ...fact('sent','1'), from:'a', to:'b' }, delivery])
+  expect(x.stages.opened).toBeUndefined()
+  expect(x.stages.acknowledged).toBeUndefined()
+  expect(replyObservation(x,'2026-11-22T12:02:00Z')).toContain('2m since sent at last read')
+  expect(replyObservation(x)).toBe('No linked reply observed')
+})

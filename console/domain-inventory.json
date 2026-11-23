@@ -1544,6 +1544,7 @@
         "console/src/domains/foundation/bus"
       ],
       "test_imports": [
+        "console/src/api/agentRuntimeEvents.ts",
         "console/src/lib/shell"
       ],
       "external_imports": [

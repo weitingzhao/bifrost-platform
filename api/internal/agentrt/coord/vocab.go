@@ -19,7 +19,7 @@ func init() {
 	eventlog.Declare(eventlog.Vocabulary{
 		Bodies: map[string][]eventlog.Field{
 			"message_posted": {{Name: "message_id", Kind: eventlog.ID}, {Name: "to", Kind: eventlog.ID}, {Name: "kind", Kind: eventlog.Str},
-				{Name: "matter", Kind: eventlog.Str, Optional: true}},
+				{Name: "matter", Kind: eventlog.Str, Optional: true}, {Name: "reply_to", Kind: eventlog.ID, Optional: true}},
 			"message_acked": {{Name: "message_id", Kind: eventlog.ID}},
 			"control_set": {{Name: "control_id", Kind: eventlog.ID}, {Name: "scope", Kind: eventlog.Str}, {Name: "kind", Kind: eventlog.Str},
 				{Name: "reason", Kind: eventlog.Str}, {Name: "scope_ref", Kind: eventlog.ID, Optional: true}, {Name: "token", Kind: eventlog.Str, Optional: true}},
@@ -36,7 +36,7 @@ func init() {
 		},
 		Values: map[string]map[string]eventlog.Value{
 			"message_posted": {"message_id": messageID, "kind": eventlog.OneOf("ask", "answer", "help", "handover", "note", "wake"),
-				"matter": eventlog.Shaped("a domain id or unknown", matterRE)},
+				"matter": eventlog.Shaped("a domain id or unknown", matterRE), "reply_to": messageID},
 			"message_acked": {"message_id": messageID},
 			"control_set":   {"scope": eventlog.OneOf(scopes...), "kind": eventlog.OneOf("stop", "pause", "drain")},
 			"policy_alert": {"rule": eventlog.OneOf("approval_claim"), "source": eventlog.OneOf("message", "plan_note"),
