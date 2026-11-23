@@ -10,6 +10,7 @@ import {
   type ActuationCategory,
 } from '@/lib/audit/actuationCatalog'
 import { downloadAuditJson } from '@/lib/audit/downloadAuditJson'
+import { STATE_WORD, TAG_VARIANT, reachTag } from '@/lib/shell/stateWords'
 
 interface AuditPageProps {
   records: AuditRecord[]
@@ -65,30 +66,27 @@ export function AuditPage({ records, isLoading }: AuditPageProps) {
 
   const breakdown = useMemo(() => categoryBreakdown(records), [records])
 
-  const lamp = isLoading ? ('unknown' as const) : errorCount > 0 ? ('degraded' as const) : ('ok' as const)
-  const tagVariant = isLoading ? ('neutral' as const) : errorCount > 0 ? ('warning' as const) : ('success' as const)
-  const tagLabel = isLoading
-    ? '…'
+  // The tag is one of the engine's seven words (Console's stateWords); the count goes in the sentence beside it.
+  const verdict = isLoading
+    ? reachTag('unknown', true)
     : records.length === 0
-      ? 'EMPTY'
-      : errorCount > 0
-        ? `${errorCount} FAILED`
-        : 'OK'
+      ? { lamp: 'unknown' as const, tagLabel: STATE_WORD.info, tagVariant: TAG_VARIANT.info }
+      : reachTag(errorCount > 0 ? 'degraded' : 'ok')
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsVerdictStrip
         ariaLabel="Actuation history verdict"
         title="ACTUATION HISTORY"
-        lamp={lamp}
-        tagLabel={tagLabel}
-        tagVariant={tagVariant}
+        lamp={verdict.lamp}
+        tagLabel={verdict.tagLabel}
+        tagVariant={verdict.tagVariant}
         summary={
           isLoading
             ? 'Loading actuation records…'
             : records.length === 0
               ? 'No actuation records in the current window.'
-              : `${records.length} record${records.length === 1 ? '' : 's'} · most recent ${
+              : `${errorCount > 0 ? `${errorCount} failed · ` : ''}${records.length} record${records.length === 1 ? '' : 's'} · most recent ${
                   latestIso != null ? relativeTime(latestIso) : '—'
                 }`
         }

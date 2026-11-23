@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AuditRecord } from '@/api/auditTypes'
 import { AuditRecordsPanel } from '../AuditRecordsPanel'
-import { auditLedgerTable, auditStatusTone } from '../auditLedger'
+import { auditLedgerTable, auditStatusTone, statusCell } from '../auditLedger'
+import { AuditPage } from '@/pages/AuditPage'
 
 afterEach(cleanup)
 
@@ -47,5 +48,24 @@ describe('Records → Audit in the Ledger', () => {
     expect(auditStatusTone('refused')).toBe('boundary')
     expect(auditStatusTone('pending-approval')).toBe('unknown')
     expect(auditLedgerTable([record(1, { status: 'weird' })]).rows[0].cells[6]).toMatchObject({ tone: 'unknown' })
+  })
+  // 2026-11-23, Console review of dbc09167a: a tag shows the engine's seven words and what exactly is meant goes
+  // beside it, so the cell reads "pending · waiting", not a bare "waiting" whose tone only the colour carried.
+  it('writes the seven-word tone before the record status', () => {
+    expect(statusCell('waiting')).toEqual({ text: 'pending · waiting', tone: 'pending', title: 'waiting' })
+    expect(statusCell('ok').text).toBe('ok')
+  })
+  // Same review: the verdict strip said OK / n FAILED / EMPTY; it says the seven words, the count in the sentence.
+  it('says the verdict in the seven words', () => {
+    const wrap = (records: AuditRecord[], isLoading = false) =>
+      render(<QueryClientProvider client={new QueryClient()}><AuditPage records={records} isLoading={isLoading} /></QueryClientProvider>)
+    wrap([record(1), record(2, { status: 'failed' })])
+    const strip = screen.getByLabelText('Actuation history verdict')
+    expect(strip.textContent).toContain('warn')
+    expect(strip.textContent).toContain('1 failed · 2 records')
+    expect(strip.textContent).not.toMatch(/FAILED|EMPTY|\bOK\b/)
+    cleanup()
+    wrap([], true)
+    expect(screen.getByLabelText('Actuation history verdict').textContent).toContain('pending')
   })
 })

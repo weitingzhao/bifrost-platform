@@ -120,7 +120,7 @@ export function AuditRecordsPanel({
           {(hasTitle || filtersActive) && (
             <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {isLoading
-                ? '...'
+                ? '…'
                 : filtersActive
                   ? `${filtered.length} / ${records.length} matching`
                   : `${filtered.length} records`}
@@ -206,7 +206,7 @@ export function AuditRecordsPanel({
         // Ledger carries its own (Ledger line follow-up; spacing as in CI's RunSourceReport).
         <div className="min-w-0 px-3 py-2 text-xs [&_table]:w-full [&_th]:p-2 [&_th]:text-left [&_td]:p-2 [&_td]:align-top [&_td]:whitespace-nowrap [&_button]:whitespace-nowrap! [&_button]:text-left [&_td:last-child]:whitespace-normal [&_td:last-child]:min-w-[18rem] [&_td:last-child]:[overflow-wrap:anywhere] [&_tr]:border-b [&_tr]:border-[var(--table-rule)] [&_.ledger-controls]:flex [&_.ledger-controls]:flex-wrap [&_.ledger-controls]:items-center [&_.ledger-controls]:gap-3 [&_.ledger-grid_p]:my-1 [&_.ledger-grid_p]:text-[var(--muted-foreground)] [&_nav]:flex [&_nav]:gap-2 [&_.g2-fail]:text-[var(--destructive)]">
           {isLoading ? (
-            <p className="m-0 text-[var(--muted-foreground)]">Loading...</p>
+            <p className="m-0 text-[var(--muted-foreground)]">…</p>
           ) : (
             <LedgerGrid
               table={ledgerTable}
@@ -246,7 +246,7 @@ export function AuditRecordsPanel({
             <DenseTableRow>
               <DenseTableCell colSpan={9} className="text-[var(--muted-foreground)]">
                 {isLoading
-                  ? 'Loading...'
+                  ? '…'
                   : filtersActive
                     ? 'No records match filters'
                     : 'No actuation records yet'}

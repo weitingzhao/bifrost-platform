@@ -48,6 +48,15 @@ function secondsUtc(iso: string): string {
   return Number.isNaN(at.getTime()) ? iso : `${at.toISOString().slice(0, 19).replace('T', ' ')}Z`
 }
 
+/**
+ * The status cell says the seven-word tone first and the record's own status after it ("pending · waiting"):
+ * a tag shows the engine's word, what exactly is meant goes beside it (箭10 2026-11-23, Console review of dbc09167a).
+ */
+export function statusCell(status: string): { text: string; tone: Tone; title: string } {
+  const tone = auditStatusTone(status)
+  return { text: tone === status.toLowerCase() ? tone : `${tone} · ${status}`, tone, title: status }
+}
+
 type LedgerTable = Extract<Block, { kind: 'table' }>
 /** Records → Audit as one Ledger table: the same columns as the dense table, one row per kept record. */
 export function auditLedgerTable(records: AuditRecord[]): LedgerTable {
@@ -69,7 +78,7 @@ export function auditLedgerTable(records: AuditRecord[]): LedgerTable {
           record.actor,
           actionLabel(record),
           record.target,
-          { text: record.status, tone: auditStatusTone(record.status) },
+          statusCell(record.status),
           detail ? { text: short, title: detail } : '—',
         ],
       }

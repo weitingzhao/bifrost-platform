@@ -2141,7 +2141,8 @@
       ],
       "test_imports": [
         "console/src/api/auditTypes.ts",
-        "console/src/domains/foundation/patrol-view"
+        "console/src/domains/foundation/patrol-view",
+        "console/src/pages/AuditPage.tsx"
       ],
       "external_imports": [
         "@bifrost/ui",
@@ -3817,7 +3818,8 @@
         "console/src/api/auditTypes.ts",
         "console/src/components",
         "console/src/components/layout",
-        "console/src/lib/audit"
+        "console/src/lib/audit",
+        "console/src/lib/shell"
       ],
       "test_imports": [],
       "external_imports": [
