@@ -307,3 +307,8 @@ export function approvalSubject(item: ApprovalItem): string {
 export function approvalHref(id: string): string {
   return `#approvals?id=${encodeURIComponent(id)}`
 }
+
+/** The release window in the engine's seven words: held is a release under way (info), free is ok, else unknown. */
+export function releaseWindowWord(state: string): 'info' | 'ok' | 'unknown' {
+  return state === 'held' ? 'info' : state === 'free' ? 'ok' : 'unknown'
+}

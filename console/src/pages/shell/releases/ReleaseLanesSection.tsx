@@ -1,11 +1,12 @@
 import { DenseTag } from '@bifrost/ui'
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import type { ApprovalItem } from '@/api/approvals'
 import type { DeliveryPipelineRunView, DeliveryPipelineView } from '@/api/deliveryTypes'
 import type { ReleaseRecord, ReleaseRule, RunningImageCell } from '@/api/releases'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { formatPipelineRunStatus, isPipelineRunFailed, isPipelineRunRunning, isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
 import { RELEASE_RECORD_LIMIT, approvalHref, formatBuiltFrom, formatBuiltFromTitle, formatDuration, formatInstant, shortSha,
-  type ReleaseWindowView } from '@/pages/shell/releases/releaseView'
+  type ReleaseWindowView, releaseWindowWord } from '@/pages/shell/releases/releaseView'
 
 
 /** One read: `data` once answered, `error` once failed, neither while it is read. */
@@ -241,8 +242,8 @@ export function ReleaseLanesSection(p: ReleaseLanesProps) {
     description="Each release line: the last successful STG and PROD delivery (what runs now is not confirmed), and the one release window every repository shares.">
     <div className="@container flex min-w-0 flex-col">
       <div data-testid="release-lanes-window" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm">
-        <DenseTag variant={w.state === 'held' ? 'warning' : w.state === 'free' ? 'success' : 'neutral'}>{w.state === 'held' || w.state === 'free' ? w.state : 'unknown'}</DenseTag>
-        <span className="font-medium">{w.text}</span>
+        <DenseTag variant={TAG_VARIANT[releaseWindowWord(w.state)]} title={w.state}>{releaseWindowWord(w.state)}</DenseTag>
+        {w.text.toLowerCase() !== releaseWindowWord(w.state) && <span className="font-medium">{w.text}</span>}
         {w.detail !== '' && <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{w.detail}</span>}
         {w.state === 'held' && <strong>Blocks releases in every repository until it is released or expires.</strong>}
       </div>

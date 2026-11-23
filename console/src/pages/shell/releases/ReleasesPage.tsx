@@ -263,6 +263,8 @@ export function ReleasesPage() {
                       reason={rollbackReason(app.name)}
                       rollback={rollbackUndo()}
                       label={REQUEST_ROLLBACK_LABEL}
+                      // One row each: outline, so the page keeps one accent action (design system, Releases skin).
+                      variant="outline"
                       direct={{
                         method: 'POST',
                         path: `/api/v1/gitops/apps/${encodeURIComponent(app.name)}/rollback`,

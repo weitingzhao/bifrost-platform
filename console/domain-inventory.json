@@ -1687,12 +1687,14 @@
         "console/src/domains/delivery/policy/useReleasePolicy.ts"
       ],
       "imports": [
-        "console/src/api/releasePolicy.ts"
+        "console/src/api/releasePolicy.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api/releasePolicy.ts"
       ],
       "external_imports": [
+        "@bifrost/ui",
         "@tanstack/react-query",
         "@testing-library/react",
         "react",
@@ -5256,6 +5258,7 @@
         "console/src/pages/shell/releases/__tests__/ReleasesPage.test.tsx",
         "console/src/pages/shell/releases/__tests__/policyDecisions.test.tsx",
         "console/src/pages/shell/releases/__tests__/releaseView.test.ts",
+        "console/src/pages/shell/releases/__tests__/releaseWindowWord.test.ts",
         "console/src/pages/shell/releases/policyDecisions.ts",
         "console/src/pages/shell/releases/releaseView.ts"
       ],

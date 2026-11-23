@@ -192,7 +192,8 @@ describe('ReleaseLanesSection', () => {
     expect(lane('trade').textContent).toContain('release records: releases: HTTP 502; bifrost-deliver-stg runs not read (pipeline runs: HTTP 502)')
     expect(lane('platform').textContent).toContain('bifrost-deliver-platform runs not read (pipeline not listed)')
     expect(lane('research').textContent).toContain('running-images: running images: HTTP 500')
-    expect(screen.getByTestId('release-lanes-window').textContent).toContain('Unknown')
+    // 2026-11-23 (箭10, Releases skin): the window's tag is the seven word (unknown); its text no longer repeats it.
+    expect(screen.getByTestId('release-lanes-window').textContent).toContain('unknown')
   })
 
   it('without records, runs or a token says none was found', () => {

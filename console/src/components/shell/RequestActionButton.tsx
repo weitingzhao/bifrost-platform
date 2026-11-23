@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@bifrost/ui'
@@ -24,6 +25,8 @@ export type RequestActionButtonProps = {
   /** Called only when the approval API classifies the action as tier B. */
   direct: RequestActionDirect
   disabled?: boolean
+  /** The button's look; a list of many rows passes outline so the page keeps one accent action (design system). */
+  variant?: ComponentProps<typeof Button>['variant']
 }
 
 type Notice =
@@ -44,6 +47,7 @@ export function RequestActionButton({
   label,
   direct,
   disabled = false,
+  variant,
 }: RequestActionButtonProps) {
   const catalogQuery = useQuery({
     queryKey: ['actions', 'catalog'],
@@ -90,7 +94,7 @@ export function RequestActionButton({
 
   return (
     <span className="inline-flex min-w-0 flex-col items-start gap-1">
-      <Button type="button" size="sm" disabled={disabled || busy} onClick={() => void onClick()}>
+      <Button type="button" size="sm" variant={variant} disabled={disabled || busy} onClick={() => void onClick()}>
         {busy ? 'Requesting…' : label}
       </Button>
       {notice.kind === 'waiting' ? (
