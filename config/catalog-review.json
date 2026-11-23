@@ -95,10 +95,11 @@
     },
     "bifrost-trade-infra": {
       ".": {
-        "verdict": "unknown",
-        "reason": "measured mixed at repository grain: governance (agent-config: coordination and owner), platform overlays (k8s/overlays/platform-*: delivery and compute) and Trade manifests (tenant) in one repository; one domain for the whole repository would be wrong. Known, not one owner: its own table (segment 5) splits it",
+        "verdict": "claim",
+        "domain": "foundation",
+        "reason": "repository grain only: Foundation, owner of structure elasticity (R0B 2026-11-23), puts a repository at the highest layer it holds; this one holds the manifests, Tekton and the governance layer, so foundation. Its own ownership table still gives each directory inside to its domain (coordination, owner, delivery, compute, tenant); this claim does not move them",
         "by": "seat:catalog",
-        "on": "2026-11-20"
+        "on": "2026-11-23"
       }
     },
     "primary-probe": {
