@@ -1071,6 +1071,7 @@
         "console/src/components/ToolsMenu.tsx",
         "console/src/components/UserMenu.tsx",
         "console/src/components/shell",
+        "console/src/domains/coordination/communication",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell"
       ],
@@ -1523,6 +1524,40 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/coordination/communication",
+      "files": [
+        "console/src/domains/coordination/communication/AgentScreen.tsx",
+        "console/src/domains/coordination/communication/CommunicationPage.tsx",
+        "console/src/domains/coordination/communication/README.md",
+        "console/src/domains/coordination/communication/__tests__/communication.test.ts",
+        "console/src/domains/coordination/communication/__tests__/looks.test.ts",
+        "console/src/domains/coordination/communication/__tests__/observer.test.tsx",
+        "console/src/domains/coordination/communication/adapter.ts",
+        "console/src/domains/coordination/communication/looks.ts",
+        "console/src/domains/coordination/communication/roster.generated.json",
+        "console/src/domains/coordination/communication/useCommunication.ts"
+      ],
+      "imports": [
+        "console/src/api/agentRuntimeEvents.ts",
+        "console/src/api/agentThreads.ts",
+        "console/src/api/client.ts",
+        "console/src/domains/foundation/bus"
+      ],
+      "test_imports": [
+        "console/src/lib/shell"
+      ],
+      "external_imports": [
+        "@bifrost/ui/communication",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/api",
       "files": [
         "console/src/domains/delivery/api/delivery.ts",
@@ -1703,6 +1738,7 @@
         "console/src/domains/foundation/bus/busProblems.ts",
         "console/src/domains/foundation/bus/busStatus.ts",
         "console/src/domains/foundation/bus/busTrace.ts",
+        "console/src/domains/foundation/bus/communication.ts",
         "console/src/domains/foundation/bus/liveRefresh.ts",
         "console/src/domains/foundation/bus/sseParser.ts",
         "console/src/domains/foundation/bus/useBusStream.ts"
@@ -1719,6 +1755,7 @@
       "external_imports": [
         "3d-force-graph",
         "@bifrost/ui",
+        "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",
         "@xyflow/react",
@@ -2210,6 +2247,7 @@
       "imports": [
         "console/src",
         "console/src/api",
+        "console/src/domains/foundation/bus",
         "console/src/lib/shell"
       ],
       "test_imports": [
@@ -3707,6 +3745,7 @@
         "console/src/components/ConsoleHeader.tsx",
         "console/src/components/ConsoleSidebar.tsx",
         "console/src/components/shell",
+        "console/src/domains/coordination/communication",
         "console/src/domains/foundation/bus",
         "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",

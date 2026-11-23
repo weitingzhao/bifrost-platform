@@ -19,6 +19,11 @@
     "root": "console/src",
     "inventory": "console/domain-inventory.json",
     "groups": {
+      "console/src/domains/coordination/communication": {
+        "domains": ["coordination"],
+        "status": "assigned",
+        "basis": "2026-11-22 Owner-authorized Agent collaboration observation: read-only composition of public message, bus receipt and Crew contracts; shared UI owns rendering."
+      },
       "console/src": {
         "domains": [
           "foundation"

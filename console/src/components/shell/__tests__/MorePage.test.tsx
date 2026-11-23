@@ -16,7 +16,9 @@ describe('More', () => {
   it('lists every detail page, the Trade app in each environment and the external tools', () => {
     render(<MorePage viewerEnv="prod" />)
     const details = within(screen.getByRole('navigation', { name: 'Detail pages' })).getAllByRole('link')
-    expect(details).toHaveLength(8)
+    // 2026-11-22: Agent collaboration adds a ninth detail entry; retain its mobile access.
+    expect(details).toHaveLength(9)
+    expect(details.some(link => link.getAttribute('href') === '#collaboration')).toBe(true)
     const urls = resolveTradeFrontendUrls()
     const trade = within(screen.getByRole('navigation', { name: 'Trade' })).getAllByRole('link')
     expect(trade.map(a => a.getAttribute('href'))).toEqual([urls.dev, urls.stg, urls.prod])
