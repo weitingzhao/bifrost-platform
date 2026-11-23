@@ -2,15 +2,11 @@ package server
 
 import (
 	"context"
-	"os"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	lineageassembly "github.com/weitingzhao/bifrost-platform/api/internal/lineage/assembly"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 )
@@ -21,23 +17,21 @@ import (
 // the lineage's own part left for lineage/assembly on 2026-11-19, and this
 // file keeps the binding to delivery.
 func (srv *Server) wireLineage(releasesSvc *releases.Service, titleStore *threadtitles.Store) {
-	srv.lineage = lineageassembly.New(func(ctx context.Context) (lineage.Access, error) {
+	srv.lineage = lineageassembly.Wire(func(ctx context.Context) (lineageassembly.Gitea, error) {
 		a, err := srv.delivery.GiteaAccess(ctx)
-		// The agent organization's branches too (T36), as the result check reads them.
-		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass,
-			AgentOrg: strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))}, err
-	}, func(ctx context.Context) ([]lineage.Release, error) {
+		return lineageassembly.Gitea{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+	}, func(ctx context.Context) ([]lineageassembly.Release, error) {
 		recs, err := releasesSvc.List(ctx)
 		if err != nil {
 			return nil, err
 		}
-		out := make([]lineage.Release, 0, len(recs))
+		out := make([]lineageassembly.Release, 0, len(recs))
 		for _, r := range recs {
 			repos := make(map[string]string, len(r.Repos))
 			for name, b := range r.Repos {
 				repos[name] = b.SHA
 			}
-			out = append(out, lineage.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
+			out = append(out, lineageassembly.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
 		}
 		return out, nil
 	}, titleStore)

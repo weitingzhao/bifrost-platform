@@ -12,7 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/ownercard"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
+	lineageassembly "github.com/weitingzhao/bifrost-platform/api/internal/lineage/assembly"
 )
 
 // host lends the domains' routes what every /agentrt route shares, read from
@@ -88,11 +88,11 @@ func (h host) NotOwnRecord() error { return externalwork.ErrNotOwnRecord }
 // externalwork); the plan proposes its import.
 type recorderLogs struct{}
 
-func (recorderLogs) Format() string { return recorderimport.Format }
+func (recorderLogs) Format() string { return lineageassembly.RecorderFormat }
 
-func (recorderLogs) Request() any { return &recorderimport.Request{} }
+func (recorderLogs) Request() any { return &lineageassembly.RecorderRequest{} }
 
 func (recorderLogs) Prepare(request any) (planstore.RecorderLog, error) {
-	log, err := externalwork.PrepareRecorderImport(*request.(*recorderimport.Request))
+	log, err := externalwork.PrepareRecorderImport(*request.(*lineageassembly.RecorderRequest))
 	return planstore.RecorderLog(log), err
 }

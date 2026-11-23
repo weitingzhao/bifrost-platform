@@ -2,32 +2,20 @@ package server
 
 import (
 	"context"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
+	lineageassembly "github.com/weitingzhao/bifrost-platform/api/internal/lineage/assembly"
 )
 
 func (s *Server) agentRuntimePlanSources() planstore.PlanSources {
 	var src planstore.PlanSources
 	if s.delivery != nil {
-		// One reader for the process: it keeps each repo's main between passes.
-		reader := &lineage.PlanHistoryReader{
-			Access: func(ctx context.Context) (lineage.Access, error) {
-				a, err := s.delivery.GiteaAccess(ctx)
-				return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass,
-					AgentOrg: strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))}, err
-			},
-			Client:   &http.Client{Timeout: 20 * time.Second},
-			MaxPages: 200,
-			Main:     s.mainOf("plan-history", nil),
-			Rules:    planHistoryRules(),
-		}
+		reader := lineageassembly.PlanHistory(func(ctx context.Context) (lineageassembly.Gitea, error) {
+			a, err := s.delivery.GiteaAccess(ctx)
+			return lineageassembly.Gitea{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+		}, s.mainOf("plan-history", nil), planHistoryRules())
 		src.History = func(ctx context.Context, repo, task, result, snapshot string) (landing.MainHistory, error) {
 			return reader.History(ctx, repo, task, result, snapshot)
 		}
@@ -39,9 +27,9 @@ func (s *Server) agentRuntimePlanSources() planstore.PlanSources {
 // lineage reader's port: lineage reads main's history from Gitea and does not
 // import verification (OWNER_LAW #28, 2026-11-20). The commits are copied
 // field by field; the rules are landinggit's, unchanged.
-func planHistoryRules() lineage.HistoryRules {
-	return lineage.HistoryRules{
-		Evaluate: func(task, result, message string, commits []lineage.HistoryCommit, complete bool) (landing.MainHistory, error) {
+func planHistoryRules() lineageassembly.HistoryRules {
+	return lineageassembly.HistoryRules{
+		Evaluate: func(task, result, message string, commits []lineageassembly.HistoryCommit, complete bool) (landing.MainHistory, error) {
 			in := make([]landinggit.HistoryCommit, len(commits))
 			for i, c := range commits {
 				in[i] = landinggit.HistoryCommit{SHA: c.SHA, Message: c.Message, Parents: c.Parents}

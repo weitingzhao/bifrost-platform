@@ -45,7 +45,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/instruments"
-	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
+	lineageassembly "github.com/weitingzhao/bifrost-platform/api/internal/lineage/assembly"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
@@ -103,7 +103,7 @@ type Server struct {
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	agentgovernance *agentgovernance.Handler
-	lineage         *lineage.Handler
+	lineage         *lineageassembly.Handler
 	releases        *releases.Handler
 	work            *workactions.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
