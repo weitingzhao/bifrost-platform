@@ -247,6 +247,9 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 	}
 	id := NewMessageID()
 	posted := map[string]any{"message_id": id, "to": to, "kind": kind}
+	if reply := replyReference(body); reply != "" {
+		posted["reply_to"] = reply
+	}
 	if matter != "" {
 		posted["matter"] = matter
 	}

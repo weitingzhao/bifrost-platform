@@ -6,10 +6,10 @@ const string = (v: unknown) => typeof v === 'string' ? v : undefined
 export function messageFacts(events: readonly RuntimeEventRow[]): CommunicationFact[] {
   return events.flatMap(e => {
     const id = string(e.body.message_id)
-    if (!id || !['message_posted', 'message_acked'].includes(e.event_type)) return []
+    if (!id || !['message_posted', 'seat.mail.arrived', 'message_acked'].includes(e.event_type)) return []
     return [{ id: 'agentrt:' + e.event_id, communication: id, channel: 'message' as const,
-      stage: e.event_type === 'message_posted' ? 'sent' as const : 'acknowledged' as const,
-      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to), label: string(e.body.kind) } : {}),
+      stage: e.event_type === 'message_posted' ? 'sent' as const : e.event_type === 'seat.mail.arrived' ? 'delivered' as const : 'acknowledged' as const,
+      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to), label: string(e.body.kind), replyTo: string(e.body.reply_to) } : {}),
       evidence: { id: String(e.event_id), source: 'agentrt/events', at: e.at, actor: e.actor_id } }]
   })
 }

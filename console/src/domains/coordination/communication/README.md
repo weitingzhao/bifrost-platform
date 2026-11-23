@@ -77,3 +77,16 @@ between them. AgentWorld consumes the same useCommunication snapshot and opens
 member/record evidence on demand. City and Console navigation include Agents;
 City's optional otherLooks prop is the sole renderer overlap for this revision.
 No second mailbox, parser, identity resolver or transport is introduced.
+
+## Letter round trips (2026-11-22)
+
+All observation modes consume `@bifrost/ui/communication` snapshots via `useCommunication`; do not open another inbox or derive workflow in a renderer.
+
+- `message_posted` -> `sent`; optional `reply_to` projects only a valid v1 envelope's declared original ID (new sends only). No body or summary is added to the ledger. It is not a claim that the sender completed anything.
+- `seat.mail.arrived` -> `delivered` means persisted in the recipient mailbox, not delivered to a model context or opened.
+- `message_acked` -> `acknowledged`, independent of delivery, reading, acceptance and completion.
+- Shared engine links a reply only with explicit `replyTo`, an observed original and reversed participants. Replies remain independent letters with their own stages. No heuristic based on `answer`, prose, timing or names.
+- `ReplyTrail` is shared by Agents and Console. It navigates original/replies and reports elapsed time at the last successful read. Missing reply evidence is not a timeout, demand for an answer, or an idle-agent verdict. Historical filters exclude future replies.
+- `opened` is a supported evidence stage but this platform source does NOT currently record recipient body reads. MCP `read_message` can return a cached body without a platform write. Observer reads must not create read receipts. Acceptance/completion/audit likewise require explicit upstream records and remain unknown here.
+
+Ownership overlap for the multi-view line: consume the public shared UI model and the host hook/adapter; no City geometry changes. Public optional additions are `CommunicationFact.replyTo`, `Exchange.replyTo/replies`, `Stage.opened` and `replyObservation`. The sender's envelope contract remains v1 with existing `reply_to`; event projection adds an optional field, preserving older events. No new permissions or inbox endpoints.

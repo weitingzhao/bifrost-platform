@@ -9,7 +9,7 @@ import { fetchLatestEvents, fetchEventsAfter, type RuntimeEventRow } from '@/api
 import { fetchAgentThreads } from '@/api/agentThreads'
 import { communicationSnapshot } from './adapter'
 
-const TYPES = ['message_posted', 'message_acked'] as const
+const TYPES = ['message_posted', 'seat.mail.arrived', 'message_acked'] as const
 const CAP = 1000
 let lastIdentity = '', identityVersion = 0
 function readIdentityVersion() { const token = operatorToken(); if (token !== lastIdentity) { lastIdentity = token; identityVersion++ } return identityVersion }
@@ -33,6 +33,6 @@ export function useCommunication() {
     state: events.error ? 'error' : events.data ? 'ready' : 'loading',
     updatedAt: events.dataUpdatedAt ? new Date(events.dataUpdatedAt).toISOString() : undefined,
     truncated: events.data?.truncated ?? false,
-    note: (events.error ? String(events.error) + '. ' : '') + 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '. Messages and ACK evidence from the platform ledger. Crew membership is a source snapshot imported ' + roster.importedAt + '; it is not live presence. ' + (threads.error ? 'Member titles could not be refreshed.' : 'Work activity is independent of message activity.'),
+    note: (events.error ? String(events.error) + '. ' : '') + 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '. Messages, inbox arrivals and ACK evidence from the platform ledger. Replies require explicit sender links and matching participants; older letters may lack links. Opening and acceptance are not recorded by this source. Absence of a reply is not agent inactivity. Crew membership is a source snapshot imported ' + roster.importedAt + '; it is not live presence. ' + (threads.error ? 'Member titles could not be refreshed.' : 'Work activity is independent of message activity.'),
   }, roster.members as Member[], busFacts(contract.data, bus.events, bus.receipts))
 }

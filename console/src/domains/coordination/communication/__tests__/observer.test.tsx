@@ -10,7 +10,8 @@ describe('read-only observation', () => {
     render(<WorkingStudio stationImage="/station.png" snapshot={{version:1,members:[{id:'a',label:'A',memberships:[]}],exchanges:exchangesOf([{id:'e1',communication:'m1',channel:'message',stage:'sent',from:'a',to:'b',label:'A request',evidence:{id:'e1',source:'test',at:'2026-11-22T12:00:00Z'}}]),coverage:{state:'ready',note:'Test',truncated:false}}} />)
     fireEvent.click(screen.getByRole('button',{name:'Ledger',exact:true}))
     expect(screen.getByText('message · m1')).toBeTruthy()
-    expect(screen.getAllByText('Not observed')).toHaveLength(6)
+    expect(screen.getAllByText('Not observed')).toHaveLength(7)
+    expect(screen.getByText('Opened by recipient')).toBeTruthy()
     expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals()
   })
   // 2026-11-22 Owner: the world is the mode; details must not cover it until requested.
