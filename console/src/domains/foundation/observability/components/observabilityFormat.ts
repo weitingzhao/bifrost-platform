@@ -1,4 +1,5 @@
-import { STATE_WORD } from '@/lib/shell/stateWords'
+import { STATUS } from '@bifrost/ui/city/world'
+import { STATE_WORD, TAG_VARIANT, type StatusWord } from '@/lib/shell/stateWords'
 /**
  * Pure helpers / constants for ObservabilityPage chrome.
  * No signal evaluation — display mapping only.
@@ -17,8 +18,16 @@ import type {
 import { maxVerdict, VERDICT_LABELS } from '@/domains/foundation/observability'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 
-export const GAP_LEGEND =
-  'ok = matched · fail = unhealthy · blind = probe missing · by-design = optional contract · reference = plane not probed'
+/**
+ * A required signal's gap in the engine's seven words (箭10 2026-11-23): blind (the probe is missing) cannot be
+ * judged, so unknown; by design (an optional contract) and the reference planes are not faults, so boundary.
+ */
+export const GAP_WORD: Record<SignalGap, StatusWord> = { ok: 'ok', fail: 'fail', blind: 'unknown', by_design: 'boundary' }
+
+/** The legend: only the words this section uses, each in the WorldFrame legend's own words. */
+export const GAP_LEGEND = (['ok', 'fail', 'unknown', 'boundary'] as const)
+  .map(w => `${w} — ${STATUS[w].means}`)
+  .join(' · ') + ' (here: by design · no runtime contract)'
 
 export type AttentionScopeFilter = 'all' | 'trade_env' | 'shared'
 
@@ -119,18 +128,13 @@ export const SIGNAL_STATE_LABELS: Record<SignalState, string> = {
 }
 
 export const GAP_TAG_VARIANT: Record<SignalGap, 'success' | 'danger' | 'warning' | 'neutral'> = {
-  ok: 'success',
-  fail: 'danger',
-  blind: 'warning',
-  by_design: 'neutral',
+  ok: TAG_VARIANT[GAP_WORD.ok],
+  fail: TAG_VARIANT[GAP_WORD.fail],
+  blind: TAG_VARIANT[GAP_WORD.blind],
+  by_design: TAG_VARIANT[GAP_WORD.by_design],
 }
 
-export const GAP_LABEL: Record<SignalGap, string> = {
-  ok: 'ok',
-  fail: 'fail',
-  blind: 'blind',
-  by_design: 'by-design',
-}
+export const GAP_LABEL: Record<SignalGap, string> = GAP_WORD
 
 export function gapPartClass(gap: SignalGap): string {
   switch (gap) {
@@ -139,23 +143,29 @@ export function gapPartClass(gap: SignalGap): string {
     case 'fail':
       return 'text-danger'
     case 'blind':
-      return 'text-warning'
+      return 'text-muted-foreground'
     default:
       return 'text-muted-foreground'
   }
 }
 
-/** Domain card line: "4/4 ok" when all ok; else "1 ok · 1 fail · 2 blind" (by_design in tooltip). */
-export function formatGapSummaryLine(g: GapSummary): { line: string; title: string } {
-  const title = `${g.ok} ok · ${g.fail} fail · ${g.blind} blind · ${g.byDesign} by-design · ${g.total} required`
-  if (g.total === 0) return { line: '0 required', title }
-  if (g.ok === g.total) return { line: `${g.ok}/${g.total} ok`, title }
-  const parts: string[] = []
-  if (g.ok > 0) parts.push(`${g.ok} ok`)
-  if (g.fail > 0) parts.push(`${g.fail} fail`)
-  if (g.blind > 0) parts.push(`${g.blind} blind`)
+/** Every gap count in the seven words, for a tooltip: "3 ok · 1 fail · 0 unknown · 1 boundary · 5 required". */
+export function gapSummaryTitle(g: GapSummary): string {
+  return `${g.ok} ${GAP_WORD.ok} · ${g.fail} ${GAP_WORD.fail} · ${g.blind} ${GAP_WORD.blind} · ${g.byDesign} ${GAP_WORD.by_design} · ${g.total} required`
+}
+
+/** Domain card line: "4/4 ok" when all ok; else "1 ok · 1 fail · 2 unknown" (boundary in the tooltip). */
+export function formatGapSummaryLine(g: GapSummary): { line: string; title: string; parts: { gap: SignalGap; text: string }[] } {
+  const title = gapSummaryTitle(g)
+  if (g.total === 0) return { line: '0 required', title, parts: [] }
+  if (g.ok === g.total) return { line: `${g.ok}/${g.total} ok`, title, parts: [{ gap: 'ok', text: `${g.ok}/${g.total} ok` }] }
+  const parts: { gap: SignalGap; text: string }[] = []
+  if (g.ok > 0) parts.push({ gap: 'ok', text: `${g.ok} ${GAP_WORD.ok}` })
+  if (g.fail > 0) parts.push({ gap: 'fail', text: `${g.fail} ${GAP_WORD.fail}` })
+  if (g.blind > 0) parts.push({ gap: 'blind', text: `${g.blind} ${GAP_WORD.blind}` })
   // by_design omitted from primary line — surface via title tooltip
-  return { line: parts.length > 0 ? parts.join(' · ') : `${g.byDesign} by-design`, title }
+  if (parts.length === 0) parts.push({ gap: 'by_design', text: `${g.byDesign} ${GAP_WORD.by_design}` })
+  return { line: parts.map(p => p.text).join(' · '), title, parts }
 }
 
 export type DomainGrafanaLink = { label: string; url: string }

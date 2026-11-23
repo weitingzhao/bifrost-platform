@@ -1,4 +1,5 @@
 import { DenseTag, cn } from '@bifrost/ui'
+import { STATE_WORD, TAG_VARIANT } from '@/lib/shell/stateWords'
 import { SYSTEM_DOMAIN_ICON } from '@/lib/architecture/systemDomainCatalog'
 import type { DomainHealth } from '@/domains/foundation/observability'
 
@@ -26,9 +27,10 @@ export function ReferenceDomainChip({
       )}
     >
       <Icon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
-      <DenseTag variant="neutral" className="text-[9px]">
-        reference
+      <span className="shrink-0 whitespace-nowrap text-[var(--text-dense-caption)] font-medium">{domain.label}</span>
+      {/* Not a fault: boundary, the engine's word; what it means is in the sentence beside it. */}
+      <DenseTag variant={TAG_VARIANT.boundary} className="shrink-0 whitespace-nowrap text-[9px]">
+        {STATE_WORD.boundary}
       </DenseTag>
       <span className="text-[var(--text-dense-caption)] text-muted-foreground">
         by design · no runtime contract

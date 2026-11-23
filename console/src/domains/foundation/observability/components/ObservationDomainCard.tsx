@@ -4,7 +4,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 import {
   SYSTEM_DOMAIN_ICON,
 } from '@/lib/architecture/systemDomainCatalog'
-import type { DomainHealth, GapSummary, SignalGap } from '@/domains/foundation/observability'
+import type { DomainHealth, GapSummary } from '@/domains/foundation/observability'
 import { VERDICT_LABELS } from '@/domains/foundation/observability'
 import {
   formatGapSummaryLine,
@@ -21,29 +21,19 @@ function GapSummaryText({
   summary: GapSummary
   className?: string
 }) {
-  const { line, title } = formatGapSummaryLine(summary)
+  const { line, title, parts } = formatGapSummaryLine(summary)
   const allOk = summary.total > 0 && summary.ok === summary.total
   return (
     <span className={cn('font-mono-tabular', className)} title={title}>
       {allOk ? (
         <span className={gapPartClass('ok')}>{line}</span>
       ) : (
-        line.split(' · ').map((part, i) => {
-          const gap: SignalGap =
-            part.includes('fail')
-              ? 'fail'
-              : part.includes('blind')
-                ? 'blind'
-                : part.includes('by-design')
-                  ? 'by_design'
-                  : 'ok'
-          return (
-            <span key={part}>
-              {i > 0 ? ' · ' : null}
-              <span className={gapPartClass(gap)}>{part}</span>
-            </span>
-          )
-        })
+        parts.map((part, i) => (
+          <span key={part.text}>
+            {i > 0 ? ' · ' : null}
+            <span className={gapPartClass(part.gap)}>{part.text}</span>
+          </span>
+        ))
       )}
     </span>
   )

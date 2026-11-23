@@ -1997,6 +1997,7 @@
         "console/src/domains/foundation/observability/components/ObservationDomainCard.tsx",
         "console/src/domains/foundation/observability/components/ReferenceDomainChip.tsx",
         "console/src/domains/foundation/observability/components/SystemGapMeta.tsx",
+        "console/src/domains/foundation/observability/components/__tests__/gapWords.test.ts",
         "console/src/domains/foundation/observability/components/observabilityFormat.ts",
         "console/src/domains/foundation/observability/dashboardCatalog.ts",
         "console/src/domains/foundation/observability/grafanaUrlBuilder.ts",
@@ -2035,6 +2036,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "@testing-library/react",
         "react",
