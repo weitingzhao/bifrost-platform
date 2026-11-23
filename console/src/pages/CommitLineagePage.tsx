@@ -41,6 +41,9 @@ const HELP_KEY = 'lineage.help'
  * The picked line lives in the address (`thread=`), so a reload, the browser's back
  * from the City, or a shared link lands on the same line (brief 2026-11-22, item 3).
  */
+/** Long enough for the shell's section scroll to have run first. */
+const SCROLL_AFTER_SECTION_MS = 300
+
 function readThreadParam(): string | null {
   const q = window.location.hash.split('?')[1] ?? ''
   const v = new URLSearchParams(q).get('thread')?.trim() ?? ''
@@ -399,8 +402,17 @@ export function CommitLineagePage() {
   const pickedDrawn = selected != null && threads.some(t => t.session === selected)
   useEffect(() => {
     if (!pickedDrawn || selected == null) return
-    // After the shell's own scroll to the section, which would undo one made here.
-    return scrollAfterShell(() => document.getElementById(`lineage-thread-${selected}`), { block: 'center' })
+    // After the shell's own scroll to the section (on arrival and on coming back from the
+    // City), which runs after this effect and would undo a scroll made now (STG 2026-11-23:
+    // back from the City the row was open but 8000 px below the fold).
+    let cancel = () => {}
+    const timer = window.setTimeout(() => {
+      cancel = scrollAfterShell(() => document.getElementById(`lineage-thread-${selected}`), { block: 'center' })
+    }, SCROLL_AFTER_SECTION_MS)
+    return () => {
+      window.clearTimeout(timer)
+      cancel()
+    }
   }, [pickedDrawn, selected])
 
   const toggle = (id: string) =>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LineageCommit, LineageResponse, LineageThread } from '@/api/lineage'
 import { CommitLineagePage } from '@/pages/CommitLineagePage'
@@ -159,6 +159,23 @@ describe('commit lineage page, lines at a glance', () => {
     fireEvent.click(card)
     expect(window.location.hash).toBe('#work?section=commit-lineage&thread=local_s1')
     expect(document.getElementById('lineage-thread-local_s1')?.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  // Origin (STG 2026-11-23): back from the City the line's row was open but left 8000 px
+  // below the fold, because the shell's own section scroll ran after this page's.
+  it('scrolls the named line into view after the shell has scrolled to the section', async () => {
+    const scrolled: string[] = []
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id) }
+    try {
+      window.history.replaceState(null, '', '#work?section=commit-lineage&thread=local_s1')
+      page()
+      await screen.findByRole('button', { name: /local_s1/ })
+      expect(scrolled).not.toContain('lineage-thread-local_s1')
+      await waitFor(() => expect(scrolled).toContain('lineage-thread-local_s1'), { timeout: 1500 })
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
   })
 
   it('opens the line the address names on arrival', async () => {
