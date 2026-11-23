@@ -110,7 +110,8 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 // card had no system record across "relax cards into records" (law 46); the
 // comm line put each push on the ledger as approval.card.notified from the
 // PROD release of 16:20:43Z. Shape from PROD: kind created, one kind failed
-// (#662, 17:22:42Z). A window starting before the ledger kept them is
+// (#662, 17:22:42Z). 2026-11-23: "failed" was read as an undelivered push, so
+// the label is card_failed and by_kind splits the rest. A window starting before the ledger kept them is
 // unmeasured; a later window with no push is a measured 0.
 func TestOwnerInterruptions(t *testing.T) {
 	src := func(rows []eventlog.Row) ledgerSource {
@@ -130,7 +131,7 @@ func TestOwnerInterruptions(t *testing.T) {
 		row("approval.card.notified", at, map[string]any{"kind": "reminder_waiting", "channel": "ntfy"}),
 	}
 	r, err := src(rows).interruptionReading(day)
-	if err != nil || r.Status != StatusOK || *r.Value != 3 || r.Labels["failed"] != "1" {
+	if err != nil || r.Status != StatusOK || *r.Value != 3 || r.Labels["card_failed"] != "1" || r.Labels["by_kind"] != "created 2, reminder_waiting 1" || r.Definition.Version != "2" {
 		t.Fatalf("three pushes and one failure: %+v %v", r, err)
 	}
 	r, _ = src(nil).interruptionReading(day)

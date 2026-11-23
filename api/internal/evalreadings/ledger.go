@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -236,6 +237,13 @@ func (s ledgerSource) ownerReadings(w Window) ([]Reading, error) {
 	}, nil
 }
 
+// InterruptionsDefinitionVersion is owner_interruptions' own version. 2
+// (2026-11-23): the label "failed" read as "the push did not arrive" to the
+// coordinator; it counts pushes saying an approved card failed to run, so it
+// is now card_failed, and by_kind splits the counted pushes (created,
+// reminder_waiting, unknown, ...).
+const InterruptionsDefinitionVersion = "2"
+
 // notifiedSince is when the ledger began keeping the pushes to the Owner's
 // phone: the first PROD release with approval.card.notified (2026-11-20
 // 16:20:43Z, bifrost-deliver-platform-prod-1795191637, 7c4db486). A window
@@ -250,7 +258,8 @@ var notifiedSince = time.Date(2026, 11, 20, 16, 20, 43, 0, time.UTC)
 func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 	const name = "owner_interruptions"
 	d := def("event ledger approval.card.notified (one per push about a card: created, reminder, result)",
-		"pushes in the window whose kind is not failed; failed ones are in the label")
+		"pushes in the window whose kind is not failed; labels: card_failed = pushes saying an approved card failed to run, by_kind = the counted pushes by kind")
+	d.Version = InterruptionsDefinitionVersion
 	if w.From.Before(notifiedSince) {
 		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,
 			Note: "the ledger keeps the pushes only since " + notifiedSince.Format(time.RFC3339) + "; this window starts earlier"}, false), nil
@@ -260,15 +269,31 @@ func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 		return Reading{}, fmt.Errorf("approval.card.notified: %w", err)
 	}
 	sent, failed := 0, 0
+	kinds := map[string]int{}
 	for _, r := range rows {
-		if str(r.Body, "kind") == "failed" {
+		k := str(r.Body, "kind")
+		if k == "failed" {
 			failed++
-		} else {
-			sent++
+			continue
 		}
+		sent++
+		kinds[k]++
+	}
+	labels := map[string]string{"card_failed": fmt.Sprint(failed)}
+	if len(kinds) > 0 {
+		names := make([]string, 0, len(kinds))
+		for k := range kinds {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, k := range names {
+			parts = append(parts, fmt.Sprintf("%s %d", k, kinds[k]))
+		}
+		labels["by_kind"] = strings.Join(parts, ", ")
 	}
 	r := finish(Reading{Name: name, Value: count(sent), Unit: "count", Samples: sent, Window: w, Definition: d,
-		Labels: map[string]string{"failed": fmt.Sprint(failed)}}, false)
+		Labels: labels}, false)
 	measuredZero(&r)
 	return r, nil
 }
