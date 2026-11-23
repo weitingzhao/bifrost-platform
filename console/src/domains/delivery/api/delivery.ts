@@ -15,8 +15,8 @@ export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesRespons
   return r.json() as Promise<DeliveryPipelinesResponse>
 }
 
-export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {
-  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)
+export async function fetchPipelineRuns(name: string, options?: { signal?: AbortSignal }): Promise<DeliveryPipelineRunsResponse> {
+  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`, { signal: options?.signal })
   if (!r.ok) throw new Error(`pipeline runs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelineRunsResponse>
 }

@@ -1618,6 +1618,25 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/delivery/observation-report",
+      "files": [
+        "console/src/domains/delivery/observation-report/README.md",
+        "console/src/domains/delivery/observation-report/index.ts"
+      ],
+      "imports": [
+        "console/src/domains/delivery/api"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui/city/observation",
+        "@bifrost/ui/city/observationReport",
+        "@tanstack/react-query"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/delivery/policy",
       "files": [
         "console/src/domains/delivery/policy/ReleasePolicyBanner.tsx",
@@ -1999,7 +2018,8 @@
         "console/src/domains/foundation/observation-access/context.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.ts",
-        "console/src/domains/foundation/observation-access/index.ts"
+        "console/src/domains/foundation/observation-access/index.ts",
+        "console/src/domains/foundation/observation-access/reports.test.tsx"
       ],
       "imports": [
         "console/src",
@@ -2008,14 +2028,20 @@
       ],
       "test_imports": [
         "console/src/api/client.ts",
+        "console/src/api/deliveryTypes.ts",
+        "console/src/api/marketDataQueueHistory.ts",
+        "console/src/domains/delivery/observation-report",
         "console/src/domains/foundation/runtime-observation",
-        "console/src/domains/owner/city"
+        "console/src/domains/owner/city",
+        "console/src/domains/tenant/market-observation/observation-report"
       ],
       "external_imports": [
         "@bifrost/ui/city/observation",
         "@bifrost/ui/city/observationContext",
+        "@bifrost/ui/city/observationReport",
         "@tanstack/react-query",
         "@testing-library/react",
+        "react",
         "vitest"
       ],
       "source_inputs": [],
@@ -2562,6 +2588,25 @@
       ],
       "test_imports": [],
       "external_imports": [],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
+      "path": "console/src/domains/tenant/market-observation/observation-report",
+      "files": [
+        "console/src/domains/tenant/market-observation/observation-report/README.md",
+        "console/src/domains/tenant/market-observation/observation-report/index.ts"
+      ],
+      "imports": [
+        "console/src/domains/tenant/market-observation/api"
+      ],
+      "test_imports": [],
+      "external_imports": [
+        "@bifrost/ui/city/observation",
+        "@bifrost/ui/city/observationReport",
+        "@tanstack/react-query"
+      ],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []

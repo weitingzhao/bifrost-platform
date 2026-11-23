@@ -1525,6 +1525,20 @@
         ],
         "status": "mixed",
         "basis": "2026-11-16 complete activity and read-panel projections extracted; remaining Plan detail/Owner request composition and shared freshness checks retained unchanged."
+      },
+      "console/src/domains/delivery/observation-report": {
+        "domains": [
+          "delivery"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-22 Owner-authorized generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
+      },
+      "console/src/domains/tenant/market-observation/observation-report": {
+        "domains": [
+          "payload"
+        ],
+        "status": "assigned",
+        "basis": "2026-11-22 Owner-authorized generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
       }
     }
   }

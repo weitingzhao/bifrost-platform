@@ -1,3 +1,4 @@
+import { ReportsPreview } from './Reports'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CardView } from '@bifrost/ui/city/CardView'
@@ -31,4 +32,4 @@ function DomainRead({name}: {name:string}) {
     <pre style={{whiteSpace:'pre-wrap'}}>{JSON.stringify(read.data?.domains,null,2)}</pre>
   </section>
 }
-createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}>{location.search==='?domains'?<main style={{padding:24}}><h1>Independent domain reads</h1><DomainRead name="Console consumer"/><DomainRead name="Signals consumer"/></main>:<Preview/>}</QueryClientProvider>)
+createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}>{location.search==='?reports'?<ReportsPreview/>:location.search==='?domains'?<main style={{padding:24}}><h1>Independent domain reads</h1><DomainRead name="Console consumer"/><DomainRead name="Signals consumer"/></main>:<Preview/>}</QueryClientProvider>)

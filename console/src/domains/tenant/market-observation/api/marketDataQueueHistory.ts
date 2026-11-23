@@ -31,11 +31,13 @@ export type QueueHistory = {
 export async function fetchQueueHistory(
   hours: number,
   kind?: string,
+  options?: { signal?: AbortSignal },
 ): Promise<QueueHistory> {
   const q = new URLSearchParams({ hours: String(hours) });
   if (kind) q.set("kind", kind);
   const r = await serverFetch(
     `/api/v1/plugins/market-data/api/market/ingest/queue-history?${q}`,
+    { signal: options?.signal },
   );
   if (!r.ok) throw new Error(`queue history: HTTP ${r.status}`);
   const body = (await r.json()) as { ok: boolean; data: QueueHistory };
