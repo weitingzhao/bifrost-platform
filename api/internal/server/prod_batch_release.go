@@ -1,12 +1,10 @@
 package server
 
 import (
-	"context"
 	"log/slog"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
-	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 )
 
 // Mode on of "the platform releases PROD in batches" (headrelease/prod_shadow.go
@@ -15,18 +13,6 @@ import (
 // service starts the run only when no run of the pipeline is under way and
 // the release window is free, and holds the window for the run), under its
 // own name. prod_batch_shadow.go, the shadow's reads, stays without it.
-
-// prodRelease starts the PROD delivery of revision with params beside it.
-func (s *Server) prodRelease(ctx context.Context, pipeline, revision string, params map[string]string) (string, string, error) {
-	run, heldBy, err := s.startHeadRelease(ctx, headrelease.ProdReleasePrincipal, pipeline, revision, params)
-	if err != nil {
-		return "", "", err
-	}
-	if heldBy != "" {
-		return "", "not started: " + heldBy, nil
-	}
-	return run.Name, "", nil
-}
 
 // prodReleaseZone is the briefs' zone, in which the release hours are read;
 // nil (no hours) when it does not load.

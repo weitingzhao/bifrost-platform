@@ -16,7 +16,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/headrelease"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
 )
@@ -154,7 +153,10 @@ func TestTraceRuntimeRecords(t *testing.T) {
 		c := h.srv.beginApprovalTrace(ctx, a)
 		h.srv.endApprovalTrace(c, map[string]any{"run": "human-run"}, nil)
 	}
-	h.srv.recordHeadDecision(ctx, headrelease.Deliverable{}, headrelease.Outcome{Deliverable: "platform", Action: "waiting", Why: "CI pending"})
+	// The head-release loop records through the hand the server lends it
+	// (headrelease.Hands.Trace; what it records is tested in headrelease).
+	h.srv.headHands().Trace(ctx, "start_pipeline_run", "system_head", "head-release", "CI pending",
+		map[string]any{"deliverable": "platform"}, map[string]any{"action": "waiting"}, map[string]any{"action": "waiting"})
 	for _, code := range []int{502, 504} {
 		rec := httptest.NewRecorder()
 		h.srv.tracedAction("start_pipeline_run", func(w http.ResponseWriter, r *http.Request) {

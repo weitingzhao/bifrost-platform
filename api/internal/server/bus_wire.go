@@ -297,7 +297,7 @@ func (s *Server) startBus(ctx context.Context, pool *pgxpool.Pool, env string, r
 			return
 		}
 		safego.Go("bus-stream-sizes", func() { relay.WatchStreamSizes(ctx, js, relay.Tenant, env) })
-		if headrelease.On() || headrelease.ProdShadowOn() {
+		if headrelease.Enabled() {
 			s.bus.head.Consume(ctx, js, env)
 		}
 		s.subscriptions(pool).Run(ctx, js, env)

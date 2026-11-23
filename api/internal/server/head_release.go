@@ -2,8 +2,7 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
+	"errors"
 	"net/http"
 	"time"
 
@@ -86,41 +85,47 @@ func (s *Server) startHeadRelease(ctx context.Context, principal, pipeline, revi
 
 // headReleaseSource is the loop's pass, or nil when the switch is off.
 func (s *Server) headReleaseSource() func(context.Context) error {
-	if s.delivery == nil || (!headrelease.On() && !headrelease.ProdShadowOn()) {
+	if s.delivery == nil {
 		return nil
 	}
-	table, path, err := headrelease.LoadTable()
-	if err != nil {
-		slog.Error("head release: the table does not load; nothing is released", "path", path, "error", err)
-		return nil
-	}
-	releasing := headrelease.On()
-	// The shadow of PROD by batch (prod_batch_shadow.go): nil unless
-	// PROD_HEAD_RELEASE=shadow. It records and does nothing else.
-	shadow := s.prodShadowOf(table)
-	slog.Info("head release: on", "path", path, "deliverables", len(table.Deliverables), "releasing", releasing, "prod_shadow", shadow != nil)
-	return headrelease.Pass(headrelease.PassDeps{
-		Table: table, Releasing: releasing, WorldOf: s.headWorldOf, Shadow: shadow,
-		Record: s.recordHeadDecision,
-	})
+	return headrelease.Source(s.headHands())
 }
 
-func (s *Server) recordHeadDecision(ctx context.Context, d headrelease.Deliverable, out headrelease.Outcome) {
-	rec := headrelease.RecordOf(ctx, d, out, s.headBrought)
-	detail, err := json.Marshal(rec)
-	if err != nil {
-		detail = []byte(out.Action + ": " + out.Why)
+// headHands lends the head-release loop what it reaches outside delivery:
+// this process's audit log and action trace, Gitea, the delivery start, the
+// PROD shadow's reads, the daily full CI and the ledger. The loop's own work
+// (records, the shadow, the PROD release) is in headrelease (Source).
+func (s *Server) headHands() headrelease.Hands {
+	return headrelease.Hands{
+		WorldOf: s.headWorldOf,
+		Git:     gitAccess(s.delivery.GiteaAccess),
+		Audit: func(principal, action, target, result, detail string) {
+			s.audit.RecordDirect(principal, actuation.RoleOperator, action, target, result, detail)
+		},
+		Trace: func(ctx context.Context, action, mode, principal, why string, params map[string]any, decision, result any) {
+			s.tracer().RecordSystem(ctx, action, mode, principal, why, params, decision, result)
+		},
+		Start: func(ctx context.Context, principal, pipeline, revision string, params map[string]string) (string, string, error) {
+			run, heldBy, err := s.startHeadRelease(ctx, principal, pipeline, revision, params)
+			return run.Name, heldBy, err
+		},
+		ShadowReads: s.prodShadowReads,
+		DB: func() eventlog.DB {
+			if s.agentRuntime == nil || s.agentRuntime.api == nil || s.agentRuntime.api.DB == nil {
+				return nil
+			}
+			return s.agentRuntime.api.DB
+		},
+		// Read when called: wireFullCI sets fullCIRun on PROD's controller,
+		// which may come after this loop is built.
+		FullCI: func(ctx context.Context, revision string) (string, error) {
+			if s.fullCIRun == nil {
+				return "", errors.New("the daily full CI is not wired in this process")
+			}
+			return s.fullCIRun(ctx, revision)
+		},
+		Zone: prodReleaseZone(),
 	}
-	slog.Info("head release", "deliverable", out.Deliverable, "action", out.Action, "why", out.Why, "run", out.Run, "record", string(detail))
-	s.audit.RecordDirect(headrelease.Principal, actuation.RoleOperator, "head_release", "deliverable/"+out.Deliverable, out.Action, string(detail))
-	s.tracer().RecordSystem(ctx, "start_pipeline_run", "system_head", headrelease.Principal, out.Why,
-		map[string]any{"deliverable": out.Deliverable, "commits": out.Commits}, rec, map[string]any{"action": out.Action, "run": out.Run})
-}
-
-// headBrought lists the commits to has and from lacks, newest first, each
-// with its lineage trailers, from Gitea (headrelease.Brought).
-func (s *Server) headBrought(ctx context.Context, repo, from, to string) ([]headrelease.BroughtCommit, int, string) {
-	return headrelease.Brought(ctx, gitAccess(s.delivery.GiteaAccess), repo, from, to)
 }
 
 // handleReleased is GET /api/v1/delivery/released (headrelease.ReleasedRoute).
