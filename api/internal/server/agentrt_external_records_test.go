@@ -11,45 +11,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/evidence"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
-
-func TestPipelineRecordsDurationFromEnv(t *testing.T) {
-	for _, name := range []string{pipelineRecordsEveryEnv, pipelineRecordsFullEveryEnv} {
-		for value, want := range map[string]time.Duration{
-			"":      0, // the controller's default
-			"15s":   15 * time.Second,
-			" 1m ":  time.Minute,
-			"5s":    5 * time.Second,
-			"4s":    0, // under the floor: the default holds
-			"-1m":   0,
-			"30":    0, // not a duration
-			"often": 0,
-		} {
-			t.Setenv(name, value)
-			if got := pipelineRecordsDuration(name); got != want {
-				t.Errorf("%s=%q: %s, want %s", name, value, got, want)
-			}
-		}
-	}
-	if controller.DefaultPipelineEvery < pipelineRecordsEveryMin || controller.DefaultPipelineFullEvery < controller.DefaultPipelineEvery {
-		t.Fatalf("defaults: every %s, full every %s, floor %s", controller.DefaultPipelineEvery, controller.DefaultPipelineFullEvery, pipelineRecordsEveryMin)
-	}
-}
-
-// The controller is given the intervals. The release recorder is told of a
-// finished run by the bus (consumeReleaseRecords, N21), not by this loop.
-func TestWirePipelineRecords(t *testing.T) {
-	t.Setenv(pipelineRecordsEveryEnv, "20s")
-	t.Setenv(pipelineRecordsFullEveryEnv, "10m")
-	c := &controller.Controller{}
-	s := &Server{releases: releases.NewHandler(releases.NewService(t.TempDir(), nil))}
-	s.wirePipelineRecords(c)
-	if c.PipelineEvery != 20*time.Second || c.PipelineFullEvery != 10*time.Minute || c.PipelineRecorded != nil {
-		t.Fatalf("every %s, full every %s, hook set %v", c.PipelineEvery, c.PipelineFullEvery, c.PipelineRecorded != nil)
-	}
-}
 
 // A CI run's results name what it tested: <short>-commit and <short>-tree a
 // repository, source-* the run's own; other results are not inputs, and a

@@ -19,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	verificationports "github.com/weitingzhao/bifrost-platform/api/internal/verification/ports"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
@@ -178,6 +179,14 @@ func frozenBoundaryRule(id string, current, latest *store.StoredRule, now time.T
 	return v
 }
 
+// ruleVersionOf is a stored rule as verification/ports hands it to the view.
+func ruleVersionOf(r *store.StoredRule) *verificationports.RuleVersion {
+	if r == nil {
+		return nil
+	}
+	return &verificationports.RuleVersion{Version: r.Version, Effective: r.Effective, Expires: r.Expires, Doc: r.Doc}
+}
+
 // Moved from agentrt/store with the projection (2026-11-18).
 func TestBoundaryProjectionFrozenParity(t *testing.T) {
 	t.Parallel()
@@ -197,7 +206,7 @@ func TestBoundaryProjectionFrozenParity(t *testing.T) {
 						latest = makeRule()
 					}
 					want := frozenBoundaryRule(id, current, latest, now)
-					got := boundaryRuleFrom(id, current, latest, now)
+					got := boundaryRuleFrom(id, ruleVersionOf(current), ruleVersionOf(latest), now, verificationports.DeliveryBoundaries())
 					if !reflect.DeepEqual(want, got) {
 						t.Fatalf("%s %v %v %v: %#v != %#v", id, c, l, offset, want, got)
 					}

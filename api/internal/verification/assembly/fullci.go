@@ -13,11 +13,11 @@ import (
 // The daily full CI as PROD's controller runs it: the landing CI's client
 // creates and lists the runs, the platform's read-only Gitea identity reads
 // main. Moved out of server (agentrt_full_ci.go, wireFullCI) on 2026-11-23,
-// unchanged; server still decides whether to wire it and hands the zone.
+// unchanged; controller.go wires it (wireFullCI) from what server lends.
 
-// FullCIRun starts a candidate's full CI with the same runner, on the day of
+// fullCIRun starts a candidate's full CI with the same runner, on the day of
 // zone (the PROD head-release loop, headrelease fullCIFor).
-func FullCIRun(ci *landingci.Client, zone string) func(ctx context.Context, revision string) (string, error) {
+func fullCIRun(ci *landingci.Client, zone string) func(ctx context.Context, revision string) (string, error) {
 	return func(ctx context.Context, revision string) (string, error) {
 		day := time.Now().UTC()
 		if loc, err := time.LoadLocation(zone); err == nil {
@@ -27,8 +27,8 @@ func FullCIRun(ci *landingci.Client, zone string) func(ctx context.Context, revi
 	}
 }
 
-// NewFullCI is the controller's daily full CI at at (HH:MM), run with ci.
-func NewFullCI(ci *landingci.Client, at string) *fullci.FullCI {
+// newFullCI is the controller's daily full CI at at (HH:MM), run with ci.
+func newFullCI(ci *landingci.Client, at string) *fullci.FullCI {
 	git := func() (*landinggit.Git, error) { return landinggit.ReaderFromEnv("bifrost-platform") }
 	return &fullci.FullCI{At: at, Runs: func(ctx context.Context, since time.Time) ([]landingci.FullRun, error) {
 		// A name for the platform's count of its own Kubernetes requests: these

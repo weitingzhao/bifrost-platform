@@ -16,17 +16,18 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/assessmentreadings"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 )
 
 // agentRuntime is the agent runtime as this process runs it.
@@ -45,7 +46,7 @@ type agentRuntime struct {
 	// once it is (/health says agentrt_ready); nil without AGENTRT_DSN.
 	late *runtimedb.Late
 	// fullCI is the controller's daily full CI once the workers process
-	// has wired it (wireFullCI), for the gauge /metrics serves; nil in a
+	// has wired it (verification/assembly), for the gauge /metrics serves; nil in a
 	// process that runs no controller, or where the loop is off.
 	fullCI atomic.Pointer[fullci.FullCI]
 }
@@ -139,15 +140,18 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			pool.Close()
 			return
 		}
-		c := agentRuntimeController(env, pool, s.agentRuntimeSources(), s.questionRuntime.Unacked())
-		s.wireExternalRecords(&c.Sources)
+		lent := agentRuntimeController(env, pool, s.agentRuntimeSources(), s.questionRuntime.Unacked())
+		s.wireExternalRecords(&lent.Sources)
 		// The old landing lane is retired (the Owner 2026-11-13): its loops
 		// (drill, live claims, cards, grant requests, reconcile, the reading
 		// of main for landed results) are not wired any more. Changes reach
 		// main through ready/ and the bifrost-land pipeline.
-		s.wirePipelineRecords(c)
-		s.wireFullCI(c)
-		rt.fullCI.Store(c.FullCI)
+		s.lendController(&lent)
+		c := verificationassembly.NewController(lent)
+		if run := c.FullCIRun(); run != nil {
+			s.fullCIRun = run
+		}
+		rt.fullCI.Store(c.FullCI())
 		wait := c.Start(ctx)
 		<-ctx.Done()
 		wait()
@@ -159,30 +163,43 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	}
 }
 
-// agentRuntimeController is the platform-workers' controller. Every
-// environment runs the same passes. The facts-and-rules pass runs, after the
-// tuning rule, the plan's facts, its decisions, the acknowledging of the
-// answers the runtime used (agentrt/questionbridge, the owner domain's) and the
-// plan's done rules, in that order; the plan's observations are a loop of
-// their own (agentrt/planloop, the plan domain's). The controller's own
-// sources are the plan's deployment read and the external records'
-// (wireExternalRecords).
-func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, unacked func(context.Context) ([]questionbridge.AnsweredCard, error)) *controller.Controller {
-	c := &controller.Controller{DB: db, Sources: controller.Sources{Deployed: plans.Deployed}, Env: env, Logf: func(format string, args ...any) {
+// agentRuntimeController is what the platform-workers' controller
+// (verification/assembly.NewController) is lent. Every environment runs the
+// same passes. The facts-and-rules pass runs, after the tuning rule, the
+// plan's facts, its decisions, the acknowledging of the answers the runtime
+// used (agentrt/questionbridge, the owner domain's) and the plan's done
+// rules, in that order; the plan's observations are a loop of their own
+// (agentrt/planloop, the plan domain's). The controller's own sources are the
+// plan's deployment read and the external records' (wireExternalRecords).
+func agentRuntimeController(env string, db eventlog.DB, plans planloop.Sources, unacked func(context.Context) ([]questionbridge.AnsweredCard, error)) verificationassembly.ControllerLent {
+	c := verificationassembly.ControllerLent{DB: db, Sources: verificationassembly.ControllerSources{Deployed: plans.Deployed}, Env: env, Logf: func(format string, args ...any) {
 		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}, Infof: func(format string, args ...any) {
 		slog.Info("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
 	p := &planloop.Loop{DB: db, Sources: plans}
 	a := &questionbridge.Acker{DB: db, Unacked: unacked, Ack: plans.Ack, Logf: c.Logf, Infof: c.Infof}
-	c.Steps = []controller.Step{
+	c.Steps = []verificationassembly.Pass{
 		{Name: "facts", Run: passOf(p.Facts)},
 		{Name: "plan decisions", Run: passOf(p.PlanDecisions)},
 		{Name: "used answers", Run: passOf(a.AckUsedAnswersDue)},
 		{Name: "rules", Run: passOf(p.Rules)},
 	}
-	c.Loops = []controller.Loop{{Name: "agentrt-plan-observations", Every: planloop.PlanObserveEvery, Run: passOf(p.PlanObservations)}}
+	c.Loops = []verificationassembly.Pass{{Name: "agentrt-plan-observations", Every: planloop.PlanObserveEvery, Run: passOf(p.PlanObservations)}}
 	return c
+}
+
+// lendController lends the controller the bus's queue of finished runs
+// (gate-cluster names each one, startGateCluster) and, where there is a
+// cluster, the landing CI for the daily full CI, whose day is the Owner's, in
+// the zone of the briefs.
+func (s *Server) lendController(l *verificationassembly.ControllerLent) {
+	l.PipelineFinished = s.bus.finished.Queue()
+	if s.cluster != nil {
+		ci := s.landingCI()
+		l.CI = &ci
+	}
+	l.FullCIZone = planpace.BriefZone
 }
 
 // passOf is a pass that counts what it did as a step or loop of the

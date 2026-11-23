@@ -2,14 +2,13 @@ package server
 
 import (
 	"context"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/readerseen"
-	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 	"net/http"
 	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/gatecluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/relay"
@@ -19,6 +18,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry/pluginmetrics"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 )
 
 // /metrics is every part's own exposition, in order; each part writes itself.
@@ -38,12 +38,17 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		s.releasePolicy.Status(ctx)
 		cancel()
 	}
-	s.writeFullCIMetric(&b)
+	// The daily full CI's gauge and the controller's records counts: only
+	// the process whose controller runs the full CI (workers, PROD) has it.
+	var full *fullci.FullCI
+	if s.agentRuntime != nil {
+		full = s.agentRuntime.fullCI.Load()
+	}
+	verificationassembly.WriteMetrics(&b, full)
 	releasepolicy.WriteMetrics(&b)
 	agentthreads.WriteMetrics(&b)
 	relay.WriteMetrics(&b)
 	gatecluster.WriteMetrics(&b)
-	controller.WritePipelineEventMetrics(&b)
 	delivery.WriteBusReaderMetrics(&b)
 	readerseen.WriteMetrics(&b)
 	kubemetrics.Write(&b)
@@ -51,20 +56,6 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(b.String()))
-}
-
-// writeFullCIMetric writes whether the newest finished daily full CI run is
-// red, for the alert rules: only the process whose controller runs that loop
-// (workers, PROD) has the answer, and any other writes no series.
-func (s *Server) writeFullCIMetric(b *strings.Builder) {
-	if s.agentRuntime == nil {
-		return
-	}
-	name, status, ok := s.agentRuntime.fullCI.Load().Latest()
-	if !ok {
-		return
-	}
-	cirunview.WriteFullCIMetric(b, name, status)
 }
 
 func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {

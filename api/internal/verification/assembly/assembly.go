@@ -10,8 +10,10 @@
 // The handlers still live in server (ci_read_wire.go, units_*.go), which
 // binds them to delivery's Gitea access and other domains' reads; they are
 // lent here with the gates. Since 2026-11-23 the assembly packages reach the
-// verification domain only through this package (surface.go names what they
-// bind; fullci.go and units.go hold wiring moved out of server).
+// verification domain only through its public packages: this package holds
+// the wiring moved out of server (controller.go, ci.go, fullci.go,
+// scopeshadow.go, units.go, metrics.go), built from what server lends, and
+// verification/ports hands other domains' ports verification's facts.
 package assembly
 
 import (

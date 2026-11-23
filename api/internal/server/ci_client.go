@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -19,23 +19,25 @@ func (s *Server) landingGateRuns() func(string, func(*unstructured.Unstructured)
 	}
 }
 
-// The CI client's Kubernetes transports are wired here, not through delivery.
-func (s *Server) landingCIClient() *landingci.Client {
-	namespace := landingci.DefaultNamespace
+// What the landing CI's client (verification/assembly) is lent: the stack's
+// namespace, the bus run cache and the cluster's Kubernetes transports, wired
+// here, not through delivery.
+func (s *Server) landingCI() verificationassembly.CILent {
+	namespace := ""
 	// Tests build a bare Server; production always has a config.
 	if s.cfg != nil {
 		if entry := s.cfg.DefaultCluster(); entry != nil && entry.ResolvedStackNamespace() != "" {
 			namespace = entry.ResolvedStackNamespace()
 		}
 	}
-	return &landingci.Client{Namespace: namespace, GateRuns: s.landingGateRuns(), Dynamic: func() (dynamic.Interface, error) {
+	return verificationassembly.CILent{Namespace: namespace, GateRuns: s.landingGateRuns(), Dynamic: func() (dynamic.Interface, error) {
 		cfg, _, err := s.cluster.Service().RestConfig()
 		if err != nil {
 			return nil, err
 		}
 		return dynamic.NewForConfig(cfg)
-	}, Logs: landingci.PodLogs(func() (kubernetes.Interface, error) {
+	}, Kubernetes: func() (kubernetes.Interface, error) {
 		client, _, err := s.cluster.Service().KubernetesClient()
 		return client, err
-	}, namespace)}
+	}}
 }

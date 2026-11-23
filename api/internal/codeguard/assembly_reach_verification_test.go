@@ -1,15 +1,10 @@
 package codeguard
 
 // Assembly's imports of verification packages verification has not made public
-// (assembly_contracts_test.go), 2026-11-22. The list only shrinks.
-var _ = heldAssemblyReach(
-	"api/internal/agentrt/planwiring -> api/internal/agentrt/rules (verification)",
-	"api/internal/agentrt/planwiring -> api/internal/agentrt/store (verification)",
-	"api/internal/server -> api/internal/agentrt/controller (verification)",
-	"api/internal/server -> api/internal/agentrt/landing (verification)",
-	"api/internal/server -> api/internal/agentrt/landingci (verification)",
-	"api/internal/server -> api/internal/agentrt/landinggit (verification)",
-	"api/internal/server -> api/internal/agentrt/rules (verification)",
-	"api/internal/server -> api/internal/agentrt/store (verification)",
-	"api/internal/server -> api/internal/unitplan (verification)",
-)
+// (assembly_contracts_test.go), 2026-11-22. Empty since 2026-11-23: the
+// wiring that was purely verification's (the controller, the landing CI's
+// client, the unit scope shadow, the run view's cache) moved into
+// verification/assembly, and what assembly hands other domains' ports of
+// verification's facts (the rule store, the landing rules, the unit plan)
+// comes from verification/ports in plain data. The list only shrinks.
+var _ = heldAssemblyReach()

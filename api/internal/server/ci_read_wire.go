@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/evidenceread"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -57,8 +58,7 @@ func (s *Server) handleUnitFullCICheck(w http.ResponseWriter, r *http.Request) {
 				return fullci.CheckSources{}, false
 			}
 			s.unitTreesOf()
-			ci := s.landingCIClient()
-			return fullci.CheckSources{FirstParents: fullci.FirstParentsFrom(s.unitTrees.Get), RunModules: ci.RunModulesOf, FailedTasks: ci.FullRunFailedTasks}, true
+			return verificationassembly.FullCICheckSources(s.landingCI(), fullci.FirstParentsFrom(s.unitTrees.Get)), true
 		},
 	}.ServeHTTP(w, r)
 }

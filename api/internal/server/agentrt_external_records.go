@@ -2,23 +2,21 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/approvalfacts"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 )
 
 // wireExternalRecords supplies bounded, read-only lists for durable backfill.
-func (s *Server) wireExternalRecords(src *controller.Sources) {
+func (s *Server) wireExternalRecords(src *verificationassembly.ControllerSources) {
 	src.Questions = s.questionRuntime.Observations()
 	if s.approvals != nil {
 		src.Approvals = approvalfacts.Backfill(s.approvals.Observations)
@@ -63,40 +61,6 @@ func (s *Server) wireExternalRecords(src *controller.Sources) {
 			return out, nil
 		}
 	}
-}
-
-// pipelineRecordsEveryEnv sets how often the workers list the retained
-// pipeline runs for the ones that completed, and pipelineRecordsFullEveryEnv
-// how often such a pass compares every listed run with the database whatever
-// it remembers: Go durations (30s, 5m), not under pipelineRecordsEveryMin.
-// Unset, the controller's defaults hold (controller.DefaultPipelineEvery,
-// controller.DefaultPipelineFullEvery).
-const (
-	pipelineRecordsEveryEnv     = "AGENTRT_PIPELINE_RECORDS_EVERY"
-	pipelineRecordsFullEveryEnv = "AGENTRT_PIPELINE_RECORDS_FULL_EVERY"
-	pipelineRecordsEveryMin     = 5 * time.Second
-)
-
-// pipelineRecordsDuration reads one of them; zero is the controller's default.
-func pipelineRecordsDuration(name string) time.Duration {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return 0
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil || d < pipelineRecordsEveryMin {
-		slog.Error("agentrt: "+name+" is not a duration of at least "+pipelineRecordsEveryMin.String()+"; the default holds", "value", v)
-		return 0
-	}
-	return d
-}
-
-// wirePipelineRecords sets how often the controller records completed runs.
-func (s *Server) wirePipelineRecords(c *controller.Controller) {
-	c.PipelineEvery = pipelineRecordsDuration(pipelineRecordsEveryEnv)
-	c.PipelineFullEvery = pipelineRecordsDuration(pipelineRecordsFullEveryEnv)
-	// Bus step 2: gate-cluster names each finished run (startGateCluster).
-	c.PipelineFinished = s.bus.finished.Queue()
 }
 
 // runFailure adapts delivery observations to the CI failure projection.

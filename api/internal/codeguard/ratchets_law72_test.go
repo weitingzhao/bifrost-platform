@@ -96,7 +96,7 @@ func TestUnlistedNamesAPackageWithoutARow(t *testing.T) {
 var assemblyFuncs = map[string]int{
 	"api/internal/agentrt/integration": 0,
 	"api/internal/agentrt/planwiring":  3,
-	"api/internal/server":              279,
+	"api/internal/server":              274,
 }
 
 // funcsIn counts the top-level func declarations in a directory's non-test

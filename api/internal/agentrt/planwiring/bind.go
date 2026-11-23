@@ -4,8 +4,7 @@
 // the Owner's questions, nor lineage the plan tree: each declares what it
 // needs as a port and this package, which names both sides, binds them when
 // Bind is called. A binary or a test that runs the plan code calls it; the
-// rule ports are bound by agentrt/store, which keeps the rules and is linked
-// from here.
+// rule ports read the rule store through verification/ports.
 package planwiring
 
 import (
@@ -22,11 +21,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/externalwork"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planreadings"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/strictjson"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
+	verificationports "github.com/weitingzhao/bifrost-platform/api/internal/verification/ports"
 )
 
 // ExternalWorkPorts are the plan's ports onto the work records (the checks
@@ -66,29 +64,23 @@ func ExternalWorkPorts() planstore.ExternalWorkPorts {
 }
 
 // rulePorts are the plan's ports onto the rule in force of each kind, as far
-// as the plan code reads it, read through the rule store. A rule that does
-// not read counts as none there too.
+// as the plan code reads it, read through the rule store (verification/ports).
+// A rule that does not read counts as none there too.
 func rulePorts() planstore.RulePorts {
 	return planstore.RulePorts{
 		PlanRuleInForce: func(ctx context.Context, tx pgx.Tx) (*planstore.PlanRule, error) {
-			r, err := store.InForceIn(ctx, tx, rules.KindPlan)
+			r, err := verificationports.PlanRuleInForce(ctx, tx)
 			if err != nil || r == nil {
 				return nil, err
 			}
-			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
+			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.DoneRules}, nil
 		},
-		CardAutoKindsInForce: func(ctx context.Context, tx pgx.Tx) ([]string, error) {
-			r, err := store.InForceIn(ctx, tx, rules.KindCardAuto)
-			if err != nil || r == nil {
-				return nil, err
-			}
-			return r.CardAuto.Kinds, nil
-		},
+		CardAutoKindsInForce: verificationports.CardAutoKindsInForce,
 	}
 }
 
 // Bind binds the plan code's ports that this package provides (including the rule
-// ports, read through agentrt/store). The API binary calls it at its start
+// ports, read through verification/ports). The API binary calls it at its start
 // (server/agentrt_planwiring.go); a test that runs the plan code calls it from
 // its TestMain. Linking this package binds nothing any more (2026-11-18,
 // decoupling item 5: the planstore tests used to be bound only because they

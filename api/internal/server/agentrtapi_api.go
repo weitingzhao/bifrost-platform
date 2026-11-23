@@ -39,9 +39,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recordsapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rulesapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/workregistration"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
+	verificationports "github.com/weitingzhao/bifrost-platform/api/internal/verification/ports"
 )
 
 // agentrtAPI serves the routes. A nil DB means the platform has no agentrt
@@ -239,7 +239,7 @@ func (a *agentrtAPI) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "identity_mismatch", err.Error())
 	case errors.Is(err, eventlog.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
-	case errors.Is(err, store.ErrUnsigned):
+	case verificationports.Unsigned(err):
 		writeError(w, http.StatusForbidden, "unsigned", err.Error())
 	case errors.Is(err, planstore.ErrAsk):
 		writeError(w, http.StatusServiceUnavailable, "owner_unreachable", err.Error())

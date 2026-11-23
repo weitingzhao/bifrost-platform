@@ -240,7 +240,7 @@
       "tier": 2,
       "source": "domains/3-4-verify-release-ci/charter.md",
       "contracts": {
-        "public_packages": ["api/internal/verification/assembly", "api/internal/cirunview", "api/internal/evidenceread", "api/internal/agentrt/rulesapi", "api/internal/ciconfig", "api/internal/cidomains", "api/internal/ciscore", "api/internal/agentrt/fullci", "api/internal/unitwatch", "api/internal/unitexec", "api/internal/agentrt/runfacts"],
+        "public_packages": ["api/internal/verification/assembly", "api/internal/verification/ports", "api/internal/cirunview", "api/internal/evidenceread", "api/internal/agentrt/rulesapi", "api/internal/ciconfig", "api/internal/cidomains", "api/internal/ciscore", "api/internal/agentrt/fullci", "api/internal/unitwatch", "api/internal/unitexec", "api/internal/agentrt/runfacts"],
         "measured_at": "2e93ae09",
         "request_response": [
           {"method": "GET", "path": "/api/v1/ci/changes", "handler": "api/internal/server.handleCIChanges", "consumers": ["console"]},
@@ -895,7 +895,14 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). Imports foundation (versionedread) only."
+      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). 2026-11-23 (E5): also the verification's wiring moved out of server unchanged, built from what server lends (func values and structs declared here): the controller (NewController: pipeline records' intervals, the daily full CI and its runner), the landing CI's client (CILent: full-CI check sources, the run view's cache), the unit scope shadow, the unit configuration read and the verification's /metrics series."
+    },
+    "api/internal/verification/ports": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-23 (decoupling endpoint E5): what verification hands other domains' ports, one function per use, in plain data (structs of the package, builtin and foundation types): the rule store's plan and card-auto rules for the plan's rule ports, the boundaries view's rules for delivery, the landing rules over main's history for lineage, the rule approval for approvals, the unsigned refusal for the agent runtime API, and the Go packages of a commit for the catalog. Calls agentrt/store, agentrt/rules, agentrt/landing, agentrt/landinggit, unitplan and cidomains inside; returns none of their types. Public (contracts.public_packages)."
     },
     "api/internal/ciscore": {
       "domains": [

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landingci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/cirunview"
 )
 
 // The contract between the units routes and the Console's CI views: the
@@ -66,14 +67,14 @@ func TestUnitsContractRuns(t *testing.T) {
 			Tasks: []landingci.TaskView{{Task: "changes", Status: "Succeeded", Seconds: 11, Waited: 6}, {Task: "test-svc", Status: "Succeeded", Seconds: 123, Waited: 7}, {Task: "test-web", Status: "Succeeded", Seconds: 12, Waited: 5}}},
 		{Name: "ci-1", Pipeline: "another-pipeline", Revision: strings.Repeat("2", 40), Status: "Succeeded", Trigger: "platform-api", CreatedAt: "2026-11-13T20:00:00Z", Seconds: 300, Tasks: []landingci.TaskView{}},
 	}
-	var cache unitRunsCache
-	out, err := cache.unitRuns(context.Background(), func(context.Context, string, int) ([]landingci.RunView, error) { return runs, nil },
+	var cache cirunview.Cache
+	out, err := cache.Read(context.Background(), func(context.Context, string, int) ([]landingci.RunView, error) { return runs, nil },
 		time.Date(2026, 11, 14, 16, 45, 0, 0, time.UTC), "r", unitRunsDefault)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unitsContract(t, "runs.json", out)
-	empty, err := cache.unitRuns(context.Background(), func(context.Context, string, int) ([]landingci.RunView, error) { return []landingci.RunView{}, nil },
+	empty, err := cache.Read(context.Background(), func(context.Context, string, int) ([]landingci.RunView, error) { return []landingci.RunView{}, nil },
 		time.Date(2026, 11, 14, 16, 45, 0, 0, time.UTC), "nobody", unitRunsDefault)
 	if err != nil {
 		t.Fatal(err)

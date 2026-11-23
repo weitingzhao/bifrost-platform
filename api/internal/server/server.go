@@ -63,12 +63,13 @@ import (
 	tenantassembly "github.com/weitingzhao/bifrost-platform/api/internal/tenant/assembly"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
+	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
 type Server struct {
 	// fullCIRun starts the full CI of a revision with the daily full CI's runner
-	// (wireFullCI, PROD only); nil elsewhere.
+	// (verification/assembly wireFullCI, PROD only); nil elsewhere.
 	fullCIRun func(ctx context.Context, revision string) (string, error)
 	cfg       *config.Config
 	prober    *probe.Prober
@@ -83,7 +84,7 @@ type Server struct {
 	// (gitread.Trees), keeping the blobs it read.
 	unitTrees *gitread.Trees
 	// unitRunsKept keeps the run view's answers a short while (cirunview.Cache).
-	unitRunsKept unitRunsCache
+	unitRunsKept verificationassembly.RunsKept
 	// ciScorecardKept keeps the CI scorecard a short while (ci_read_wire.go).
 	ciScorecardKept ciscore.Cache
 	// ciDomainsKept keeps the CI page's domain graph and the files commits
