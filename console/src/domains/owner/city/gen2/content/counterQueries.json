@@ -1,0 +1,4 @@
+{
+  "perMin": "60 * sum by (handler, method) (rate(http_requests_total{namespace=\"bifrost-platform-prod\"}[1h]))",
+  "failPerMin": "60 * sum by (handler, method) (rate(http_requests_total{namespace=\"bifrost-platform-prod\", status=\"5xx\"}[1h]))"
+}

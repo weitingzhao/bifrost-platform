@@ -23,12 +23,13 @@ export const OTHER = 'other'
  * first while they fit the ground, one slot kept for Other; the rest go into one Other building that says how
  * many it holds. Nothing is dropped: Other's card lists them.
  */
-export function buildingsOf(h: DomainHoldings | undefined, state: State): Place[] {
+export function buildingsOf(h: DomainHoldings | undefined, state: State, roomsOf?: (packages: string[]) => Place[]): Place[] {
   const all = h?.buildings ?? []
-  const make = (id: string, label: string, n: number, question: string, shape = sizeOf(n)): Place =>
-    ({ id, kind: 'building', shape, label, question, dashboard: null, state, children: [] })
+  const make = (id: string, label: string, n: number, question: string, shape = sizeOf(n), children: Place[] = []): Place =>
+    ({ id, kind: 'building', shape, label, question, dashboard: null, state, children })
+  // Its rooms, when the content gives them (the counters: one room per package, counters.ts).
   const one = (b: { id: string; packages: string[] }) => make(b.id, b.id, b.packages.length,
-    `The ${b.id} building of ${h!.id}: ${b.packages.length} Go package${b.packages.length === 1 ? '' : 's'}.`)
+    `The ${b.id} building of ${h!.id}: ${b.packages.length} Go package${b.packages.length === 1 ? '' : 's'}.`, sizeOf(b.packages.length), roomsOf?.(b.packages) ?? [])
   const fits = (xs: { packages: string[] }[], extra: number) => xs.length + extra <= MOST && xs.reduce((u, b) => u + UNITS[sizeOf(b.packages.length)], 0) + extra <= MOST
   if (fits(all, 0)) return all.map(one)
   const kept: typeof all = []

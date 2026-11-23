@@ -8,6 +8,7 @@ import { districtTechTree, domainTechTree, type GraphRead } from './techTree'
 import { trafficPanel, type TrafficRead } from './traffic'
 import { overflowOf } from './districtBuildings'
 import { alertsRead, type DeviceKey, type PromAlert } from './alerts'
+import type { CounterRoute } from '@bifrost/ui/city/units/counterRoom'
 import { districtLinesPanel, linesPanel, type LinesRead, type RosterRead } from './lines'
 
 /**
@@ -17,9 +18,9 @@ import { districtLinesPanel, linesPanel, type LinesRead, type RosterRead } from 
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }, routes?: Map<string, CounterRoute[]>): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
-  const tree = domainTree(domains.data, hardware, why, holdings)
+  const tree = domainTree(domains.data, hardware, why, holdings, routes)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
   // A district whose buildings go past its ground (16 things): cut too fine, to decouple or merge (the Owner, 2026-11-22).
   const overflowPanel = (id: string) => {
