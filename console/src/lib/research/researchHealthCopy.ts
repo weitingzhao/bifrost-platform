@@ -159,7 +159,8 @@ function toTag(v: HealthLayerVerdict): {
 } {
   if (v === 'healthy') return { tagLabel: 'HEALTHY', tagVariant: 'success' }
   if (v === 'due' || v === 'draining' || v === 'caution' || v === 'unknown') {
-    return { tagLabel: v === 'unknown' ? 'UNKNOWN' : v.toUpperCase(), tagVariant: 'warning' }
+    // caution is the old word for the design system's Degraded (state-vocabulary, 箭10 2026-11-23).
+    return { tagLabel: v === 'unknown' ? 'UNKNOWN' : v === 'caution' ? 'DEGRADED' : v.toUpperCase(), tagVariant: 'warning' }
   }
   return { tagLabel: v.toUpperCase(), tagVariant: 'danger' }
 }
@@ -215,7 +216,7 @@ export function buildResearchVerdictCopy(input: ResearchHealthCopyInput): Resear
   if (input.loading) {
     return {
       lamp: 'unknown',
-      tagLabel: 'PROBING',
+      tagLabel: '…',
       tagVariant: 'neutral',
       summary: 'Probing Research API and husbandry layers…',
       navSummary: 'Probing…',

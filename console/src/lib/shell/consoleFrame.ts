@@ -1,4 +1,4 @@
-import type { StatusWord } from '@bifrost/ui/city/world'
+import type { StatusWord, WorldTime } from '@bifrost/ui/city/world'
 import { alertCount } from '@/api/alertCount'
 import type { TelemetryAlertsResponse } from '@/api/clusterTypes'
 
@@ -17,6 +17,15 @@ export function frameAlertsOf(data: TelemetryAlertsResponse | undefined, error: 
   if (data == null) return { count: null, why: error ?? 'Reading alerts' }
   const n = alertCount(data.alerts)
   return { count: n.count, ...(n.worst ? { worst: WORD[n.worst] } : {}), why: 'From GET /api/v1/telemetry/alerts' }
+}
+
+/**
+ * The frame's time chip: the Console is always live, and its time is when the server made the reading the
+ * frame shows (the alerts' generated_at), not the page clock. Not read yet: live with no time ("time unknown").
+ */
+export function frameTimeOf(data: TelemetryAlertsResponse | undefined): WorldTime {
+  const at = data?.generated_at
+  return at && Number.isFinite(Date.parse(at)) ? { mode: 'live', at } : { mode: 'live' }
 }
 
 export type FrameCrumb = { label: string; href?: string }

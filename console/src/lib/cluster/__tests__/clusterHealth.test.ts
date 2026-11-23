@@ -37,7 +37,7 @@ describe('deriveClusterVerdict', () => {
       isProbing: true,
     })
     expect(v.lamp).toBe('unknown')
-    expect(v.tagLabel).toBe('PROBING')
+    expect(v.tagLabel).toBe('…')
     expect(v.tagVariant).toBe('neutral')
     expect(v.summaryLine).toMatch(/Loading/i)
   })
@@ -190,7 +190,7 @@ describe('deriveClusterVerdict', () => {
       opsSummaryLine: 'Agent (degraded) — Operator Plane repair recommended',
     })
     expect(v.lamp).toBe('degraded')
-    expect(v.tagLabel).toBe('CAUTION')
+    expect(v.tagLabel).toBe('DEGRADED')
     expect(v.summaryLine).toContain('Agent')
   })
 

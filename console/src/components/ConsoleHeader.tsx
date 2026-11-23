@@ -1,6 +1,7 @@
 import { communicationHref } from '@/domains/coordination/communication/looks'
 import { SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
+import type { WorldTime } from '@bifrost/ui/city/world'
 import { CircleHelp, Ellipsis } from 'lucide-react'
 import {
   viewerEnvBadgeLabel,
@@ -43,6 +44,7 @@ export function ConsoleHeader({
   moreHref,
   looks,
   alerts,
+  time,
 }: {
   pageTitle: string
   pageDescription?: string
@@ -58,6 +60,8 @@ export function ConsoleHeader({
   moreHref?: string
   looks?: HeaderLooks
   alerts?: FrameAlerts
+  /** The time chip: live and when the shown reading was made (frameTimeOf). */
+  time?: WorldTime
 }) {
   const side = layout === 'side'
   const places = consoleFramePlaces(
@@ -73,6 +77,7 @@ export function ConsoleHeader({
         hrefs={places.hrefs}
         env={viewerEnvLoading ? undefined : viewerEnvBadgeLabel(viewerEnv)}
         alerts={alerts}
+        time={time}
         looks={places.looks}
         context={
           <>

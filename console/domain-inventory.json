@@ -1092,6 +1092,7 @@
       "external_imports": [
         "@bifrost/ui",
         "@bifrost/ui/city/WorldFrame",
+        "@bifrost/ui/city/world",
         "lucide-react"
       ],
       "source_inputs": [],

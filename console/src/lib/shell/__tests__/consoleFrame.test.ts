@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TelemetryAlertsResponse } from '@/api/clusterTypes'
-import { consoleCrumbs, consoleFramePlaces, frameAlertsOf } from '@/lib/shell/consoleFrame'
+import { consoleCrumbs, consoleFramePlaces, frameAlertsOf, frameTimeOf } from '@/lib/shell/consoleFrame'
 
 // Origin (2026-11-23, UI lead): every view wears one world frame; the Console's own header was
 // another website's bar (World baseline: places 1, alerts 5 warning while the City said 6 firing).
@@ -37,5 +37,15 @@ describe('the places and looks the Console hands the frame', () => {
     expect(p.looks).toBeUndefined()
     expect(p.hrefs.console).toBe('#more')
     expect(p.hrefs.city).toBeUndefined()
+  })
+})
+
+// 2026-11-23 (World's brand-layer score, item 9): the Console's frame had no time chip. Its time is the server's
+// generated_at of the alerts read the frame shows, never the page clock (the Signals 18:26Z correction).
+describe('frameTimeOf', () => {
+  it('is live at the reading the server made, and live with no time before it is read', () => {
+    expect(frameTimeOf({ alerts: [], generated_at: '2026-11-23T18:26:00Z' })).toEqual({ mode: 'live', at: '2026-11-23T18:26:00Z' })
+    expect(frameTimeOf(undefined)).toEqual({ mode: 'live' })
+    expect(frameTimeOf({ alerts: [], generated_at: 'not a time' })).toEqual({ mode: 'live' })
   })
 })

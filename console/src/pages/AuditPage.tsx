@@ -68,7 +68,7 @@ export function AuditPage({ records, isLoading }: AuditPageProps) {
   const lamp = isLoading ? ('unknown' as const) : errorCount > 0 ? ('degraded' as const) : ('ok' as const)
   const tagVariant = isLoading ? ('neutral' as const) : errorCount > 0 ? ('warning' as const) : ('success' as const)
   const tagLabel = isLoading
-    ? 'PROBING'
+    ? '…'
     : records.length === 0
       ? 'EMPTY'
       : errorCount > 0

@@ -66,7 +66,7 @@ function BayCard({
 }
 
 /**
- * Observability-style bay scan cards — sole bay picker; click opens one bay (accordion).
+ * One card per check — the sole picker; click opens that check's detail below (accordion).
  */
 export function ControlRoomBayCards({
   bays,
@@ -75,13 +75,13 @@ export function ControlRoomBayCards({
   onSelectBay,
 }: ControlRoomBayCardsProps) {
   return (
-    <section className="control-room-bay-cards" aria-label="Bay scan">
+    <section className="control-room-bay-cards" aria-label="Checks">
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
-          Bay scan
+          Checks
         </span>
         <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-          Click a bay to open detail below
+          Click one to open its detail below
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5">

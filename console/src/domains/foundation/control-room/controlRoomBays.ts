@@ -66,7 +66,7 @@ export type ControlRoomBaySignal = {
 
 export type ControlRoomBaySignalInput = {
   snapshot: MissionSnapshot
-  /** Open operate-queue handoffs (caution when > 0). */
+  /** Open operate-queue handoffs (degraded when > 0). */
   operateOpenCount?: number
   /** Pending decision briefs. */
   pendingBriefCount?: number
@@ -79,11 +79,11 @@ export type ControlRoomBaySignalInput = {
   showHealth?: boolean
 }
 
-function signalReason(signal: Signal, ok: string, caution: string, fail: string): string {
+function signalReason(signal: Signal, ok: string, degraded: string, fail: string): string {
   if (signal === 'ok') return ok
   if (signal === 'fail') return fail
-  if (signal === 'degraded') return caution
-  return 'Probing…'
+  if (signal === 'degraded') return degraded
+  return 'Not answered yet'
 }
 
 export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): ControlRoomBaySignal[] {
@@ -100,14 +100,14 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
   const degradation = collectMissionDegradationItems(snapshot)
   const missionReason =
     snapshot.missionOverall === 'ok'
-      ? 'Mission probes nominal'
+      ? 'Mission probes healthy'
       : missionDegradationSummary(degradation)
 
   const launchSignal = worst(snapshot.release.signal, snapshot.payloadOverall)
   const launchReason = signalReason(
     launchSignal,
-    'Launch pad clear',
-    'Release or payload caution',
+    'Release and payload healthy',
+    'Release or payload degraded',
     'Release or payload blocked',
   )
 
@@ -122,10 +122,10 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
   const operateReason =
     operateBits.length > 0
       ? operateBits.join(' · ')
-      : signalReason(snapshot.agent.signal, 'Agent loop idle', 'Agent caution', 'Agent fail')
+      : signalReason(snapshot.agent.signal, 'Agent loop idle', 'Agent degraded', 'Agent failed')
 
   // promoteLamp 'unknown' = Prod cutover narrative-ready (non-live GO), not "still probing".
-  // Folding it into worst() would paint the Release bay as PROBING while STG/deliver are clear.
+  // Folding it into worst() would paint the Release bay Unknown while STG/deliver are healthy.
   let releaseSignal: Signal
   let releaseReason: string
   if (promoteLamp == null) {
@@ -144,7 +144,7 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
       releaseReason = signalReason(
         releaseSignal,
         'Narrative ready · awaiting live cutover',
-        'Release caution · cutover narrative ready',
+        'Release degraded · cutover narrative ready',
         'Release blocked · cutover narrative ready',
       )
     }
@@ -171,7 +171,7 @@ export function buildControlRoomBaySignals(input: ControlRoomBaySignalInput): Co
       id: 'health',
       label: 'Health',
       signal: healthSignal,
-      reason: signalReason(healthSignal, 'Network probes ok', 'Network caution', 'Network fail'),
+      reason: signalReason(healthSignal, 'Network probes healthy', 'Network degraded', 'Network failed'),
     })
   }
 
@@ -307,21 +307,26 @@ export function collapseOpenBayIdsForSingleMode(
   return first != null ? new Set([first]) : new Set()
 }
 
-export type ControlRoomVerdictLabel = 'NOMINAL' | 'CAUTION' | 'CRITICAL' | 'PROBING'
+/**
+ * The Ops design system's closed words (guidelines/state-vocabulary.md), not the old room words
+ * (NOMINAL / CAUTION / CRITICAL / PROBING, 箭10 2026-11-23 frame rule 5 and 13). Pending is the read
+ * not answered yet; Unknown is a check that cannot be judged — neither is a finding.
+ */
+export type ControlRoomVerdictLabel = 'Healthy' | 'Degraded' | 'Failed' | 'Unknown' | 'Pending'
 
 export function controlRoomVerdictLabel(signal: Signal): ControlRoomVerdictLabel {
-  if (signal === 'ok') return 'NOMINAL'
-  if (signal === 'degraded') return 'CAUTION'
-  if (signal === 'fail') return 'CRITICAL'
-  return 'PROBING'
+  if (signal === 'ok') return 'Healthy'
+  if (signal === 'degraded') return 'Degraded'
+  if (signal === 'fail') return 'Failed'
+  return 'Unknown'
 }
 
 export function controlRoomVerdictTagVariant(
   label: ControlRoomVerdictLabel,
 ): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (label === 'NOMINAL') return 'success'
-  if (label === 'CAUTION') return 'warning'
-  if (label === 'CRITICAL') return 'danger'
+  if (label === 'Healthy') return 'success'
+  if (label === 'Degraded') return 'warning'
+  if (label === 'Failed') return 'danger'
   return 'neutral'
 }
 
@@ -353,7 +358,7 @@ export type ControlRoomAttentionItem = {
   summary: string
 }
 
-/** Cross-bay attention queue — fail/caution bays first; skip ok/unknown governance noise. */
+/** Cross-bay attention queue — failed/degraded checks first; skip ok/unknown governance noise. */
 export function buildControlRoomAttentionItems(
   bays: ControlRoomBaySignal[],
 ): ControlRoomAttentionItem[] {
@@ -379,21 +384,21 @@ export function buildControlRoomAttentionItems(
 }
 
 export function controlRoomBayCountsLabel(bays: ControlRoomBaySignal[]): string {
-  let critical = 0
-  let caution = 0
+  let failed = 0
+  let degraded = 0
   let ok = 0
-  let probing = 0
+  let unknown = 0
   for (const b of bays) {
-    if (b.signal === 'fail') critical += 1
-    else if (b.signal === 'degraded') caution += 1
+    if (b.signal === 'fail') failed += 1
+    else if (b.signal === 'degraded') degraded += 1
     else if (b.signal === 'ok') ok += 1
-    else probing += 1
+    else unknown += 1
   }
   return [
-    critical > 0 ? `${critical} critical` : null,
-    caution > 0 ? `${caution} caution` : null,
-    probing > 0 ? `${probing} probing` : null,
-    ok > 0 ? `${ok} clear` : null,
+    failed > 0 ? `${failed} failed` : null,
+    degraded > 0 ? `${degraded} degraded` : null,
+    unknown > 0 ? `${unknown} unknown` : null,
+    ok > 0 ? `${ok} healthy` : null,
   ]
     .filter(Boolean)
     .join(' · ')

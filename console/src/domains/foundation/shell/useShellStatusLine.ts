@@ -1,4 +1,4 @@
-import { frameAlertsOf } from '@/lib/shell/consoleFrame'
+import { frameAlertsOf, frameTimeOf } from '@/lib/shell/consoleFrame'
 import { useQuery } from '@tanstack/react-query'
 import { fetchChecklistSignals } from '@/api/checklist'
 import { fetchSelfHealth } from '@/api/core'
@@ -61,6 +61,7 @@ export function useSystemVerdict() {
     verdict,
     health,
     frameAlerts: frameAlertsOf(alerts.data, errorText(alerts.error, 'Alerts request failed')),
+    frameTime: frameTimeOf(alerts.data),
     refetch: async () => {
       await Promise.all([health.refetch(), checklist.refetch(), alerts.refetch()])
     },
@@ -69,7 +70,7 @@ export function useSystemVerdict() {
 
 /** Shell header: the verdict sentence plus the viewer seat from self-health. */
 export function useShellStatusLine() {
-  const { verdict, health, frameAlerts, refetch } = useSystemVerdict()
+  const { verdict, health, frameAlerts, frameTime, refetch } = useSystemVerdict()
   const loading = health.isLoading && health.data == null
   return {
     statusLine: verdict.sentence,
@@ -78,6 +79,7 @@ export function useShellStatusLine() {
     viewerEnvLoading: loading,
     healthy: shellViewerHealthy(health.data),
     frameAlerts,
+    frameTime,
     refetch,
   }
 }

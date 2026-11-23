@@ -54,3 +54,9 @@ html[data-ops-theme] .ops-appearance-menu { width: 224px; padding: 10px; backgro
 @media (prefers-reduced-motion: reduce) {
   html[data-ops-theme] [data-shell-chrome] { transition: none; }
 }
+
+/* Arriving in the Console from another place (箭10 2026-11-23, frame rule 10): the frame stays put and the
+   page fades in, 150 ms, none when motion is reduced — the same rhythm as Agents and the City. */
+.ops-page-content { animation: ops-console-in 150ms ease-out; }
+@keyframes ops-console-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ops-page-content { animation: none; } }

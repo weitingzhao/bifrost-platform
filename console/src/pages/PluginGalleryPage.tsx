@@ -47,7 +47,7 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
 ]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {
-  if (loading) return 'PROBING'
+  if (loading) return '…'
   switch (reach) {
     case 'ok':
       return 'OK'

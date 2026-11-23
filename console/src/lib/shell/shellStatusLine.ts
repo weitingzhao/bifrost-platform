@@ -87,10 +87,14 @@ function checklistCauses(body: ChecklistSignalsResponse): VerdictCause[] {
  * hint, not a fault, so it does not move the verdict.
  */
 function alertCauses(body: TelemetryAlertsResponse): VerdictCause[] {
-  const { by_severity: n } = alertCount(body.alerts)
+  const { count, by_severity: n } = alertCount(body.alerts)
   const out: VerdictCause[] = []
   if (n.critical > 0) out.push({ level: 'fail', source: 'alerts', label: plural(n.critical, 'critical alert') })
   if (n.warning > 0) out.push({ level: 'degraded', source: 'alerts', label: plural(n.warning, 'warning alert') })
+  // The frame's corner says how many fire in all; when info ones fire too, the line says the same total
+  // so one screen never shows two numbers for one fact (World's score item 11, 2026-11-23).
+  const last = out[out.length - 1]
+  if (last != null && count > n.critical + n.warning) last.label = `${last.label} of ${count} firing`
   return out
 }
 

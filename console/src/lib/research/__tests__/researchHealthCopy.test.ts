@@ -35,7 +35,7 @@ describe('buildResearchVerdictCopy', () => {
     expect(copy.summary).toContain('Batch unprobed')
     expect(copy.summary).toMatch(/Flex DEGRADED/i)
     expect(copy.summary).not.toMatch(/ops_dagster\.runs/)
-    expect(copy.tagLabel).toBe('CAUTION')
+    expect(copy.tagLabel).toBe('DEGRADED')
     expect(copy.layers).toHaveLength(3)
     expect(copy.layers.find(l => l.id === 'product')?.verdict).toBe('healthy')
     expect(copy.layers.find(l => l.id === 'batch')?.meta).toBe('orchestration unprobed')

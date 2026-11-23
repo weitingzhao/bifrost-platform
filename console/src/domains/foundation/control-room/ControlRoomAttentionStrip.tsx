@@ -4,6 +4,8 @@ import type { ControlRoomAttentionItem, ControlRoomBayId } from '@/lib/control-r
 export type ControlRoomAttentionStripProps = {
   items: ControlRoomAttentionItem[]
   onSelectBay: (id: ControlRoomBayId) => void
+  /** Checks that have not answered or cannot be judged: an empty list does not mean they are fine. */
+  unknownCount?: number
   className?: string
 }
 
@@ -17,6 +19,7 @@ function severityLamp(s: ControlRoomAttentionItem['severity']) {
 export function ControlRoomAttentionStrip({
   items,
   onSelectBay,
+  unknownCount = 0,
   className,
 }: ControlRoomAttentionStripProps) {
   if (items.length === 0) {
@@ -29,15 +32,14 @@ export function ControlRoomAttentionStrip({
         aria-label="Attention"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <StatusLamp value="ok" kind="reach" />
+          {/* An empty list is a count, not a health verdict: no green lamp, no OK word (state-vocabulary). */}
           <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
             Attention
           </span>
-          <DenseTag variant="success" className="text-[9px]">
-            CLEAR
-          </DenseTag>
           <span className="text-[var(--text-dense-meta)] text-muted-foreground">
-            No items — bays clear or probing.
+            {unknownCount > 0
+              ? `Nothing failed or degraded; ${unknownCount} check${unknownCount === 1 ? '' : 's'} not judged yet.`
+              : 'Nothing failed or degraded.'}
           </span>
         </div>
       </section>

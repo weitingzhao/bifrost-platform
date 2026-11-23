@@ -137,7 +137,7 @@ export function ObservabilityPage({
         ariaLabel="System verdict"
         title={`SYSTEM VERDICT · ${tradeEnv.toUpperCase()}`}
         lamp={verdictLamp(system.overall)}
-        tagLabel={isLoading ? 'PROBING' : system.label}
+        tagLabel={isLoading ? '…' : system.label}
         tagVariant={verdictTag(system.overall)}
         summary={
           <span className="inline-flex min-w-0 max-w-full items-center gap-2">

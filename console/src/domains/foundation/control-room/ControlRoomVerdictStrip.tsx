@@ -27,7 +27,8 @@ export type ControlRoomVerdictStripProps = {
 }
 
 /**
- * Room posture strip — situation scan for Control Room (not Mission launch home).
+ * Probes strip — the mission and network probes only; the page's own verdict sits above it, so this one
+ * says what it covers and never reads as the whole system's (not Mission launch home).
  */
 export function ControlRoomVerdictStrip({
   missionSignal,
@@ -39,7 +40,7 @@ export function ControlRoomVerdictStrip({
   actions,
   onSelectBay,
 }: ControlRoomVerdictStripProps) {
-  const label = isLoading ? 'PROBING' : controlRoomVerdictLabel(missionSignal)
+  const label = isLoading ? 'Pending' : controlRoomVerdictLabel(missionSignal)
   const counts = controlRoomBayCountsLabel(bays)
   const attentionBays = bays.filter(b => b.signal !== 'ok' && b.signal !== 'unknown')
   const staleLabel = isLoading ? '' : controlRoomStaleSourcesLabel(staleSources, dataUpdatedAt)
@@ -47,14 +48,14 @@ export function ControlRoomVerdictStrip({
   return (
     <OpsVerdictStrip
       className="control-room-verdict"
-      ariaLabel="Room posture"
-      title="ROOM POSTURE"
+      ariaLabel="Mission and network probes"
+      title="PROBES"
       lamp={isLoading ? 'unknown' : missionSignal}
       tagLabel={label}
       tagVariant={controlRoomVerdictTagVariant(label)}
       summary={
         <span title={primaryCause}>
-          {isLoading ? 'Aggregating room probes…' : primaryCause}
+          {isLoading ? 'Reading the probes…' : primaryCause}
         </span>
       }
       actions={actions}
@@ -71,7 +72,7 @@ export function ControlRoomVerdictStrip({
                     'inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-primary/10',
                     bay.signal === 'fail' ? 'text-destructive' : 'text-warning',
                   )}
-                  title={`${bay.label}: ${bay.reason} — open bay`}
+                  title={`${bay.label}: ${bay.reason} — open it below`}
                   onClick={() => onSelectBay(bay.id)}
                 >
                   <StatusLamp value={bay.signal} kind="reach" />

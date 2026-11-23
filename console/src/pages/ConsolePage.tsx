@@ -245,6 +245,7 @@ function ConsolePageInner() {
               moreHref={undefined}
               looks={looksFor(location)}
               alerts={status.frameAlerts}
+              time={status.frameTime}
             />
             {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>

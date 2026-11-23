@@ -99,7 +99,7 @@ export function ControlRoomPage({
   }, [baySignals, missionLoading])
 
   const missionPrimaryCause = useMemo(() => {
-    if (snapshot.missionOverall === 'ok') return 'Mission probes nominal'
+    if (snapshot.missionOverall === 'ok') return 'Mission probes healthy'
     return missionDegradationSummary(collectMissionDegradationItems(snapshot))
   }, [snapshot])
 
@@ -165,7 +165,11 @@ export function ControlRoomPage({
         onSelectBay={jumpToBay}
       />
 
-      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
+      <ControlRoomAttentionStrip
+        items={attentionItems}
+        onSelectBay={jumpToBay}
+        unknownCount={shownBays.filter(b => b.signal === 'unknown').length}
+      />
 
       <ControlRoomBayCards
         bays={shownBays}
@@ -174,10 +178,10 @@ export function ControlRoomPage({
         onSelectBay={jumpToBay}
       />
 
-      <div className="control-room-diagnosis flex flex-col gap-3" aria-label="Room posture detail">
+      <div className="control-room-diagnosis flex flex-col gap-3" aria-label="Check detail">
         {openBayIds.size === 0 && (
           <p className="m-0 rounded-md border border-dashed border-border px-3 py-4 text-center text-[var(--text-dense-meta)] text-muted-foreground">
-            Select a bay above to open posture detail.
+            Pick a check above to open its detail.
           </p>
         )}
 

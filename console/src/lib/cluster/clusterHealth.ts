@@ -130,7 +130,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (isProbing) {
     return {
       lamp: 'unknown',
-      tagLabel: 'PROBING',
+      tagLabel: '…',
       tagVariant: tagVariantFor('unknown'),
       summaryLine: 'Loading cluster snapshot…',
       evidenceLine,
@@ -240,7 +240,7 @@ export function deriveClusterVerdict(input: DeriveClusterVerdictInput): ClusterV
   if (opsReach === 'degraded' || opsReach === 'unknown') {
     return {
       lamp: 'degraded',
-      tagLabel: 'CAUTION',
+      tagLabel: 'DEGRADED',
       tagVariant: tagVariantFor('degraded'),
       summaryLine:
         opsSummaryLine != null && opsSummaryLine !== ''
