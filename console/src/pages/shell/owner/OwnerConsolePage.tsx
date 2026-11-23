@@ -9,6 +9,7 @@ import { formatShellHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { useWorkView } from '@/pages/shell/agents/workViewModel'
 import { CrewInstruments } from './CrewInstruments'
 import { OwnerData } from './OwnerData'
+import { OwnerGpuPower } from './OwnerGpuPower'
 import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
 import { RuntimeHealthNotice } from './RuntimeHealthNotice'
@@ -60,6 +61,7 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
   const data = useOwnerConsole({ system: blocks.system, services: blocks.services, work: activity })
   return <div id="owner-console" data-testid="owner-console" data-entry={entry} className="@container flex w-full min-w-0 flex-col gap-5 pb-8">
     <VerdictBanner verdict={data.verdict} compact={entry !== 'command'} updatedAt={data.updatedAt} now={data.now} />
+    {blocks.you && <OwnerGpuPower nodes={data.nodes} />}
     {blocks.you && <OwnerYou data={data} />}
     {blocks.you && <OwnerWaiting />}
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}

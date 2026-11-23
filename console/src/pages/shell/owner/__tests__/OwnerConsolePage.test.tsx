@@ -16,11 +16,22 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
+import type { ConfirmDialogProps } from '@/components/ConfirmDialog'
 
 vi.mock('../../agents/WorkPlanView', () => ({ WorkPlanView: () => <section data-testid="plan-view" /> }))
+// Exercise Command's confirmation contract without loading Radix's separate React instance in CI.
+vi.mock('@/components/ConfirmDialog', () => ({
+  ConfirmDialog: ({ open, title, confirmLabel, onConfirm, onCancel }: ConfirmDialogProps) => open && (
+    <div role="dialog" aria-label={title}>
+      <button type="button" onClick={onCancel}>Cancel</button>
+      <button type="button" onClick={onConfirm}>{confirmLabel}</button>
+    </div>
+  ),
+}))
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
+const gpuReady = vi.hoisted(() => ({ value: false }))
 // The architecture table, when a test sets it; absent otherwise, as while the runtime holds no ARCH root (2.5 ⑤ G2).
 const archValue = vi.hoisted(() => ({ value: undefined as ArchRead | undefined }))
 // The coordinating thread's note as the hook reads it from the mailbox (2.5 G3).
@@ -61,7 +72,7 @@ function fake(): OwnerConsoleData {
     runtime: runtimeValue.value,
     controlsReadable: true,
     nodes: [{ name: 'ubt-k3s-02', status: 'Ready', roles: 'worker', internal_ip: '192.168.10.70', version: '', reachability: 'ok', cpu_usage_percent: 4.5, memory_usage_percent: 35.2 },
-      { name: 'gpu-server', status: 'NotReady', roles: 'worker', internal_ip: '192.168.10.60', version: '', reachability: 'fail', elastic_mode: 'standby' }],
+      { name: 'gpu-server', status: gpuReady.value ? 'Ready' : 'NotReady', roles: 'worker', internal_ip: '192.168.10.60', version: '', reachability: gpuReady.value ? 'ok' : 'fail', elastic_mode: gpuReady.value ? 'active' : 'standby', compute_managed: true }],
     nodeCount: { ready: 1, total: 1, standby: 1 }, nodesError: null,
     lane: { state: 'free', text: 'Release window free', detail: '' },
     inFlight: [], records: [{ run: 'r1', pipeline: 'bifrost-deliver-platform-prod', lane: 'platform', env: 'prod', deploys: true, started_at: '', completed_at: '2026-10-16T05:29:00Z', repos: {}, recorded_at: '' }],
@@ -104,21 +115,21 @@ function Shell() {
 }
 
 const viewer = { token: '', caps: undefined, capsLoading: false, capsError: false, canAdmin: false, canOperate: false, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} }
-function show(hash = '#you', signIn = false) {
+function show(hash = '#you', auth = viewer) {
   window.history.replaceState(null, '', hash)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  // Commit lineage reads the sign-in (its own page on Work since R5:5.5-2); the shell provides it.
-  return render(<QueryClientProvider client={client}>{signIn ? <PlatformAuthContext.Provider value={viewer}><Shell /></PlatformAuthContext.Provider> : <Shell />}</QueryClientProvider>)
+  return render(<QueryClientProvider client={client}><PlatformAuthContext.Provider value={auth}><Shell /></PlatformAuthContext.Provider></QueryClientProvider>)
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
 async function go(hash: string, heading: string) {
   window.location.hash = hash
-  await waitFor(() => expect(headings()[0]).toBe(heading))
+  await waitFor(() => expect(headings()).toContain(heading))
 }
 
 beforeEach(() => {
   submit.mockClear()
   standbyKnown.value = true
+  gpuReady.value = false
   // jsdom here has no working localStorage; the sign-in token is read from it on every request.
   const values = new Map<string, string>()
   Object.defineProperty(window, 'localStorage', { configurable: true, value: {
@@ -175,7 +186,44 @@ describe('Owner Console entries', () => {
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {
     show('#you')
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')
-    expect(headings()).toEqual(['For you'])
+    expect(headings()).toEqual(['4090 power', 'For you'])
+    const power = within(screen.getByRole('region', { name: '4090 power' }))
+    expect(power.getByRole('button', { name: 'Wake (WOL)' })).toBeDisabled()
+    expect(power.getByRole('button', { name: 'Request power off' })).toBeDisabled()
+  })
+
+  // 2026-11-22 owner walkthrough: the five-click GPU path obscured the controls.
+  // The Command shortcut must keep WOL confirmation and shutdown approval tied to the same node.
+  it('confirms the 4090 wake from Command before posting to the existing endpoint', async () => {
+    const fetcher = vi.fn(async () => json({ ok: true, message: 'Wake packet sent' }))
+    vi.stubGlobal('fetch', fetcher)
+    show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const power = within(screen.getByRole('region', { name: '4090 power' }))
+    expect(power.getByRole('button', { name: 'Request power off' })).toBeDisabled()
+    fireEvent.click(power.getByRole('button', { name: 'Wake (WOL)' }))
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/wake', expect.anything())
+    fireEvent.click(screen.getByRole('button', { name: 'Wake 4090' }))
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/wake', expect.objectContaining({ method: 'POST' })))
+    expect(await power.findByText('Wake packet sent')).toBeInTheDocument()
+  })
+
+  it('requests a 4090 shutdown approval from Command without calling the poweroff endpoint', async () => {
+    gpuReady.value = true
+    const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      if (String(input) === '/api/v1/approvals' && options?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'appr_gpu', tier: 'D' }), { status: 201 })
+      }
+      return json({ actions: [] })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    show('#command', { ...viewer, canOperate: true, canAdmin: true })
+    const power = within(screen.getByRole('region', { name: '4090 power' }))
+    expect(power.getByRole('button', { name: 'Wake (WOL)' })).toBeDisabled()
+    fireEvent.click(power.getByRole('button', { name: 'Request power off' }))
+    expect(await power.findByRole('link', { name: 'Open request' })).toHaveAttribute('href', '#approvals?id=appr_gpu')
+    const request = fetcher.mock.calls.find(([url, options]) => url === '/api/v1/approvals' && options?.method === 'POST')
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ action: 'poweroff_compute_node', params: { name: 'gpu-server' } })
+    expect(fetcher).not.toHaveBeenCalledWith('/api/v1/cluster/nodes/gpu-server/poweroff', expect.anything())
   })
 
   it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {
