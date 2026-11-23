@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within, renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AgentWorld, exchangesOf } from '@bifrost/ui/communication'
+import { AgentWorld, WorkingStudio, exchangesOf } from '@bifrost/ui/communication'
 import { useCommunicationObservation } from '../useCommunication'
 import type { RuntimeEventRow } from '@/api/agentRuntimeEvents'
 const api=vi.hoisted(()=>({latest:vi.fn(),after:vi.fn()}))
@@ -49,4 +49,21 @@ it('loads older pages into the same cache without replacing the forward cursor',
  await waitFor(()=>expect(result.current.snapshot.exchanges.some(x=>x.id==='m1001')).toBe(true))
  expect(result.current.history.hasOlder).toBe(false)
  client.clear()
+})
+
+it('keeps one host-controlled evidence cutoff across scene and ledger without inventing a snapshot store',()=>{
+ const at='2026-11-22T12:00:00Z', later='2026-11-22T12:05:00Z'
+ const snapshot={version:1 as const,members:[],coverage:{state:'ready' as const,note:'test',truncated:false,updatedAt:later},exchanges:exchangesOf([{id:'s',communication:'m',channel:'message',stage:'sent',evidence:{id:'s',source:'ledger',at}},{id:'a',communication:'m',channel:'message',stage:'acknowledged',evidence:{id:'a',source:'ledger',at:later}}])}
+ const onThrough=vi.fn()
+ const view=render(<AgentWorld snapshot={snapshot} stationImage="" cityHref="#city" consoleHref="#console" through={at} onThrough={onThrough}/>)
+ expect(within(screen.getByRole('region',{name:'Communication history'})).queryByText('ACK')).toBeNull()
+ fireEvent.click(screen.getByRole('button',{name:'Return to live'}))
+ expect(onThrough).toHaveBeenLastCalledWith('')
+ expect(screen.getByText('History · fixed time')).toBeTruthy()
+ view.rerender(<WorkingStudio snapshot={snapshot} stationImage="" ledgerOnly through={at} onThrough={onThrough}/>)
+ expect(screen.getAllByText('Not observed')).toHaveLength(7)
+ fireEvent.click(screen.getByRole('button',{name:'Return to latest'}))
+ expect(onThrough).toHaveBeenLastCalledWith('')
+ view.rerender(<WorkingStudio snapshot={snapshot} stationImage="" ledgerOnly through="" onThrough={onThrough}/>)
+ expect(screen.getAllByText('Not observed')).toHaveLength(6)
 })

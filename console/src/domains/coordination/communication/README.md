@@ -35,3 +35,11 @@ Validation covers source identity joins (including ambiguous aliases), self-repo
 ## Recovery
 
 Revert the coordinated UI and platform commits through the normal release path. No database migration or persisted layout change. Stop only this line's preview using bdev when no longer needed.
+
+## Host-controlled observation time (additive)
+
+AgentWorld and WorkingStudio accept optional `through` and `onThrough(at)` props. Omit `through` to retain the existing local timeline behavior; pass an ISO timestamp to filter evidence, or the empty string for live. With a controlled value, interaction requests a change through the callback; the host supplies the next value. The cutoff is not a captured snapshot and does not reconstruct past membership or work. Both renderers continue consuming the same CommunicationSnapshot; no extra reader or snapshot store is introduced.
+
+The engine's `useObservationContext` currently accepts ObservationSnapshot and Path selection, not CommunicationSnapshot and exchange IDs. Do not cast one into the other. The world/engine owners can retain the appropriate snapshot above navigation and bridge explicit selection/time semantics when their shared contract supports communication. Current route integration retains exchange/look only; this additive renderer capability alone does not claim cross-route historical restoration.
+
+Agents day/night follows the existing host `document.documentElement.dataset.opsTheme`; Console appearance remains its owner. There is no Agents preference storage or independent clock. City geometry and other view styling are not changed.
