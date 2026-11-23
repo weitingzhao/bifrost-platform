@@ -1,6 +1,7 @@
 import type { AlertsRead, CityAlert, Severity } from '@bifrost/ui/city/alerts'
 import type { Place } from '@bifrost/ui/city/places'
 import type { HardwareReads } from './hardware'
+import { counted, gradeOf } from '@/api/alertCount'
 
 /**
  * The monitoring's firing alerts, placed in the City (the Owner, 2026-11-21: the utilities read the metrics line's
@@ -24,7 +25,6 @@ export function deviceKeys(r: HardwareReads): DeviceKey[] {
   })
 }
 
-const SEVERITIES: readonly string[] = ['critical', 'warning', 'info']
 const addressOf = (instance: string | undefined) => instance?.replace(/:\d+$/, '') ?? ''
 
 /** The device an alert's labels name, exactly, or null. */
@@ -38,17 +38,17 @@ export function deviceOf(labels: Record<string, string>, devices: readonly Devic
 }
 
 /**
- * The firing alerts as the City shows them. A rule whose severity is "none" is plumbing (the deadman Watchdog,
- * meant to fire for ever), not a judgment, and is left out; any other severity the rules do not name reads info.
+ * The firing alerts as the City shows them: the ones the metrics line's rule counts (api/alertCount.ts: firing,
+ * not severity none, not a drill), each under its grade, so the corner's count is the Console's.
  * `at` is the device's path in the tree (the district that holds it, then the device), or null.
  */
 export function cityAlerts(raw: readonly PromAlert[], devices: readonly DeviceKey[], tree: Place): CityAlert[] {
   const districtOf = new Map<string, string>()
   for (const d of tree.children) for (const b of d.children) districtOf.set(b.id, d.id)
-  return raw.filter(a => a.state === 'firing' && a.labels.severity !== 'none').map(a => {
+  return raw.filter(counted).map(a => {
     const dev = deviceOf(a.labels, devices)
     const district = dev ? districtOf.get(dev) : undefined
-    const sev = (SEVERITIES.includes(a.labels.severity) ? a.labels.severity : 'info') as Severity
+    const sev: Severity = gradeOf(a)
     const id = `${a.labels.alertname}|${Object.entries(a.labels).sort(([x], [y]) => x.localeCompare(y)).map(([k, v]) => `${k}=${v}`).join(',')}`
     return { id, name: a.labels.alertname ?? 'unnamed', severity: sev, summary: a.annotations?.summary ?? '', at: dev && district ? [district, dev] : null, since: a.active_at }
   })
