@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { RunReportPreview } from './RunReport'
 import { useQuery } from '@tanstack/react-query'
 import { ObservationReportView, type ObservationReport } from '@bifrost/ui/city/observationReport'
 import type { ReadEvidence } from '@bifrost/ui/city/observation'
@@ -23,7 +24,7 @@ function Queue() {
 export function ReportsPreview() {
   const [provider,setProvider]=useState('ci')
   return <main style={{padding:24}}><h1>Shared report reader</h1><p>One reader, provider-supplied fields and evidence. Only the selected source is subscribed. Changing source clears selection.</p>
-    <nav aria-label="Report source"><button aria-pressed={provider==='ci'} onClick={()=>setProvider('ci')}>CI runs</button><button aria-pressed={provider==='queue'} onClick={()=>setProvider('queue')}>Plugin queue history</button></nav>
-    {provider==='ci'?<Pipeline/>:<Queue/>}
+    <nav aria-label="Report source"><button aria-pressed={provider==='ci'} onClick={()=>setProvider('ci')}>CI runs</button><button aria-pressed={provider==='queue'} onClick={()=>setProvider('queue')}>Plugin queue history</button><button aria-pressed={provider==='run'} onClick={()=>setProvider('run')}>Single run</button></nav>
+    {provider==='ci'?<Pipeline/>:provider==='queue'?<Queue/>:<RunReportPreview/>}
   </main>
 }

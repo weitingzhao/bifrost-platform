@@ -1621,19 +1621,29 @@
       "path": "console/src/domains/delivery/observation-report",
       "files": [
         "console/src/domains/delivery/observation-report/README.md",
-        "console/src/domains/delivery/observation-report/index.ts"
+        "console/src/domains/delivery/observation-report/index.ts",
+        "console/src/domains/delivery/observation-report/run.test.tsx",
+        "console/src/domains/delivery/observation-report/run.ts"
       ],
       "imports": [
+        "console/src/api/ciTimings.ts",
         "console/src/domains/delivery/api"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/api/ciTimings.ts"
+      ],
       "external_imports": [
+        "@bifrost/ui/city/cards",
         "@bifrost/ui/city/observation",
         "@bifrost/ui/city/observationReport",
-        "@tanstack/react-query"
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest"
       ],
       "source_inputs": [],
-      "test_inputs": [],
+      "test_inputs": [
+        "console/fixtures/observation-access/RunReport.tsx"
+      ],
       "unresolved_imports": []
     },
     {
