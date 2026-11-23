@@ -1059,7 +1059,8 @@
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/architecture",
         "console/src/lib/cluster",
-        "console/src/lib/cn.ts"
+        "console/src/lib/cn.ts",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api/satelliteBusTypes.ts"
@@ -4885,6 +4886,7 @@
         "console/src/components/shell",
         "console/src/hooks/usePlatformAuth.ts",
         "console/src/lib/satellite",
+        "console/src/lib/shell",
         "console/src/pages/IbGatewayManagePage.tsx",
         "console/src/pages/satellite-bus"
       ],

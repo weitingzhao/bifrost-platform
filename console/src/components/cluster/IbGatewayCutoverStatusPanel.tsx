@@ -17,13 +17,15 @@ import {
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
+import { reachTag, type Reach } from '@/lib/shell/stateWords'
 
-function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (reach === 'ok') return 'success'
-  if (reach === 'degraded') return 'warning'
-  if (reach === 'fail') return 'danger'
-  return 'neutral'
+/** The probe's reach as the engine's seven words (箭10 2026-11-23: IB page slice); anything else is unknown. */
+function reachWord(reach: string) {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? (reach as Reach) : 'unknown')
 }
+
+/** The ExternalName check: ok when it is there, fail when it is not; the tag says the word, the caption what. */
+const externalNameTag = (present: boolean) => reachTag(present ? 'ok' : 'fail')
 
 function envOk(env: IbGatewayCutoverEnv): boolean {
   return env.redis_ib_external_name_ok && env.reachability === 'ok' && env.legacy_ib_replicas === 0
@@ -45,11 +47,11 @@ function EnvCard({ env }: { env: IbGatewayCutoverEnv }) {
   return (
     <DashCard
       title={shortNs(env.namespace)}
-      tag={env.redis_ib_external_name_ok ? 'ext OK' : 'ext MISSING'}
-      tagVariant={env.redis_ib_external_name_ok ? 'success' : 'danger'}
+      tag={externalNameTag(env.redis_ib_external_name_ok).tagLabel}
+      tagVariant={externalNameTag(env.redis_ib_external_name_ok).tagVariant}
       value={String(env.legacy_ib_replicas)}
       unit="legacy rep"
-      caption={`reach ${env.reachability}`}
+      caption={`ExternalName ${env.redis_ib_external_name_ok ? 'present' : 'missing'} · reach ${reachWord(env.reachability).tagLabel}`}
       captionTitle={env.detail}
     >
       <Meter fillPct={fill} toneClass={toneByLevel(envTone(env))} label={env.namespace} />
@@ -75,9 +77,14 @@ export function IbGatewayCutoverStatusPanel({
       title="Trade cutover"
       description="Legacy IB retired · redis-ib ExternalName per Trade NS"
       headerExtra={
-        <DenseTag variant={reachTagVariant(cutover?.reachability ?? 'unknown')}>
-          {cutover?.legacy_socket_retired === true ? 'LEGACY RETIRED' : 'LEGACY ACTIVE'}
-        </DenseTag>
+        <span className="inline-flex items-center gap-1.5">
+          <DenseTag variant={reachWord(cutover?.reachability ?? 'unknown').tagVariant}>
+            {reachWord(cutover?.reachability ?? 'unknown').tagLabel}
+          </DenseTag>
+          <span className="text-[var(--text-dense-meta)] text-muted-foreground">
+            {cutover?.legacy_socket_retired === true ? 'Legacy socket retired' : 'Legacy socket still active'}
+          </span>
+        </span>
       }
       bodyPadding="compact"
       overflow="visible"
@@ -128,13 +135,13 @@ export function IbGatewayCutoverStatusPanel({
                     <DenseTableCell>{env.namespace}</DenseTableCell>
                     <DenseTableCell>{env.legacy_ib_replicas}</DenseTableCell>
                     <DenseTableCell>
-                      <DenseTag variant={env.redis_ib_external_name_ok ? 'success' : 'danger'}>
-                        {env.redis_ib_external_name_ok ? 'OK' : 'MISSING'}
+                      <DenseTag variant={externalNameTag(env.redis_ib_external_name_ok).tagVariant}>
+                        {externalNameTag(env.redis_ib_external_name_ok).tagLabel}
                       </DenseTag>
                     </DenseTableCell>
                     <DenseTableCell>
-                      <DenseTag variant={reachTagVariant(env.reachability)}>
-                        {env.reachability}
+                      <DenseTag variant={reachWord(env.reachability).tagVariant}>
+                        {reachWord(env.reachability).tagLabel}
                       </DenseTag>
                     </DenseTableCell>
                   </DenseTableRow>

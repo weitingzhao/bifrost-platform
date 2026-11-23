@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
+import { reachTag } from '@/lib/shell/stateWords'
 import { fetchClusterWorkloads } from '@/api/cluster'
 import { fetchSatelliteBusDeep, fetchSelfHealth, isAllSatelliteBusDeep } from '@/api/core'
 import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
@@ -40,8 +41,9 @@ function PathNode({ label, reach, detail }: { label: string; reach: string; deta
       <div className="flex items-center gap-2">
         <StatusLamp value={lamp} kind="reach" />
         <span className="text-sm font-semibold">{label}</span>
-        <DenseTag variant={lamp === 'ok' ? 'success' : lamp === 'fail' ? 'danger' : 'neutral'}>
-          {reach || 'unknown'}
+        {/* The engine's seven words (箭10 2026-11-23): degraded is warn, colour by severity. */}
+        <DenseTag variant={reachTag(lamp).tagVariant}>
+          {reachTag(lamp).tagLabel}
         </DenseTag>
       </div>
       <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">{detail}</p>

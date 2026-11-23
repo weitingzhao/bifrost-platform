@@ -1,3 +1,4 @@
+import { reachTag } from '@/lib/shell/stateWords'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 
 /** Redis health hashes store connected as "True"/"False" (Python bool str), not "ok"/"connected". */
@@ -34,16 +35,12 @@ export function ibGatewayExtraTags(status: IbGatewayStatusResponse | undefined):
 }> {
   const tags: Array<{ label: string; variant: 'success' | 'warning' | 'danger' | 'neutral' }> = []
   if (status?.redis_reachability != null) {
+    // Name + the engine's seven words (箭10 2026-11-23): degraded reads warn, down reads fail.
     const r = status.redis_reachability
-    tags.push({
-      label: `redis-ib ${r}`,
-      variant: r === 'ok' ? 'success' : r === 'degraded' ? 'warning' : r === 'fail' ? 'danger' : 'neutral',
-    })
+    const t = reachTag(r === 'ok' || r === 'degraded' || r === 'fail' ? r : 'unknown')
+    tags.push({ label: `redis-ib ${t.tagLabel}`, variant: t.tagVariant })
   }
-  const ingOk = ingestorConnected(status)
-  tags.push({
-    label: ingOk ? 'ingestor ok' : 'ingestor down',
-    variant: ingOk ? 'success' : 'danger',
-  })
+  const ing = reachTag(ingestorConnected(status) ? 'ok' : 'fail')
+  tags.push({ label: `ingestor ${ing.tagLabel}`, variant: ing.tagVariant })
   return tags
 }

@@ -13,6 +13,7 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
+import { reachTag } from '@/lib/shell/stateWords'
 import type { IbGatewaySlotStatus } from '@/api/satelliteBusTypes'
 import { fetchIbGatewaySelfHeal, postIbGatewayControl } from '@/api/network'
 import {
@@ -28,11 +29,14 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const SNAPSHOT_STALE_SEC = 90
 
-function reachTagVariant(reach: string): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (reach === 'ok') return 'success'
-  if (reach === 'degraded') return 'warning'
-  if (reach === 'fail') return 'danger'
-  return 'neutral'
+/** The probe's reach in the engine's seven words (箭10 2026-11-23); pending while it loads. */
+function probeTag(reach: string, loading = false) {
+  return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown', loading)
+}
+
+/** A slot: the word from its connection (stale feed is warn); the slot's own status goes beside it in words. */
+function slotTag(slot: IbGatewaySlotStatus, feedStale: boolean) {
+  return reachTag(slot.connected ? (feedStale ? 'degraded' : 'ok') : 'unknown')
 }
 
 function parseSnapshotAgeSec(accountSnapshot?: string): number | null {
@@ -234,8 +238,8 @@ export function IbGatewayLiveStatusPanel({
       description="TWS slots · mode switch · L0/L1 self-heal ladder"
       actions={sectionActions}
       headerExtra={
-        <DenseTag variant={reachTagVariant(liveProbe.probeReach)}>
-          {liveProbe.isLoading ? '…' : liveProbe.probeReach}
+        <DenseTag variant={probeTag(liveProbe.probeReach, liveProbe.isLoading).tagVariant}>
+          {probeTag(liveProbe.probeReach, liveProbe.isLoading).tagLabel}
         </DenseTag>
       }
       bodyPadding="compact"
@@ -315,17 +319,12 @@ export function IbGatewayLiveStatusPanel({
                   <DenseTableCell className="font-mono text-xs">{slot.slot}</DenseTableCell>
                   <DenseTableCell>{slot.account_id}</DenseTableCell>
                   <DenseTableCell>
-                    <DenseTag
-                      variant={
-                        slot.connected && feedStale
-                          ? 'warning'
-                          : slot.connected
-                            ? 'success'
-                            : 'neutral'
-                      }
-                    >
-                      {slot.connected && feedStale ? 'connected · feed stale' : slot.status}
-                    </DenseTag>
+                    <span className="inline-flex items-center gap-1.5">
+                      <DenseTag variant={slotTag(slot, feedStale).tagVariant}>{slotTag(slot, feedStale).tagLabel}</DenseTag>
+                      <span className="text-muted-foreground">
+                        {slot.connected && feedStale ? 'connected · feed stale' : slot.status}
+                      </span>
+                    </span>
                   </DenseTableCell>
                   <DenseTableCell>
                     <StatusLamp value={slot.reachability} kind="reach" />

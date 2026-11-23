@@ -44,3 +44,13 @@ describe('ibGatewaySummaryModel', () => {
     expect(compactIbGatewaySummary(baseStatus({}))).toContain('ingestor down')
   })
 })
+
+// 2026-11-23 (箭10, IB page slice): the IB tags said "redis-ib degraded" / "ingestor down"; tags are the
+// engine's seven words (degraded is warn, down is fail), the summary sentence keeps its plain words.
+describe('ib gateway tags in the seven words', () => {
+  it('names the check and says its word', () => {
+    const tags = ibGatewayExtraTags(baseStatus({ redis_reachability: 'degraded' }))
+    expect(tags[0]).toEqual({ label: 'redis-ib warn', variant: 'warning' })
+    expect(ibGatewayExtraTags(baseStatus({})).some(t => t.label === 'ingestor fail' && t.variant === 'danger')).toBe(true)
+  })
+})
