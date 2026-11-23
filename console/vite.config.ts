@@ -26,6 +26,8 @@ export default defineConfig({
       { find: '@bifrost/ui', replacement: path.join(uiRoot, 'dist/index.js') },
     ],
   },
+  // Retired City benches are not application entrypoints; do not eagerly scan them.
+  optimizeDeps: { entries: ['index.html', 'communication-preview.html', 'observation-preview.html'] },
   server: {
     // Bind IPv4 explicitly — bare host can prefer [::1] and break IPv4 clients.
     host: consoleHost,

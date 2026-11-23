@@ -1,92 +1,37 @@
-# Agent collaboration adapter
+# Agent collaboration observation
 
-Route: `#collaboration`, Crew navigation. Read-only observation.
+Routes: `#collaboration` (Agents), `#collaboration?look=console` (records). Both consume one shared communication snapshot. This is an observer; viewing, seeking and replay never send, ACK, accept or approve.
 
-## Sources and evidence mapping
+## Public integration contract
 
-- Existing `GET /api/v1/agentrt/events`: message_posted -> sent,
-  message_acked -> acknowledged. Uses transaction cursor from the existing API
-  client; first 500 events, incremental reads every 15 seconds, at most 1000
-  retained events, visibly marked as bounded when a page/cap is reached.
-- Existing bus contract and `useBusStream`: shared by City and collaboration.
-  `foundation/bus/communication.ts` converts matching event/consumer receipts
-  into delivered evidence. Console observer receipts are excluded. Event
-  delivery is never presented as message delivery or ACK.
-- Existing `GET /api/v1/agent/threads`: source-reported status and title,
-  independently refreshed every 30 seconds. Does not infer work from mail.
-- Crew public file `agent-config/charters/seats.yaml`: imported by
-  `console/scripts/import-communication-roster.rb <source> <output>` into
-  `roster.generated.json`. The generated artifact preserves its source hash,
-  import timestamp, multiple memberships, temporary and outside seats. UI
-  labels it as a source snapshot, not live presence. There is no invented
-  runtime Crew endpoint. Re-run the importer when the source changes.
+Host: `useCommunication()` returns `CommunicationSnapshot`; `useCommunicationObservation()` returns the same snapshot plus host-owned history controls. Generic engine: `@bifrost/ui/communication`. Consumers must reuse this adapter/query cache, not build a second mailbox reader, parser, identity resolver or status calculator.
 
-No message bodies or arbitrary mailbox reads are added. Current source metadata
-supports sent and ACK for letters. Acceptance, linked reply, completion and Audit
-remain not observed until an authoritative source supplies correlated evidence.
-Unknown membership is visible. Authentication failures retain their error and
-last-successful timestamp; they are not reported as zero activity.
+Additive v1 model fields: `CommunicationFact.replyTo`, `Exchange.replyTo/replies`, `Stage.opened`, `Member.work`, `Member.records`. Work records and reports carry source IDs and timestamps. Optional work properties do not imply authorization. Platform vocabulary and identity joins remain in `adapter.ts`.
 
-## Ownership and overlapping files
+## Authoritative sources and limits
 
-New module: coordination/communication; generic model/renderer: bifrost-ui
-src/communication. Public shared touchpoints: useBusStream (one reader with
-subscriber lifecycle), bus/communication (receipt projection), City traffic.ts
-(consumes that projection), shell routing and local package aliases. City layout,
-buildings, technology tree and animation are unchanged. No other agent checkout
-was edited. Changes are isolated in agent/communication-ui in both repos.
+- Existing `GET /api/v1/agentrt/events`: `message_posted` -> sent, `seat.mail.arrived` -> persisted inbox delivery, `message_acked` -> ACK. None implies recipient opened, accepted or completed.
+- Initial latest 500 events; forward cursor refresh every 15 seconds. Load earlier uses the existing `before_event_id` pagination. Both merge into one deduplicated cache, preserving the forward cursor. Up to 10,000 retained records; cap, unavailable history and read errors are explicit. No full-history claim beyond source retention.
+- Optional `reply_to` on new `message_posted` events comes from a valid existing v1 envelope. Only an explicit original and reversed parties establish a reply. No body/summary disclosure, historical backfill or prose matching. Replies have independent stages.
+- Shared bus contract and `useBusStream` feed event-delivery evidence; Console observer receipts are excluded. Event receipts are not letter ACKs. Earlier event receipt history is not fetched here.
+- `GET /api/v1/agent/threads`: title, last heartbeat event, activity and task binding. It does not prove domain membership or authority. Recent threads (24 h), known roster members and communication participants are observable.
+- `GET /api/v1/agentrt/seats`: latest self-reported goal, doing, waiting_on, next, progress/basis and declared charter. Uses existing `seat-statuses` query. Reports older than two hours are labelled older, not represented as fresh work. Parse errors retain their problem and do not show progress.
+- `GET /api/v1/lineage` with 2-day window: linked commit records and release reach. Uses existing `lineage-lines,2` query. Exact identities only; vendor-session aliases must have a unique thread-source match. No display-name guessing. Source record link opens Commit Lineage.
+- Crew memberships remain the generated source snapshot from `agent-config/charters/seats.yaml`, with import time/hash in `roster.generated.json`. Multiple memberships and temporary roles remain explicit; self-reported charter does not overwrite them.
+- Effective permissions are not exposed by these sources, so the member panel says so. Opened, acceptance, completion and audit require independent upstream evidence. MCP cached body reads are not durable read receipts.
 
-## Validation and limits
+## Visual and time behavior
 
-Model/public API tests cover independent stages, deduplication, channel separation,
-unknown identity, multi-membership and time cutoff. Observer tests cover no network
-writes. Existing City traffic and shell route tests run unchanged except adding the
-new route expectation. Shared stream tests cover two observers and last-unmount.
-Browser fixture: `/communication-preview.html`, explicitly illustrative, dev only;
-it does not call Platform and is not a live integration acceptance result.
+Agents extends City's existing `Draw`, `faces`, `HUES` and sprite serialization with a cartoon block workbench and member. No City geometry, buildings, animations or technology tree were changed. The scene focuses on the selected communication; directory entries expose primary department and all memberships in detail. Colors identify members, never health or permission.
 
-Live local entry is `http://127.0.0.1:5293/#collaboration`, bdev service
-`communication-console`. This origin needs the existing Connect login. No tokens
-were read or copied. Live authenticated black-box acceptance remains pending.
-No deployment, remote push, or shared-checkout change was performed.
+The timeline supports live following, fixed-time inspection, previous/next evidence, replay and earlier letter history. Historical filtering excludes future stages and replies. Current work is explicitly not reconstructed in history; timestamped work records can be filtered. Missing replies do not establish idle agents or deadlines. Reduced-motion suppresses the finite evidence pulse.
+
+## Ownership and acceptance
+
+Owned files: platform `coordination/communication`, fixture, dev entry scan; UI `src/communication`. Existing City kit is imported without edits. Other views use the shared snapshot and retain their independent composition.
+
+Validation covers source identity joins (including ambiguous aliases), self-report vs membership separation, no fabricated progress on malformed reports, time cutoff/future ACK, shared historical cursor and read-only interaction. Local browser fixture is `http://127.0.0.1:5293/communication-preview.html#agents`, managed by bdev `communication-console`, explicitly illustrative. Production route has no fixture injection. Live acceptance and release SHAs are recorded separately in delivery evidence, not inferred from fixture success.
 
 ## Recovery
 
-Both changesets are additive/local and separately reviewable. To remove the preview,
-stop only `communication-console` via bdev. To withdraw the feature before merge,
-exclude the two isolated branch changesets. After merge, revert both coordinated
-commits together (UI public entry plus Platform consumer); no database migration,
-platform message mutation, or persisted layout needs restoration.
-
-## Decision record
-
-Owner explicitly delegated reversible visual choice and implementation. Working
-Studio was selected without another approval loop. The generic skill's request for
-visual selection did not protect an irreversible action here; continuing with a
-reviewable implementation removed that wait. No governance/CI gate was changed.
-The real remaining credential step protects the Owner's secrets; the agent can
-prepare and test the feature but cannot take over that credential under repository
-rules. Visual and unit testing therefore continued independently of login.
-
-## Peer modes
-
-The default #collaboration route is now an independent AgentScreen outside the
-Console frame. #collaboration?look=console uses WorkingStudio in ledgerOnly mode.
-The optional exchange query parameter carries the selected communication identity
-between them. AgentWorld consumes the same useCommunication snapshot and opens
-member/record evidence on demand. City and Console navigation include Agents;
-City's optional otherLooks prop is the sole renderer overlap for this revision.
-No second mailbox, parser, identity resolver or transport is introduced.
-
-## Letter round trips (2026-11-22)
-
-All observation modes consume `@bifrost/ui/communication` snapshots via `useCommunication`; do not open another inbox or derive workflow in a renderer.
-
-- `message_posted` -> `sent`; optional `reply_to` projects only a valid v1 envelope's declared original ID (new sends only). No body or summary is added to the ledger. It is not a claim that the sender completed anything.
-- `seat.mail.arrived` -> `delivered` means persisted in the recipient mailbox, not delivered to a model context or opened.
-- `message_acked` -> `acknowledged`, independent of delivery, reading, acceptance and completion.
-- Shared engine links a reply only with explicit `replyTo`, an observed original and reversed participants. Replies remain independent letters with their own stages. No heuristic based on `answer`, prose, timing or names.
-- `ReplyTrail` is shared by Agents and Console. It navigates original/replies and reports elapsed time at the last successful read. Missing reply evidence is not a timeout, demand for an answer, or an idle-agent verdict. Historical filters exclude future replies.
-- `opened` is a supported evidence stage but this platform source does NOT currently record recipient body reads. MCP `read_message` can return a cached body without a platform write. Observer reads must not create read receipts. Acceptance/completion/audit likewise require explicit upstream records and remain unknown here.
-
-Ownership overlap for the multi-view line: consume the public shared UI model and the host hook/adapter; no City geometry changes. Public optional additions are `CommunicationFact.replyTo`, `Exchange.replyTo/replies`, `Stage.opened` and `replyObservation`. The sender's envelope contract remains v1 with existing `reply_to`; event projection adds an optional field, preserving older events. No new permissions or inbox endpoints.
+Revert the coordinated UI and platform commits through the normal release path. No database migration or persisted layout change. Stop only this line's preview using bdev when no longer needed.
