@@ -205,7 +205,8 @@ function ConsolePageInner() {
   const agentsLook = location.kind === 'shell' && location.id === 'collaboration' && readCommunicationLook(window.location.hash.split('?')[1] ?? '').look === 'agents'
   if (location.kind === 'shell' && location.id === 'observation') return <Suspense fallback={<RouteLoading full place="Signals" />}><Observation /></Suspense>
   if (agentsLook) return <><Suspense fallback={<RouteLoading full place="Agents" />}><AgentScreen /></Suspense><SignalModeLink /></>
-  if (cityLook) return <><Suspense fallback={<RouteLoading full place="the City" />}><CityScreen /></Suspense><SignalModeLink /></>
+  // The City wears the world frame, whose four places include Signals: no floating link over it.
+  if (cityLook) return <Suspense fallback={<RouteLoading full place="the City" />}><CityScreen /></Suspense>
   return (
     <TooltipProvider>
       <SidebarProvider>
@@ -265,7 +266,7 @@ export function ConsolePage() {
   return <><ConsolePageInner /><WorldJourney /></>
 }
 
-/** Shell-owned peer entry; leaves the City and communication renderers untouched. */
+/** Shell-owned peer entry over Agents until Agents wears the world frame too. */
 function SignalModeLink() {
   return <a href="#observation" aria-label="Open Signals view" style={{position:'fixed',right:28,top:78,zIndex:45,padding:'6px 14px',border:'1px solid #496575',borderRadius:16,background:'#102330',color:'#9ae6d1',font:'12px system-ui',textDecoration:'none'}}>Signals ↗</a>
 }
