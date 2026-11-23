@@ -28,7 +28,7 @@ describe('lines on the City', () => {
     ], 'map')]) }, {}, now)
     const t = blocks[1]
     expect(t.kind === 'table' && t.rows[0].cells.slice(2)).toEqual([2, 2, 1])
-    expect(t.kind === 'table' && t.rows[0].cells[1]).toEqual({ text: '2 h ago', tone: 'good' })
+    expect(t.kind === 'table' && t.rows[0].cells[1]).toEqual({ text: '2 h ago', tone: 'ok' })
   })
 
   it('puts the line picked in the Console first, marked', () => {
@@ -48,7 +48,7 @@ describe('lines on the City', () => {
   it('lists the newest line first and counts the moving ones', () => {
     const blocks = townLines({ data: lineage([thread('old', '2026-11-18T00:00:00Z', [commit('x', true)], 'old line'), thread('new', '2026-11-23T11:00:00Z', [commit('y', true)], 'new line')]) }, {}, now)
     const facts = blocks[0]
-    expect(facts.kind === 'facts' && facts.rows[0].value).toEqual({ text: 1, tone: 'good' })
+    expect(facts.kind === 'facts' && facts.rows[0].value).toEqual({ text: 1, tone: 'ok' })
     const table = blocks[1]
     expect(table.kind === 'table' && table.rows.map(r => r.key)).toEqual(['new', 'old'])
     expect(blocks.at(-1)).toMatchObject({ kind: 'note', text: expect.stringContaining('seat roster is not served') })

@@ -30,7 +30,8 @@ const whyOf = (e: unknown) => e instanceof Error ? e.message : e ? String(e) : '
 /** The pool's count for a domain; unknown when the map does not serve the pool yet. */
 const offMapOf = (d: MapStatus, id: string) => d.off_map_by_domain ? String(d.off_map_by_domain[id] ?? 0) : { text: 'unknown', tone: 'unknown' as Tone }
 const nameOf = (d: MapStatus, id: string) => d.domains.find(r => r.id === id)?.name || id
-export const toneOf = (value: string): Tone => value === 'good' ? 'good' : value === 'bad' || value === 'problem' ? 'warn' : 'unknown'
+/** The map's light in the Ops seven words (colour is severity): good ok, problem warn, bad fail, anything else not judged. */
+export const toneOf = (value: string): Tone => value === 'good' ? 'ok' : value === 'problem' ? 'warn' : value === 'bad' ? 'fail' : 'unknown'
 
 function inventory(rows: RepoCount[]): Block {
   return {

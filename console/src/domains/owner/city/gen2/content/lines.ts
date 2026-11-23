@@ -35,9 +35,9 @@ export type RosterSeat = {
 export type LinesRead = { data?: LineageResponse; error?: unknown }
 export type RosterRead = { data?: RosterSeat[]; error?: unknown }
 
-/** How long since a line moved: moving (good) or quiet (not known: no judgment of why). */
+/** How long since a line moved: moving (ok) or quiet (boundary: not a fault, the line's own pace; never unknown, which means not read). */
 export const paceOf = (l: LineActivity): { text: string; tone: Tone } =>
-  l.quietHours == null ? { text: 'unknown', tone: 'unknown' } : { text: quietLabel(l.quietHours), tone: l.movingToday ? 'good' : 'unknown' }
+  l.quietHours == null ? { text: 'unknown', tone: 'unknown' } : { text: quietLabel(l.quietHours), tone: l.movingToday ? 'ok' : 'boundary' }
 
 /** The domains a session sits, by the roster (a session may sit two seats, so two domains). */
 export function domainsOf(roster: readonly RosterSeat[], session: string): string[] {
@@ -87,7 +87,7 @@ export function townLines(read: LinesRead, roster: RosterRead, now: Date, focus?
   } : undefined
   const missing = focus && focus.startsWith('local_') && !rows.some(r => r.session === focus)
   return [
-    { kind: 'facts', rows: [{ label: 'Moving', value: { text: moving, tone: 'good' }, note: 'committed today' }, { label: 'Quiet', value: rows.length - moving, note: `of ${rows.length} lines with commits in ${LINES_DAYS} days` }] },
+    { kind: 'facts', rows: [{ label: 'Moving', value: { text: moving, tone: 'ok' }, note: 'committed today' }, { label: 'Quiet', value: rows.length - moving, note: `of ${rows.length} lines with commits in ${LINES_DAYS} days` }] },
     ...(missing ? [{ kind: 'note' as const, text: `The line picked in the Console committed nothing in the last ${LINES_DAYS} days.` }] : []),
     table(rows, focus, col),
     { kind: 'note', text: seats ? SOURCE : `${SOURCE} ${NO_ROSTER}` },

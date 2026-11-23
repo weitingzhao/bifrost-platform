@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { consoleContent } from '../console'
 import { CardView } from '@bifrost/ui/city/CardView'
 import type { CardBody } from '@bifrost/ui/city/cards'
-import { domainsPanel } from '../domainsPanel'
+import { domainsPanel, toneOf } from '../domainsPanel'
 
 const light = (value: string, why = `${value} because`) => ({ value, why })
 const status = {
@@ -79,5 +79,13 @@ describe('domains panel', () => {
     expect(c.panels!(c.tree, open).some(p => p.id === 'domains')).toBe(true)
     const district = c.tree.children[0]
     expect(c.panels!(district, open).map(p => p.id)).toEqual(['domain-ops'])
+  })
+})
+
+// 2026-11-23, «one world» gap table item 5 (cockpit/ui-world/consistency-gaps-2026-11-23.md): the City wrote the
+// map's lights as good/warn/unknown and read "bad" as warn; the Ops vocabulary says colour is severity and bad is fail.
+describe('the map lights in the Ops seven words', () => {
+  it('reads good as ok, problem as warn, bad as fail, anything else as not judged', () => {
+    expect(['good', 'problem', 'bad', 'unknown', ''].map(toneOf)).toEqual(['ok', 'warn', 'fail', 'unknown', 'unknown'])
   })
 })

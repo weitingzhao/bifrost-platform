@@ -50,7 +50,7 @@ export function trafficPanel(read: TrafficRead): Panel {
   const stream: Block = {
     kind: 'facts',
     rows: [
-      { label: 'Stream', value: { text: read.connection, tone: live ? 'good' : read.connection === 'connecting' ? 'unknown' : 'warn' }, note: read.detail ?? '' },
+      { label: 'Stream', value: { text: read.connection, tone: live ? 'ok' : read.connection === 'connecting' ? 'pending' : 'unknown' }, note: read.detail ?? '' },
       { label: 'Deliveries seen', value: read.trips.length, note: 'since this page opened, from a reader the bus registry places; one inside a single domain is that district’s own business, not driven on the town' },
       { label: 'Not placed', value: read.unplaced ? { text: read.unplaced, tone: 'warn' } : 0, note: 'a topic or reader that declares no domain the map serves' },
     ],
