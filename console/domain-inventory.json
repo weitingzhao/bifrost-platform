@@ -3576,6 +3576,7 @@
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
         "console/src/lib/shell/__tests__/fiveDomains.test.tsx",
         "console/src/lib/shell/__tests__/shellStatusLine.test.ts",
+        "console/src/lib/shell/__tests__/staleIsFail.test.ts",
         "console/src/lib/shell/__tests__/stateWords.test.ts",
         "console/src/lib/shell/__tests__/useConsoleAppearance.test.tsx",
         "console/src/lib/shell/__tests__/useHashSection.test.tsx",
@@ -3603,8 +3604,10 @@
         "console/src/api/clusterTypes.ts",
         "console/src/components/shell",
         "console/src/domains/owner/city",
+        "console/src/lib/research",
         "console/src/pages/shell/data",
-        "console/src/pages/shell/infrastructure"
+        "console/src/pages/shell/infrastructure",
+        "console/src/pages/shell/owner"
       ],
       "external_imports": [
         "@bifrost/ui",

@@ -19,7 +19,8 @@ function freshnessVerdictVariant(
   verdict: string,
 ): 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
   if (verdict === 'ok') return 'success'
-  if (verdict === 'stale') return 'warning'
+  // Stale is older than its declared freshness: fail (design system; 箭10 2026-11-23, the city aligns).
+  if (verdict === 'stale') return 'danger'
   if (verdict === 'fail') return 'danger'
   return 'neutral'
 }

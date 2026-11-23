@@ -223,7 +223,8 @@ describe('data tiles', () => {
     const tile = copiesTile({ data: { cluster_id: '', reference_db: 'bifrost_prod', cache_hit: false, generated_at: '', fresh_threshold_days: 3, stale_threshold_days: 7,
       databases: [{ name: 'bifrost_prod', environment: 'prod', verdict: 'reference' }, { name: 'bifrost_dev', environment: 'dev', verdict: 'stale', lag_vs_prod_days: 13.2 },
         { name: 'bifrost_stg', environment: 'stg', verdict: 'stale', lag_vs_prod_days: 12.8 }] }, error: null })
-    expect(tile).toMatchObject({ tone: 'warn', state: 'Stale', figure: '13 days', detail: 'dev and stg copies of PROD, oldest' })
+    // 2026-11-23 (箭10): Stale is older than its declared freshness, the design system's fail (was warn); the city aligns.
+    expect(tile).toMatchObject({ tone: 'fail', state: 'Stale', figure: '13 days', detail: 'dev and stg copies of PROD, oldest' })
     const partly = copiesTile({ data: { cluster_id: '', reference_db: 'bifrost_prod', cache_hit: false, generated_at: '', fresh_threshold_days: 3, stale_threshold_days: 7,
       databases: [{ name: 'bifrost_dev', environment: 'dev', verdict: 'fresh', lag_vs_prod_days: 0 }, { name: 'bifrost_stg', environment: 'stg', verdict: 'unknown' }] }, error: null })
     expect(partly).toMatchObject({ tone: 'unknown', state: 'Unknown', detail: 'stg not read' })

@@ -34,10 +34,10 @@ function probeTag(reach: string, loading = false) {
   return reachTag(reach === 'ok' || reach === 'degraded' || reach === 'fail' ? reach : 'unknown', loading)
 }
 
-/** A slot: the word from its connection (stale feed is warn); the slot's own status goes beside it in words. */
+/** A slot: the word from its connection; the slot's own status goes beside it in words. Stale is older than its declared freshness: fail (design system; 箭10 2026-11-23, the city aligns): a feed older than SNAPSHOT_STALE_SEC. */
 function slotTag(slot: IbGatewaySlotStatus, feedStale: boolean) {
   // Not connected is known, not unknown: the slot's own reach says how bad (the secondary without TWS reads warn).
-  return slot.connected ? reachTag(feedStale ? 'degraded' : 'ok') : probeTag(slot.reachability)
+  return slot.connected ? reachTag(feedStale ? 'fail' : 'ok') : probeTag(slot.reachability)
 }
 
 function parseSnapshotAgeSec(accountSnapshot?: string): number | null {
@@ -56,7 +56,7 @@ function slotTone(
   slot: IbGatewaySlotStatus,
   feedStale: boolean,
 ): 'ok' | 'scheduled' | 'missing' | 'unknown' {
-  if (slot.connected && feedStale) return 'scheduled'
+  if (slot.connected && feedStale) return 'missing'
   if (slot.connected && slot.reachability === 'ok') return 'ok'
   if (slot.connected || slot.reachability === 'degraded') return 'scheduled'
   if (slot.reachability === 'fail') return 'missing'

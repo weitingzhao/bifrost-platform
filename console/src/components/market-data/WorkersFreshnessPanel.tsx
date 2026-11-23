@@ -22,7 +22,8 @@ import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
 
 function freshnessTone(verdict: string): 'ready' | 'thin' | 'blocked' | 'unknown' {
   if (verdict === 'ok') return 'ready'
-  if (verdict === 'stale') return 'thin'
+  // Stale is older than its declared freshness: fail (design system; 箭10 2026-11-23, the city aligns).
+  if (verdict === 'stale') return 'blocked'
   if (verdict === 'fail') return 'blocked'
   return 'unknown'
 }
@@ -85,7 +86,7 @@ export function WorkersFreshnessPanel({
         <div className="flex flex-wrap items-center gap-1.5">
           <DenseTag variant={reachVariant}>{reachTag}</DenseTag>
           <DenseTag variant="success">fresh {freshnessOk}</DenseTag>
-          {freshnessStale > 0 ? <DenseTag variant="warning">stale {freshnessStale}</DenseTag> : null}
+          {freshnessStale > 0 ? <DenseTag variant="danger">stale {freshnessStale}</DenseTag> : null}
           {freshnessFail > 0 ? <DenseTag variant="danger">other {freshnessFail}</DenseTag> : null}
           <span className="font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
             <FlashValue value={jobsDone}>{fmtCount(jobsDone)}</FlashValue> done

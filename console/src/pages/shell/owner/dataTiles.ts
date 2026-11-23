@@ -75,8 +75,9 @@ export function copiesTile(read: Read<DataFreshnessResponse>): DataTile {
   const unread = copies.filter(db => !known(db)).map(db => db.environment || db.name)
   if (unread.length) return unknown('Test copies', '#infrastructure', `${unread.join(' and ')} not read${d.detail ? ` · ${d.detail}` : ''}`)
   const worst = Math.max(...copies.map(db => db.lag_vs_prod_days as number))
-  const tone: Tone = worst >= d.stale_threshold_days ? 'warn' : worst >= d.fresh_threshold_days ? 'info' : 'ok'
-  const state = tone === 'warn' ? 'Stale' : tone === 'info' ? 'Aging' : 'OK'
+  // Stale is older than its declared freshness: fail (design system; 箭10 2026-11-23, the city aligns).
+  const tone: Tone = worst >= d.stale_threshold_days ? 'fail' : worst >= d.fresh_threshold_days ? 'info' : 'ok'
+  const state = tone === 'fail' ? 'Stale' : tone === 'info' ? 'Aging' : 'OK'
   const names = copies.map(db => db.environment || db.name).join(' and ')
   return { name: 'Test copies', tone, state, figure: `${Math.round(worst)} days`, detail: `${names} copies of PROD, oldest`, href: '#infrastructure' }
 }

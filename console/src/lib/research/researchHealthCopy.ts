@@ -161,7 +161,9 @@ function toTag(v: HealthLayerVerdict): {
   // The engine's seven words (lib/shell/stateWords, 箭10 2026-11-23): due is the next run not come yet
   // (boundary), draining / caution / degraded need attention (warn), a missed run is a failure (fail).
   const word: StatusWord =
-    v === 'healthy' ? 'ok' : v === 'due' ? 'boundary' : v === 'unknown' ? 'unknown' : v === 'missed' ? 'fail' : 'warn'
+    // degraded is where a stale or empty layer lands, and it already ranks and lights as a failure here:
+    // its word is fail too (stale is older than its declared freshness, 箭10 2026-11-23).
+    v === 'healthy' ? 'ok' : v === 'due' ? 'boundary' : v === 'unknown' ? 'unknown' : v === 'missed' || v === 'degraded' ? 'fail' : 'warn'
   return { tagLabel: word, tagVariant: TAG_VARIANT[word] }
 }
 
