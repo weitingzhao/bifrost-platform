@@ -2356,6 +2356,7 @@
         "console/src/domains/owner/city/gen2/content/__tests__/domainOwns.test.tsx",
         "console/src/domains/owner/city/gen2/content/__tests__/domainPlaces.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/domainsPanel.test.tsx",
+        "console/src/domains/owner/city/gen2/content/__tests__/frame.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/key.test.ts",
@@ -2371,6 +2372,7 @@
         "console/src/domains/owner/city/gen2/content/domainOwns.ts",
         "console/src/domains/owner/city/gen2/content/domainPlaces.ts",
         "console/src/domains/owner/city/gen2/content/domainsPanel.ts",
+        "console/src/domains/owner/city/gen2/content/frame.ts",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/hardwareQueries.json",
         "console/src/domains/owner/city/gen2/content/lines.ts",
@@ -2424,6 +2426,7 @@
         "@bifrost/ui/city/units/process",
         "@bifrost/ui/city/units/standards",
         "@bifrost/ui/city/viewport",
+        "@bifrost/ui/city/world",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",
         "node:fs",
@@ -4414,6 +4417,7 @@
       "files": [
         "console/src/pages/shell/city/CityLedger.tsx",
         "console/src/pages/shell/city/CityScreen.tsx",
+        "console/src/pages/shell/city/cityScreen.css",
         "console/src/pages/shell/city/useCityContent.ts",
         "console/src/pages/shell/shellPages.tsx"
       ],
@@ -4424,6 +4428,8 @@
         "console/src/api/lineage.ts",
         "console/src/api/telemetry.ts",
         "console/src/domains/foundation/bus",
+        "console/src/domains/foundation/observation-display",
+        "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
         "console/src/pages/shell/data",
         "console/src/pages/shell/ib",
@@ -4439,6 +4445,7 @@
       "external_imports": [
         "@bifrost/ui",
         "@bifrost/ui/city/CityGen2",
+        "@bifrost/ui/city/WorldFrame",
         "@bifrost/ui/city/content",
         "@bifrost/ui/city/places",
         "@bifrost/ui/city/rulers",
