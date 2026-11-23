@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveNextRun, overdueOf, patrolVerdict, scheduleIntervalMs } from '../patrolVerdict'
+import { overdueOf, patrolVerdict, scheduleIntervalMs } from '../patrolVerdict'
 import type { PatrolSkill } from '../readings'
 
 // Origin (2026-11-23, Console line's design-system inventory, confirmed by 箭10): Records → Patrol drew a fixed
@@ -50,18 +50,11 @@ describe('overdue', () => {
     expect(overdueOf(every15(8 * 60_000, { schedule: '' }), NOW)).toEqual({ word: 'unknown', note: 'autopilot: no schedule declared' })
   })
 
-  // PROD 2026-11-23 14:21: Ops Autopilot last ran 14:15 but its reported next run was still 14:00; it is on time.
-  it('a reported next run older than the last run is not trusted: due one interval after the last run', () => {
-    const lastRun = new Date(NOW - 6 * 60_000).toISOString()
-    expect(overdueOf(every15(21 * 60_000, { last_run_at: lastRun }), NOW)).toBeNull()
-    const longAgo = new Date(NOW - 40 * 60_000).toISOString()
-    expect(overdueOf(every15(41 * 60_000, { last_run_at: longAgo }), NOW)?.word).toBe('fail')
-  })
-
-  it('the Next run column shows the corrected time and says it was estimated', () => {
-    const s = every15(21 * 60_000, { last_run_at: new Date(NOW - 6 * 60_000).toISOString() })
-    expect(effectiveNextRun(s)).toEqual({ at: new Date(NOW + 9 * 60_000).toISOString(), stale: true })
-    expect(effectiveNextRun(every15(-60_000))?.stale).toBe(false)
+  // PROD 2026-11-23 14:21: Ops Autopilot last ran 14:15 but its reported next run still said 14:00. The platform has
+  // fixed it (a60d870a4: next_run_at counts from the last run), so the Console takes the reported time as it is and
+  // the estimate it used meanwhile is gone.
+  it('takes the reported next run as it is (the platform counts it from the last run)', () => {
+    expect(overdueOf(every15(8 * 60_000, { last_run_at: new Date(NOW - 6 * 60_000).toISOString() }), NOW)?.word).toBe('warn')
   })
 
   it('counts in the lamp: all success but one late is warn, with the reason in the sentence', () => {

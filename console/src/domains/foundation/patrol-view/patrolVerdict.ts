@@ -39,37 +39,17 @@ export function scheduleIntervalMs(expr: string): number | null {
 export function overdueOf(skill: PatrolSkill, now: number): { word: StatusWord; note: string } | null {
   if (skill.last_result === 'running') return null
   if (!skill.schedule?.trim()) return { word: 'unknown', note: `${skill.name}: no schedule declared` }
-  const reported = skill.next_run_at ? Date.parse(skill.next_run_at) : NaN
-  if (!Number.isFinite(reported) || now <= reported) return null
+  // The platform counts next_run_at from the last run (a60d870a4, 2026-11-23: it used to stay at the api process's
+  // first slot, and on-time skills read late), so the reported time is taken as it is.
+  const next = skill.next_run_at ? Date.parse(skill.next_run_at) : NaN
+  if (!Number.isFinite(next) || now <= next) return null
   const every = scheduleIntervalMs(skill.schedule)
   if (every == null) return { word: 'unknown', note: `${skill.name}: schedule not understood (${skill.schedule})` }
-  // A reported next run older than the last run is not updated (seen on PROD 2026-11-23: last 14:15, next 14:00);
-  // the run is then due one interval after the last one.
-  const next = dueAt(skill, every, reported)
-  if (now <= next) return null
   const late = now - next
   return {
     word: late < every ? 'warn' : 'fail',
     note: `${skill.name} overdue ${formatDurationParts(late)} (schedule every ${formatDurationParts(every)})`,
   }
-}
-
-function dueAt(skill: PatrolSkill, every: number, reported: number): number {
-  const last = skill.last_run_at ? Date.parse(skill.last_run_at) : NaN
-  return Number.isFinite(last) && last >= reported ? last + every : reported
-}
-
-/**
- * When the next run is really due: the reported time, or one interval after the last run when the reported time is
- * older than the last run (not updated). `stale` says the reported time was replaced, for the Next run column.
- */
-export function effectiveNextRun(skill: PatrolSkill): { at: string; stale: boolean } | null {
-  const reported = skill.next_run_at ? Date.parse(skill.next_run_at) : NaN
-  if (!Number.isFinite(reported)) return null
-  const every = skill.schedule?.trim() ? scheduleIntervalMs(skill.schedule) : null
-  if (every == null) return { at: skill.next_run_at!, stale: false }
-  const due = dueAt(skill, every, reported)
-  return due === reported ? { at: skill.next_run_at!, stale: false } : { at: new Date(due).toISOString(), stale: true }
 }
 
 export type PatrolVerdict = { word: StatusWord; sentence: string }
