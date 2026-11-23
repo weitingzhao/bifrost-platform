@@ -518,6 +518,7 @@
       "tier": 1,
       "source": "domains/8-2-comm-desk/charter.md",
       "contracts": {
+        "public_packages": ["api/internal/agentrt/coord", "api/internal/agentrt/coordapi", "api/internal/agentrt/windownotice", "api/internal/threadinbox"],
         "measured_at": "d8dc802c",
         "request_response": [
           {"method": "POST", "path": "/api/v1/agentrt/controls", "handler": "api/internal/agentrt/coordapi.HandleSetControl", "consumers": ["console", "mcp"]},
