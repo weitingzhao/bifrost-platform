@@ -11,6 +11,8 @@ import { GRAPH_REPO } from '@/domains/owner/city/gen2/content/techTree'
 import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
 import { deviceKeys, type PromAlert } from '@/domains/owner/city/gen2/content/alerts'
 import { fetchTelemetryAlerts } from '@/api/telemetry'
+import { fetchLineage } from '@/api/lineage'
+import { LINES_DAYS, type RosterRead } from '@/domains/owner/city/gen2/content/lines'
 import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
 import { useBusStream } from '@/domains/foundation/bus/useBusStream'
 import type { CityContent } from '@bifrost/ui/city/content'
@@ -19,6 +21,7 @@ import { useRulersTick } from '@bifrost/ui/city/rulers'
 const EVERY = 30_000
 // What a domain owns, read only when its district is entered (the map's domain read).
 const readDomain = fetchDomainPage as unknown as ReadDomain
+const NO_ROSTER: RosterRead = { error: 'no read yet' }
 const getJson = async (path: string): Promise<unknown> => (await authedFetch('city', path)).json()
 
 /**
@@ -53,6 +56,10 @@ export function useCityContent(): CityContent {
     queryFn: async () => Object.fromEntries((await Promise.all(ids.split(',').filter(Boolean).map(id => readDomain(id).then(h => [id, h] as const, () => null)))).filter((x): x is readonly [string, DomainHoldings] => x !== null)),
     enabled: ids !== '', refetchInterval: 5 * 60_000,
   })
+  // What each line did (the lineage read), over the window the Console's Commit lineage opens with, so both count the same.
+  const lineage = useQuery({ queryKey: ['city', 'gen2', 'lineage', LINES_DAYS], queryFn: () => fetchLineage(LINES_DAYS), refetchInterval: 5 * 60_000, retry: false })
+  // Which domain each line sits: the seat roster, not served by the platform yet (asked 2026-11-23; the map line serves it).
+  const roster: RosterRead = NO_ROSTER
   // A viewer's new ruler redraws the rooms that count that part (frame/rulers.tsx).
   const rulers = useRulersTick()
   return useMemo(() => {
@@ -62,6 +69,7 @@ export function useCityContent(): CityContent {
       ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
-      { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {})
-  }, [reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
+      { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
+      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()) })
+  }, [lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

@@ -2355,6 +2355,7 @@
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.fixture.json",
         "console/src/domains/owner/city/gen2/content/__tests__/hardware.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/key.test.ts",
+        "console/src/domains/owner/city/gen2/content/__tests__/lines.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/looks.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/techTree.test.ts",
         "console/src/domains/owner/city/gen2/content/__tests__/traffic.test.ts",
@@ -2368,6 +2369,7 @@
         "console/src/domains/owner/city/gen2/content/domainsPanel.ts",
         "console/src/domains/owner/city/gen2/content/hardware.ts",
         "console/src/domains/owner/city/gen2/content/hardwareQueries.json",
+        "console/src/domains/owner/city/gen2/content/lines.ts",
         "console/src/domains/owner/city/gen2/content/looks.ts",
         "console/src/domains/owner/city/gen2/content/partners.draft.json",
         "console/src/domains/owner/city/gen2/content/techTree.ts",
@@ -2381,11 +2383,13 @@
       "imports": [
         "console/src",
         "console/src/api",
+        "console/src/api/lineage.ts",
         "console/src/domains/foundation/bus",
         "console/src/lib/shell"
       ],
       "test_imports": [
-        "console/src/api"
+        "console/src/api",
+        "console/src/api/lineage.ts"
       ],
       "external_imports": [
         "@bifrost/ui/city/CardView",
@@ -4410,6 +4414,7 @@
         "console/src",
         "console/src/api",
         "console/src/api/client.ts",
+        "console/src/api/lineage.ts",
         "console/src/api/telemetry.ts",
         "console/src/domains/foundation/bus",
         "console/src/domains/owner/city",
