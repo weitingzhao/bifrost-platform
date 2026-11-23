@@ -1979,6 +1979,32 @@
       "unresolved_imports": []
     },
     {
+      "path": "console/src/domains/foundation/observation-access",
+      "files": [
+        "console/src/domains/foundation/observation-access/README.md",
+        "console/src/domains/foundation/observation-access/access.test.tsx",
+        "console/src/domains/foundation/observation-access/index.ts"
+      ],
+      "imports": [
+        "console/src/api/client.ts",
+        "console/src/domains/foundation/runtime-observation"
+      ],
+      "test_imports": [
+        "console/src/api/client.ts",
+        "console/src/domains/foundation/runtime-observation",
+        "console/src/domains/owner/city"
+      ],
+      "external_imports": [
+        "@bifrost/ui/city/observation",
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "source_inputs": [],
+      "test_inputs": [],
+      "unresolved_imports": []
+    },
+    {
       "path": "console/src/domains/foundation/observation-display",
       "files": [
         "console/src/domains/foundation/observation-display/__tests__/__snapshots__/extractionParity.test.ts.snap",
