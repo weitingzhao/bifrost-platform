@@ -4,6 +4,9 @@ import type { SeatStatus } from '@/api/seatStatus'
 import type { LineageThread } from '@/api/lineage'
 import type { AgentThread } from '@/api/agentThreads'
 const string = (v: unknown) => typeof v === 'string' ? v : undefined
+/** Every letter event is appended to the recipient's mailbox stream, `mbox:<to>` (agentrt/coord/messages.go).
+ * The stream names the recipient even when only the ACK is in the loaded window; the ACK's actor is never read as either party. */
+const mailbox = (stream: string | undefined) => stream?.startsWith('mbox:') && stream.length > 5 ? stream.slice(5) : undefined
 /** Platform vocabulary ends here. The engine receives evidence, never platform envelopes. */
 export function messageFacts(events: readonly RuntimeEventRow[]): CommunicationFact[] {
   return events.flatMap(e => {
@@ -11,7 +14,7 @@ export function messageFacts(events: readonly RuntimeEventRow[]): CommunicationF
     if (!id || !['message_posted', 'seat.mail.arrived', 'message_acked'].includes(e.event_type)) return []
     return [{ id: 'agentrt:' + e.event_id, communication: id, channel: 'message' as const,
       stage: e.event_type === 'message_posted' ? 'sent' as const : e.event_type === 'seat.mail.arrived' ? 'delivered' as const : 'acknowledged' as const,
-      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to), label: string(e.body.kind), replyTo: string(e.body.reply_to) } : {}),
+      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to) ?? mailbox(e.event_stream_id), label: string(e.body.kind), replyTo: string(e.body.reply_to) } : { to: mailbox(e.event_stream_id) ?? string(e.body.to) }),
       evidence: { id: String(e.event_id), source: 'agentrt/events', at: e.at, actor: e.actor_id } }]
   })
 }

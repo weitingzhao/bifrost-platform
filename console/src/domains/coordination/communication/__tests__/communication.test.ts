@@ -70,3 +70,17 @@ it('maps actual mailbox arrival separately from receipt by the reader and freeze
   expect(replyObservation(x,'2026-11-22T12:02:00Z')).toContain('2m since sent at last read')
   expect(replyObservation(x)).toBe('No linked reply observed')
 })
+
+// 2026-11-23 PROD #collaboration: ten letters read "Unknown member → Unknown member" because only their
+// ACK was in the latest-500 window. Every letter event sits in the recipient's stream `mbox:<to>`
+// (agentrt/coord/messages.go), so the recipient is recorded; the sender is not, and the ACK's actor is not read as either.
+it('names the recipient of an ACK-only letter from its mailbox stream and leaves the sender unknown', () => {
+  const ack = { event_id: 9, event_stream_id: 'mbox:thread:local_b', event_type: 'message_acked', actor_id: 'thread:local_b', body: { message_id: 'm_2' }, at: '2026-11-22T12:00:02Z' } as RuntimeEventRow
+  const [x] = exchangesOf(messageFacts([ack]))
+  expect(x.to).toBe('thread:local_b')
+  expect(x.from).toBeUndefined()
+  expect(x.stages.acknowledged).toHaveLength(1)
+  // Control: a stream that is not a mailbox names nobody.
+  const [y] = exchangesOf(messageFacts([{ ...ack, event_id: 10, event_stream_id: 'mission:x', body: { message_id: 'm_3' } }]))
+  expect(y.to).toBeUndefined()
+})
