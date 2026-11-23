@@ -1422,7 +1422,9 @@
         "console/src/components/shell/__tests__/MorePage.test.tsx",
         "console/src/components/shell/__tests__/RequestActionButton.test.tsx",
         "console/src/components/shell/clusterActionRequests.tsx",
+        "console/src/components/shell/world-journey/SignalsPinNote.tsx",
         "console/src/components/shell/world-journey/WorldJourney.tsx",
+        "console/src/components/shell/world-journey/__tests__/SignalsPinNote.test.tsx",
         "console/src/components/shell/world-journey/__tests__/WorldJourney.test.tsx",
         "console/src/components/shell/world-journey/__tests__/journeyTrail.test.ts",
         "console/src/components/shell/world-journey/__tests__/location.test.ts",
@@ -1436,6 +1438,7 @@
         "console/src/api/client.ts",
         "console/src/components/ToolsMenu.tsx",
         "console/src/components/ui",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/lib/shell",
@@ -1443,6 +1446,7 @@
       ],
       "test_imports": [
         "console/src/api/approvals.ts",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/lib/tradeFrontendUrls.ts"
       ],
       "external_imports": [

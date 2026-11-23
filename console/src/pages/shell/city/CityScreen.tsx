@@ -8,6 +8,7 @@ import { crumbsOf, frameAlerts } from '@/domains/owner/city/gen2/content/frame'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
 import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
+import { SignalsPinNote } from '@/components/shell/world-journey/SignalsPinNote'
 import { useCityContent } from './useCityContent'
 import './cityScreen.css'
 
@@ -59,6 +60,8 @@ export default function CityScreen() {
         time={{ mode: 'live', ...(at ? { at: new Date(at).toISOString() } : {}) }}
         alerts={{ ...frameAlerts(content.alerts), onOpen: () => setAlertsOpen(true) }}
         looks={[{ id: 'map', label: 'Map', href: cityHref(q.path, q.sel), on: true }, { id: 'table', label: 'Table', href: ledgerHref(q.path, q.sel), on: false }]}
+        // A Signals pin kept across places (the shared context): the City's own reads stay live, this says Signals holds it.
+        context={<SignalsPinNote className="city-screen-pin" />}
       />
       <div className="city-screen-body">
         <CityGen2 content={content} path={q.path} picked={q.sel ?? undefined}
