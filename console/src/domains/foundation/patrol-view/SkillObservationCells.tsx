@@ -2,9 +2,11 @@ import { DenseTableCell, StatusLamp } from '@bifrost/ui'
 import type { PatrolSkill } from '@/api/patrol'
 import { describeCronSchedule, formatCountdownTo, formatNextRunAt } from './cronSchedule'
 import { levelTag, statusLamp, resultTag } from './presentation'
+import { effectiveNextRun } from './patrolVerdict'
 
 export function SkillObservationCells({ skill, expanded, skillRunning, now, toggleSkill }: { skill: PatrolSkill; expanded: boolean; skillRunning: boolean; now: number; toggleSkill: (id: string) => void }) {
  const scheduleLabel = describeCronSchedule(skill.schedule)
+ const next = effectiveNextRun(skill)
  return <>
                   <DenseTableCell>
                     <div className="flex flex-col gap-0.5">
@@ -54,11 +56,14 @@ export function SkillObservationCells({ skill, expanded, skillRunning, now, togg
                     </span>
                   </DenseTableCell>
                   <DenseTableCell>
-                    {skill.enabled && skill.next_run_at ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[var(--text-dense-meta)]">{formatNextRunAt(skill.next_run_at)}</span>
+                    {skill.enabled && next != null ? (
+                      <div
+                        className="flex flex-col gap-0.5"
+                        title={next.stale ? `Reported next run ${formatNextRunAt(skill.next_run_at)} is older than the last run; shown one schedule interval after the last run` : undefined}
+                      >
+                        <span className="text-[var(--text-dense-meta)]">{formatNextRunAt(next.at)}{next.stale ? ' · estimated' : ''}</span>
                         <span className="font-mono-tabular text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                          {formatCountdownTo(skill.next_run_at, now)}
+                          {formatCountdownTo(next.at, now)}
                         </span>
                       </div>
                     ) : (

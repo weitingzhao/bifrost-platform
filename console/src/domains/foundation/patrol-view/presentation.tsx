@@ -1,3 +1,5 @@
+import { TAG_VARIANT } from '@/lib/shell/stateWords'
+import { wordOfResult } from './patrolVerdict'
 import { DenseTag } from '@bifrost/ui'
 import type { PatrolRunResult, PatrolTrustLevel } from '@/api/patrol'
 
@@ -16,20 +18,11 @@ export function statusLamp(enabled: boolean): 'ok' | 'unknown' {
   return enabled ? 'ok' : 'unknown'
 }
 
+/** The run's result as the engine's seven words (箭10 2026-11-23); the result's own word is in the hover. */
 export function resultTag(result?: PatrolRunResult) {
   if (result == null) return <span className="text-[var(--muted-foreground)]">—</span>
-  switch (result) {
-    case 'success':
-      return <DenseTag variant="success">success</DenseTag>
-    case 'failure':
-      return <DenseTag variant="danger">failure</DenseTag>
-    case 'skipped':
-      return <DenseTag variant="neutral">skipped</DenseTag>
-    case 'escalated':
-      return <DenseTag variant="warning">escalated</DenseTag>
-    case 'running':
-      return <DenseTag variant="warning">running</DenseTag>
-  }
+  const word = wordOfResult(result)
+  return <DenseTag variant={TAG_VARIANT[word]} title={result}>{word}</DenseTag>
 }
 
 export function formatDuration(ms?: number): string {

@@ -2172,6 +2172,7 @@
         "console/src/domains/foundation/patrol-view/__tests__/panels.test.tsx",
         "console/src/domains/foundation/patrol-view/__tests__/patrolVerdict.test.ts",
         "console/src/domains/foundation/patrol-view/__tests__/readings.test.ts",
+        "console/src/domains/foundation/patrol-view/__tests__/resultTag.test.tsx",
         "console/src/domains/foundation/patrol-view/__tests__/runLog.test.ts",
         "console/src/domains/foundation/patrol-view/cronSchedule.ts",
         "console/src/domains/foundation/patrol-view/logLanguage.ts",

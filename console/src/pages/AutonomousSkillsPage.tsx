@@ -95,7 +95,7 @@ export function AutonomousSkillsPage() {
   const isLoading = skillsQuery.isLoading
   const hasError = skillsQuery.error != null
   const actionError = (enableMut.error ?? triggerMut.error) as Error | null
-  const verdict = patrolVerdict(skillsQuery.data?.skills, isLoading, hasError ? (skillsQuery.error as Error).message : null)
+  const verdict = patrolVerdict(skillsQuery.data?.skills, isLoading, hasError ? (skillsQuery.error as Error).message : null, now)
 
   const toggleSkill = (id: string) => {
     if (expandedId === id) {
