@@ -2219,13 +2219,15 @@
         "console/src/domains/foundation/runtime-observation/README.md",
         "console/src/domains/foundation/runtime-observation/RuntimeObservation.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/communication-contract.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/controlled.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/lifecycle.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/operations.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
         "console/src/domains/foundation/runtime-observation/operations.ts",
-        "console/src/domains/foundation/runtime-observation/read.ts"
+        "console/src/domains/foundation/runtime-observation/read.ts",
+        "console/src/domains/foundation/runtime-observation/useRuntimeObservationSnapshot.ts"
       ],
       "imports": [
         "console/src",
@@ -2240,11 +2242,13 @@
       "test_imports": [],
       "external_imports": [
         "@bifrost/ui/city/observation",
+        "@bifrost/ui/city/observationContext",
         "@bifrost/ui/communication",
         "@tanstack/react-query",
         "@testing-library/react",
         "node:fs",
         "node:path",
+        "react",
         "vitest"
       ],
       "source_inputs": [],

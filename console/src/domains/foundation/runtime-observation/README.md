@@ -45,3 +45,23 @@ untracked `.observation-cache/domain-status-recorded.json` captured from a real
 platform read. Other reads are captured once. RECORDED is never live acceptance.
 Rollback this consumer commit and matching UI commit to restore the prior floor;
 no stored backend data or migration needs reverting.
+
+## World host integration (controlled Signals)
+
+`useRuntimeObservationSnapshot()` from `useRuntimeObservationSnapshot.ts` exposes the
+existing hardware + operations + communication composite as
+`{snapshot, error}`. It mounts the original readers; there is no additional
+ingest or history store. Keep its acquisition boundary mounted independently of
+the display clock. Render a ready child once snapshot is available, and keep
+that child's `useObservationContext(snapshot)` above navigation.
+
+Pass its return value as `<RuntimeObservation observation={observation}/>`.
+This controlled path mounts no readers and creates no private observation state.
+Omitting the prop preserves the existing direct route and standalone behavior.
+The UI entry `RuntimeWorld` also accepts the same observation value.
+
+Selection, metrics, pin/resume and observation time flow through this one host.
+Drawer/source-panel selection and alert visibility remain local; do not claim
+these filters or source-panel IDs are restored by the Path context.
+Scope/identity changes must remount/reset the host. Refresh cannot restore a
+lost snapshot; show that limitation instead of treating current reads as history.

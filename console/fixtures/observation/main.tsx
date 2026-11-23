@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState } from 'react'
 import { ObservationSurface, RuntimeWorld, anomalyLayer, type ObservationSnapshot } from '@bifrost/ui/city/observation'
+import { useObservationContext } from '@bifrost/ui/city/observationContext'
 import { captureReads, snapshotOf } from './read'
 import { qualityFixture } from './qualityFixture'
 import { readOperations } from '../../src/domains/foundation/runtime-observation/operations'
@@ -40,7 +41,19 @@ export function Preview() {
     void read()
     return () => { cancelled = true; controller.abort(); clearTimeout(timer) }
   }, [])
+  if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'controlled') return <ControlledPreview snapshot={snapshot}/>
   if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'village') return <RuntimeWorld snapshot={snapshot}/>
   return <>{error && <p role="alert">Read failed: {error}</p>}{snapshot ? <ObservationSurface snapshot={snapshot} initialSelection={snapshot.provenance === 'fixture' ? [] : ['utilities']} layers={[anomalyLayer, { id: 'communication', label: 'Communication', unavailable: snapshot.layerPanels?.communication ? undefined : 'Live communication is not connected in this slice.', present: s => s.layerPanels?.communication ?? [] }]} /> : <p>Reading the existing platform telemetry contract…</p>}</>
+}
+function ControlledPreview({snapshot}: {snapshot: ObservationSnapshot}) {
+  const observation = useObservationContext(snapshot)
+  const [visible, show] = useState(true)
+  return <>
+    <div style={{position:'fixed',bottom:8,left:8,zIndex:1000,background:'#fff',color:'#111',padding:10}}>
+      <button onClick={()=>show(v=>!v)}>Change test place</button>
+      <span> Host: {observation.snapshot.id} · {observation.pinned?'Pinned':'Live'} · {observation.context.selected.join('/') || 'No selection'}</span>
+    </div>
+    {visible ? <RuntimeWorld observation={observation}/> : <main><h1>Other test place</h1><p>The same host retains the complete snapshot, selection and time.</p><p>{observation.context.at}</p><button onClick={observation.resume}>Resume host live</button></main>}
+  </>
 }
 createRoot(document.getElementById('root')!).render(<Preview />)
