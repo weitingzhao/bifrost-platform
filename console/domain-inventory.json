@@ -5305,6 +5305,7 @@
         "console/src/pages/shell/status/__tests__/DomainStatusSummary.test.tsx",
         "console/src/pages/shell/status/__tests__/StatusPage.test.tsx",
         "console/src/pages/shell/status/__tests__/lineDot.test.ts",
+        "console/src/pages/shell/status/agentThreadsTitle.ts",
         "console/src/pages/shell/status/linesNowModel.ts"
       ],
       "imports": [

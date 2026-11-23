@@ -1,3 +1,4 @@
+import { agentThreadsTitle } from './agentThreadsTitle'
 import { capacityRefusalStatusText, threadsMidTurn } from '@/api/agentThreads'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentThreadRow } from '@/components/shell/AgentThreadRow'
@@ -62,7 +63,7 @@ export function AgentThreadsInProgress() {
   return (
     <section aria-label="In progress" className="flex w-full min-w-0 flex-col">
       <OpsSection
-        title={`In progress · Agent threads · ${unreadable ? '?' : q.data == null ? '…' : mid.length}`}
+        title={agentThreadsTitle(unreadable, q.data == null, mid.length)}
         bodyPadding="compact"
       >
         {body}

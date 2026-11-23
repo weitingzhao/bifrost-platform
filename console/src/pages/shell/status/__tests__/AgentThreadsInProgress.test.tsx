@@ -251,7 +251,8 @@ describe('AgentThreadsInProgress', () => {
     expect(await screen.findByText('In progress · Agent threads · 2')).toBeTruthy()
     fail = true
     await act(async () => { await client.refetchQueries({ queryKey: ['agent-threads'] }) })
-    expect(await screen.findByText('In progress · Agent threads · ?')).toBeTruthy()
+    // 2026-11-23 (箭10): "· ?" said nothing; the title says not read, the body why.
+    expect(await screen.findByText('In progress · Agent threads · not read')).toBeTruthy()
     expect(screen.getByText(/Could not read agent threads/)).toBeTruthy()
   })
 

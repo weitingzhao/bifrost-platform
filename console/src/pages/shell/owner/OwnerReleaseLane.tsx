@@ -10,7 +10,7 @@ export function OwnerReleaseLane({ data }: { data: OwnerConsoleData }) {
   // Nothing delivering needs every run list read; a free window alone does not say it (review 221 A6).
   const runsRead = data.runsRead
   const laneTone = lane.state === 'free' && running.length > 0 ? 'info' : LANE_TONE[lane.state] ?? 'unknown'
-  const laneHead = lane.state === 'free' ? (running.length ? `${plural(running.length, 'run')} delivering` : 'Free') : lane.state === 'held' ? 'Held' : lane.text
+  const laneHead = lane.state === 'free' ? (running.length ? `${plural(running.length, 'run')} delivering` : 'Free') : lane.state === 'held' ? 'Held' : lane.state === 'error' || lane.state === 'no-token' ? 'unknown' : lane.text
   const laneLine = lane.state !== 'free' ? lane.detail
     : running.length ? 'nobody holds the window' : runsRead ? 'nobody holds it; nothing delivering' : 'nobody holds the window; runs not read yet'
   return <Card label="Release lane" title="Release lane" more={{ href: '#releases', text: 'Releases' }}>
@@ -20,10 +20,11 @@ export function OwnerReleaseLane({ data }: { data: OwnerConsoleData }) {
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
       {data.inFlight.map(run => <li key={run.name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <span className="min-w-0 break-words">{run.pipeline} <span className="text-muted-foreground">· {run.started}</span></span>
-        <span className="font-semibold" style={{ color: run.kind === 'failed' ? 'var(--color-lamp-red)' : 'var(--color-info)' }}>{run.kind === 'failed' ? 'Failed' : 'Running'}</span></li>)}
+        {/* The engine's seven words (箭10 2026-11-23): a delivery running is activity (info), not a judgement. */}
+        <span className="font-semibold" title={run.kind === 'failed' ? 'Failed' : 'Running'} style={{ color: run.kind === 'failed' ? 'var(--color-lamp-red)' : 'var(--color-info)' }}>{run.kind === 'failed' ? 'fail' : 'info'}</span></li>)}
       {data.records.map(record => <li key={record.run} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <span className="min-w-0 break-words">{record.lane || record.pipeline} {record.env.toUpperCase()} <span className="text-muted-foreground" title={record.completed_at}>· {ago(record.completed_at, now)}</span></span>
-        <span className="font-semibold text-[var(--color-success)]">OK</span></li>)}
+        <span className="font-semibold text-[var(--color-success)]" title="Delivered">ok</span></li>)}
     </ul>
   </Card>
 }
