@@ -64,6 +64,18 @@ type ToOwner struct {
 	Law   []int `json:"law"`
 	Six   []int `json:"six"`
 	Daily []int `json:"daily"`
+	// SixByClass is Six split by the class the requester named (H1-H6);
+	// every class is present, empty when none.
+	SixByClass map[string][]int `json:"six_by_class"`
+}
+
+// newToOwner has every list and every class present.
+func newToOwner() *ToOwner {
+	t := &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}, SixByClass: map[string][]int{}}
+	for c := range approvals.SixClasses {
+		t.SixByClass[c] = []int{}
+	}
+	return t
 }
 
 type Readings struct {
@@ -83,6 +95,9 @@ type Readings struct {
 	// slot (exit 75 past its 30 minutes, "等空档超时"): approvals that bought
 	// nothing because something else held the way (list #13).
 	WaitTimeouts []int `json:"wait_timeouts"`
+	// SixClasses is the definition the six counts use (code -> what it is),
+	// so a page reads it instead of copying it.
+	SixClasses map[string]string `json:"six_classes"`
 }
 
 // OpenCard is one unfinished card. Holder is whose move it is: "owner" (to
@@ -139,7 +154,7 @@ func openCard(a approvals.Approval, now time.Time) (OpenCard, bool) {
 
 func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Readings {
 	out := Readings{AsOf: now.UTC().Format(time.RFC3339), Zone: loc.String(), Retained: len(items), Days: []Day{},
-		Open: []OpenCard{}, WaitTimeouts: []int{}}
+		Open: []OpenCard{}, WaitTimeouts: []int{}, SixClasses: approvals.SixClasses}
 	for _, a := range items {
 		if a.Drill {
 			continue
@@ -231,7 +246,7 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 		d := a.CreatedAt.In(loc).Format("2006-01-02")
 		t := toOwner[d]
 		if t == nil {
-			t = &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}}
+			t = newToOwner()
 			toOwner[d] = t
 		}
 		switch {
@@ -239,6 +254,7 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 			t.Law = append(t.Law, a.Number)
 		case a.OwnerClass != "":
 			t.Six = append(t.Six, a.Number)
+			t.SixByClass[a.OwnerClass] = append(t.SixByClass[a.OwnerClass], a.Number)
 		default:
 			t.Daily = append(t.Daily, a.Number)
 		}
@@ -271,7 +287,10 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 		})
 		t := toOwner[day]
 		if t == nil {
-			t = &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}}
+			t = newToOwner()
+		}
+		for _, l := range t.SixByClass {
+			sort.Ints(l)
 		}
 		sort.Ints(t.Law)
 		sort.Ints(t.Six)

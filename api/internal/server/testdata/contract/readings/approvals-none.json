@@ -4,5 +4,13 @@
   "retained": 0,
   "days": [],
   "open": [],
-  "wait_timeouts": []
+  "wait_timeouts": [],
+  "six_classes": {
+    "H1": "trading and money",
+    "H2": "credentials and secrets",
+    "H3": "deleting or changing data",
+    "H4": "Trade PROD release",
+    "H5": "signed rules and the trust root",
+    "H6": "auto mode rules"
+  }
 }

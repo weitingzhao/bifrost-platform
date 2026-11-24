@@ -94,7 +94,15 @@
           7,
           9,
           10
-        ]
+        ],
+        "six_by_class": {
+          "H1": [],
+          "H2": [],
+          "H3": [],
+          "H4": [],
+          "H5": [],
+          "H6": []
+        }
       }
     },
     {
@@ -127,7 +135,15 @@
         "six": [],
         "daily": [
           11
-        ]
+        ],
+        "six_by_class": {
+          "H1": [],
+          "H2": [],
+          "H3": [],
+          "H4": [],
+          "H5": [],
+          "H6": []
+        }
       }
     }
   ],
@@ -149,5 +165,13 @@
       "minutes": 419
     }
   ],
-  "wait_timeouts": []
+  "wait_timeouts": [],
+  "six_classes": {
+    "H1": "trading and money",
+    "H2": "credentials and secrets",
+    "H3": "deleting or changing data",
+    "H4": "Trade PROD release",
+    "H5": "signed rules and the trust root",
+    "H6": "auto mode rules"
+  }
 }

@@ -134,4 +134,12 @@ func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
 	if fmt.Sprint(got.Law) != "[1]" || fmt.Sprint(got.Six) != "[2]" || fmt.Sprint(got.Daily) != "[3 4]" {
 		t.Fatalf("to_owner = %+v", got)
 	}
+	// 2026-11-24, the UI line: a page counts each of the six classes and
+	// reads their definition from the readings, not from a copy.
+	if fmt.Sprint(got.SixByClass["H5"]) != "[2]" || len(got.SixByClass) != 6 || got.SixByClass["H1"] == nil {
+		t.Fatalf("six_by_class = %+v", got.SixByClass)
+	}
+	if len(r.SixClasses) != 6 || r.SixClasses["H4"] == "" {
+		t.Fatalf("six_classes = %+v", r.SixClasses)
+	}
 }
