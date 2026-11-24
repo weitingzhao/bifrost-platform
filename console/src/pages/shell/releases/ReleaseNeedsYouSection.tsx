@@ -82,7 +82,8 @@ export function ReleaseNeedsYouSection(props: ReleaseNeedsYouProps) {
         </DenseTableCell>
         <DenseTableCell className="font-mono-tabular">{item.action}</DenseTableCell>
         <DenseTableCell>
-          <DenseTag variant="warning">{item.tier}</DenseTag>
+          {/* The approval tier is a class of action, not a state: neutral (箭10 2026-11-23). */}
+          <DenseTag variant="neutral">{item.tier}</DenseTag>
         </DenseTableCell>
         <DenseTableCell className="max-w-[320px] truncate font-mono-tabular" title={item.reason}>
           {approvalSubject(item)}

@@ -1,3 +1,4 @@
+import { statusOfWord } from '@bifrost/ui/city/world'
 import type { ClusterPostgresBackupStatusResponse, DataFreshnessResponse } from '@/api/clusterTypes'
 import type { OrchestrationStatusData } from '@/api/researchEngine'
 import { freshnessToday } from '@/components/market-data/dataVitalsModel'
@@ -51,7 +52,8 @@ export function researchTile(read: Read<OrchestrationStatusData>, now: number): 
   if (d == null) return { name: 'Research batch', tone: 'muted', state: 'Loading', figure: '…', detail: '', href: '#data?section=research' }
   const [tone, state] = RESEARCH_TONE[d.verdict] ?? ['unknown', 'Unknown']
   const figure = d.schedules_total != null ? `${d.schedules_running ?? 0}/${d.schedules_total} schedules` : d.job_name
-  const last = d.last_run_ended_at ? `last run ${d.last_run_status ?? ''} ${ago(d.last_run_ended_at, now)}`.replace(/\s+/g, ' ') : 'no run recorded'
+  // Dagster's own status (SUCCESS, FAILURE…) through the engine's table (箭10 2026-11-23).
+  const last = d.last_run_ended_at ? `last run ${d.last_run_status ? statusOfWord(d.last_run_status) : ''} ${ago(d.last_run_ended_at, now)}`.replace(/\s+/g, ' ') : 'no run recorded'
   return { name: 'Research batch', tone, state, figure, detail: last, href: '#data?section=research' }
 }
 

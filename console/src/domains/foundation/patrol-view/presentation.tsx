@@ -3,14 +3,15 @@ import { wordOfResult } from './patrolVerdict'
 import { DenseTag } from '@bifrost/ui'
 import type { PatrolRunResult, PatrolTrustLevel } from '@/api/patrol'
 
+/** A trust level is how much a skill may do, not a state: neutral (colour only says how bad; 箭10 2026-11-23). */
 export function levelTag(level: PatrolTrustLevel) {
   switch (level) {
     case 'L0':
-      return <DenseTag variant="success">L0 read</DenseTag>
+      return <DenseTag variant="neutral">L0 read</DenseTag>
     case 'L1':
-      return <DenseTag variant="warning">L1 confirm</DenseTag>
+      return <DenseTag variant="neutral">L1 confirm</DenseTag>
     case 'L2':
-      return <DenseTag variant="danger">L2 escalate</DenseTag>
+      return <DenseTag variant="neutral">L2 escalate</DenseTag>
   }
 }
 

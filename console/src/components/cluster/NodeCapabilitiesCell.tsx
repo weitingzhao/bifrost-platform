@@ -1,6 +1,5 @@
 import { DenseTag } from '@bifrost/ui'
 import type { ClusterNodeCapability } from '@/api/clusterTypes'
-import { capabilityTagVariant } from '@/lib/cluster/nodeCapabilitiesCatalog'
 
 interface NodeCapabilitiesCellProps {
   capabilities?: ClusterNodeCapability[]
@@ -18,7 +17,8 @@ export function NodeCapabilitiesCell({ capabilities, compact = true }: NodeCapab
       {capabilities.map(cap => (
         <DenseTag
           key={cap.id}
-          variant={capabilityTagVariant(cap.id)}
+          // A capability is not a state: neutral (colour only says how bad; 箭10 2026-11-23).
+          variant="neutral"
           title={cap.detail ?? cap.label}
           className={compact ? 'max-w-[7rem] truncate' : undefined}
         >

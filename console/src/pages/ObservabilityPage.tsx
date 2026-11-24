@@ -148,8 +148,9 @@ export function ObservabilityPage({
         summary={
           <span className="inline-flex min-w-0 max-w-full items-center gap-2">
             {system.stale && (
-              <DenseTag variant="warning" className="shrink-0 text-[9px]">
-                STALE
+              // Stale is older than its declared freshness: fail (the state vocabulary, 2026-11-23).
+              <DenseTag variant="danger" className="shrink-0 text-[9px]" title="stale">
+                fail
               </DenseTag>
             )}
             <span className="truncate" title={system.primaryCause}>

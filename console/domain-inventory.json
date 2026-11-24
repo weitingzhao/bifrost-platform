@@ -3227,7 +3227,6 @@
         "console/src/api/clusterTypes.ts"
       ],
       "external_imports": [
-        "@bifrost/ui",
         "lucide-react",
         "react",
         "vitest"
@@ -5178,6 +5177,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "@testing-library/jest-dom/vitest",
         "@testing-library/react",

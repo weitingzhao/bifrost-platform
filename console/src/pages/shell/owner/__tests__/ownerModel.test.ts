@@ -215,7 +215,7 @@ describe('data tiles', () => {
   })
   it('reads the research batch and the backups', () => {
     expect(researchTile({ data: { verdict: 'healthy', job_name: 'trading_day', overdue: false, detail: '', schedules_total: 39, schedules_running: 39,
-      last_run_status: 'SUCCESS', last_run_ended_at: '2026-10-16T02:50:00Z' }, error: null }, NOW)).toMatchObject({ tone: 'ok', figure: '39/39 schedules', detail: 'last run SUCCESS 17 h ago' })
+      last_run_status: 'SUCCESS', last_run_ended_at: '2026-10-16T02:50:00Z' }, error: null }, NOW)).toMatchObject({ tone: 'ok', figure: '39/39 schedules', detail: 'last run ok 17 h ago' }) // 2026-11-23 箭10: Dagster's SUCCESS reads through the engine's table
     expect(backupTile({ data: { fresh: true, signal: 'ok', detail: '', max_age_hours: 26, backup_count: 9, last_completed_at: '2026-10-16T04:27:00Z', generated_at: '' }, error: null }, NOW))
       .toMatchObject({ tone: 'ok', figure: '15 h ago' })
   })
