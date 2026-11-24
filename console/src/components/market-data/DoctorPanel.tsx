@@ -164,19 +164,19 @@ export function DoctorPanel() {
         </p>
       ) : (
         // Fixed widths for the short columns and a floor for the table, so Detail keeps a readable width; on a phone
-        // the table scrolls sideways in its frame instead of folding Detail into a tall ribbon (2026-11-23). The `!`
-        // outranks the workspace's phone floor (720px) and the header cells' max-w-0, which would undo both.
-        <DenseDataTable tableClassName="!min-w-[64rem]">
+        // the table scrolls sideways in its frame instead of folding Detail into a tall ribbon (2026-11-23). On a phone
+        // the workspace floor reads --table-min; max-w-none replaces the header cells' max-w-0 (cn merges them).
+        <DenseDataTable tableClassName="min-w-[64rem] [--table-min:64rem]">
           <DenseTableHeader>
             <DenseTableHeadRow>
-              <DenseTableHead className="w-20 !max-w-none">Sev</DenseTableHead>
-              <DenseTableHead className="w-36 !max-w-none">Check</DenseTableHead>
-              <DenseTableHead className="w-28 !max-w-none">Slot</DenseTableHead>
-              <DenseTableHead className="w-32 !max-w-none">Expected</DenseTableHead>
-              <DenseTableHead className="w-24 !max-w-none">Actual</DenseTableHead>
+              <DenseTableHead className="w-20 max-w-none">Sev</DenseTableHead>
+              <DenseTableHead className="w-36 max-w-none">Check</DenseTableHead>
+              <DenseTableHead className="w-28 max-w-none">Slot</DenseTableHead>
+              <DenseTableHead className="w-32 max-w-none">Expected</DenseTableHead>
+              <DenseTableHead className="w-24 max-w-none">Actual</DenseTableHead>
               <DenseTableHead>Detail</DenseTableHead>
-              <DenseTableHead className="w-36 !max-w-none">Fix</DenseTableHead>
-              <DenseTableHead className="w-20 !max-w-none">Action</DenseTableHead>
+              <DenseTableHead className="w-36 max-w-none">Fix</DenseTableHead>
+              <DenseTableHead className="w-20 max-w-none">Action</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
           <DenseTableBody>

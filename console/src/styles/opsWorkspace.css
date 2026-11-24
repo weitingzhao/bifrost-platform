@@ -48,10 +48,12 @@
   .ops-workspace :is(button, [data-owner-action]) { white-space: normal; overflow-wrap: anywhere; }
 }
 @media (max-width: 640px) {
-  /* Dense tables retain legible columns inside their existing sideways scroll frame. */
+  /* Dense tables retain legible columns inside their existing sideways scroll frame. A table that needs a wider
+     floor declares it (`[--table-min:64rem]` on the table) instead of fighting this rule with !important (2026-11-23,
+     the doctor table). */
   .ops-workspace .dense-scroll-x { overflow-x: auto; }
-  .ops-workspace .dense-scroll-x > table { min-width: 560px; }
-  .ops-workspace .dense-scroll-x > table:has(th:nth-child(6)) { min-width: 720px; }
+  .ops-workspace .dense-scroll-x > table { min-width: var(--table-min, 560px); }
+  .ops-workspace .dense-scroll-x > table:has(th:nth-child(6)) { min-width: var(--table-min, 720px); }
   .ops-workspace [data-owner-card], .ops-workspace .ops-chief-latest { padding: 18px; }
   .ops-workspace .ops-section-header { padding: 14px 16px; }
   .ops-workspace .ops-section-body:not(.p-0) { padding: 14px 16px; }

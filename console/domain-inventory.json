@@ -5472,6 +5472,7 @@
     {
       "path": "console/src/styles",
       "files": [
+        "console/src/styles/__tests__/opsWorkspaceTableFloor.test.ts",
         "console/src/styles/opsAppearance.css",
         "console/src/styles/opsDecisions.css",
         "console/src/styles/opsForYou.css",
@@ -5481,7 +5482,11 @@
       ],
       "imports": [],
       "test_imports": [],
-      "external_imports": [],
+      "external_imports": [
+        "node:fs",
+        "node:path",
+        "vitest"
+      ],
       "source_inputs": [],
       "test_inputs": [],
       "unresolved_imports": []
