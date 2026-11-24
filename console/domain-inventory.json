@@ -2107,12 +2107,15 @@
         "console/src/domains/foundation/observation-access/context.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.test.tsx",
         "console/src/domains/foundation/observation-access/domainStatus.ts",
+        "console/src/domains/foundation/observation-access/engineHardware.test.ts",
+        "console/src/domains/foundation/observation-access/engineHardware.ts",
         "console/src/domains/foundation/observation-access/index.ts",
         "console/src/domains/foundation/observation-access/reports.test.tsx"
       ],
       "imports": [
         "console/src",
         "console/src/api/client.ts",
+        "console/src/api/core.ts",
         "console/src/domains/foundation/runtime-observation"
       ],
       "test_imports": [

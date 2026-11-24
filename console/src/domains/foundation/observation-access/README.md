@@ -103,3 +103,13 @@ acceptance without a viewer login returned 401: both consumers displayed the
 same error evidence and receipt time, never zero domains or a healthy state.
 Successful domain payload and recovery assertions use mocked transport; a real
 authenticated domain success remains for the host consumer acceptance.
+
+## Through the UI engine (step 2, 2026-11-24, off everywhere)
+
+`engineHardware.ts` reads the same hardware from `GET /engine/v1/hardware` (bifrost-engine) and turns the engine's
+answer back into the captures the direct read makes, so the same `snapshotOf` yields the same snapshot
+(`engineHardware.test.ts`). `ENGINE_HARDWARE` switches it per environment, keyed by self-health's `viewer_env`; it is
+empty, so every environment reads straight from the platform, and the direct read stays the way back. Through the
+engine is its own cache key. Turn an environment on only after the comparison ran there as the viewer and differed in
+nothing (bifrost-engine `scripts/compare-hardware.ts`, plus the snapshot equality on the page). Every consumer of
+`useHardwareObservation` (Signals, the hardware evidence page) follows the switch: they share one cache.
