@@ -7,7 +7,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/runtimedb"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/schemawatch"
 	deliveryassembly "github.com/weitingzhao/bifrost-platform/api/internal/delivery/assembly"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -20,6 +23,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/deliveryview"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/fullci"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
@@ -232,6 +236,40 @@ func (s *Server) agentRuntimeSources() planloop.Sources {
 	src := agentRuntimeSources(ap, s.questionRuntime.Question(), ci, rel)
 	src.Ack = s.questionRuntime.Ack()
 	src.Plan = s.agentRuntimePlanSources()
+	// The law register's seed (planstore.TranscribeLaws): OWNER_LAW.md as
+	// infra's main holds it on Gitea, read with the delivery service's
+	// read-only credential, and the commit it was read at.
+	if s.delivery != nil {
+		access := gitAccess(s.delivery.GiteaAccess)
+		client := &http.Client{Timeout: 10 * time.Second}
+		head := gitread.MainHeads(access, client)
+		src.LawTable = func(ctx context.Context) (string, string, bool) {
+			const repo, path = "bifrost-trade-infra", "agent-config/OWNER_LAW.md"
+			sha, err := head(ctx, repo)
+			if err != nil {
+				return "", "", false
+			}
+			acc, err := access(ctx)
+			if err != nil {
+				return "", "", false
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, acc.Base+"/api/v1/repos/"+url.PathEscape(acc.Org)+"/"+repo+"/raw/"+path+"?ref="+sha, nil)
+			if err != nil {
+				return "", "", false
+			}
+			req.SetBasicAuth(acc.User, acc.Pass)
+			resp, err := client.Do(req)
+			if err != nil {
+				return "", "", false
+			}
+			defer resp.Body.Close()
+			raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			if err != nil || resp.StatusCode != http.StatusOK {
+				return "", "", false
+			}
+			return string(raw), repo + "/" + path + "@" + sha, true
+		}
+	}
 	return src
 }
 

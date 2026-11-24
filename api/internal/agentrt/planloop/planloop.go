@@ -42,6 +42,9 @@ type Sources struct {
 	// Laws lists the executed law_amend cards the approval store still
 	// holds; nil, or ok false, records nothing.
 	Laws func(ctx context.Context) (cards []planstore.LawCard, ok bool)
+	// LawTable reads OWNER_LAW.md as main holds it and names the file and
+	// commit it read; nil, or ok false, transcribes nothing.
+	LawTable func(ctx context.Context) (md, source string, ok bool)
 }
 
 // Loop holds what the plan passes need.
@@ -251,8 +254,30 @@ func (l *Loop) Rules(ctx context.Context) (int, error) {
 // yet in the plan becomes an item of the newest round, a step per standard
 // (planstore.RecordLaws).
 func (l *Loop) Laws(ctx context.Context) (int, error) {
+	// The register first (planstore.TranscribeLaws): an added law takes the
+	// number after the largest, so the table is read before any card.
+	transcribed := 0
+	if l.Sources.LawTable != nil {
+		type read struct {
+			md, source string
+			ok         bool
+		}
+		r := bounded(l, ctx, func(rctx context.Context) read {
+			md, source, ok := l.Sources.LawTable(rctx)
+			return read{md, source, ok}
+		})
+		if r.ok {
+			rows, err := planstore.ParseLawTable(r.md)
+			if err != nil {
+				return 0, err
+			}
+			if transcribed, err = planstore.TranscribeLaws(ctx, l.DB, rows, r.source); err != nil {
+				return transcribed, err
+			}
+		}
+	}
 	if l.Sources.Laws == nil {
-		return 0, nil
+		return transcribed, nil
 	}
 	type read struct {
 		cards []planstore.LawCard
@@ -264,7 +289,8 @@ func (l *Loop) Laws(ctx context.Context) (int, error) {
 	})
 	cards, ok := r.cards, r.ok
 	if !ok || len(cards) == 0 {
-		return 0, nil
+		return transcribed, nil
 	}
-	return planstore.RecordLaws(ctx, l.DB, cards)
+	n, err := planstore.RecordLaws(ctx, l.DB, cards)
+	return transcribed + n, err
 }

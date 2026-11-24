@@ -39,6 +39,7 @@ type LawCard struct {
 	After      string // the law's new text; empty for a repeal
 	Before     string
 	Standards  []LawStandard
+	DecidedOn  string // the day the Owner approved it, YYYY-MM-DD
 }
 
 // lawNote marks the plan_changed event that recorded a card's law: a card is
@@ -80,6 +81,23 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 	n := 0
 	var errs []error
 	for _, c := range cards {
+		// The register first (lawregister.go): an added law's number goes
+		// into its item's title.
+		if err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+			if num, _, err := registerCard(ctx, tx, c); err != nil {
+				return err
+			} else if num != "" {
+				c.Law = num
+			}
+			return nil
+		}); err != nil {
+			errs = append(errs, fmt.Errorf("law_amend %s: register: %w", c.ApprovalID, err))
+		}
+		if c.Op == "add" && c.Law == "" {
+			if law, ok, err := lawByApproval(ctx, db, c.ApprovalID); err == nil && ok {
+				c.Law = law
+			}
+		}
 		ok, err := recordLaw(ctx, db, c)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("law_amend %s: %w", c.ApprovalID, err))
@@ -144,4 +162,18 @@ func applyLawChanges(ctx context.Context, tx pgx.Tx, root string, decided int64,
 		return nil, err
 	}
 	return applyChangesNoted(ctx, tx, "controller", root, decided, lawNote(approvalID), changes)
+}
+
+// lawByApproval is the number the register gave a card's law, if any.
+func lawByApproval(ctx context.Context, db eventlog.DB, approvalID string) (string, bool, error) {
+	laws, err := CurrentLaws(ctx, db)
+	if err != nil {
+		return "", false, err
+	}
+	for _, l := range laws {
+		if l.ApprovalID == approvalID {
+			return l.Law, true, nil
+		}
+	}
+	return "", false, nil
 }

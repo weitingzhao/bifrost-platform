@@ -98,6 +98,9 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 					continue
 				}
 				c := planstore.LawCard{ApprovalID: a.ID, Number: a.Number, Op: la.Op, Law: la.Law, After: la.After, Before: la.Before}
+				if !a.DecidedAt.IsZero() {
+					c.DecidedOn = a.DecidedAt.UTC().Format("2006-01-02")
+				}
 				for _, st := range la.Standards {
 					c.Standards = append(c.Standards, planstore.LawStandard{ID: st.ID, Standard: st.Standard, Measure: st.Measure})
 				}
