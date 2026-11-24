@@ -1,3 +1,10 @@
+// Ownership (2026-11-23, Owner: legislation apart from administration;
+// agreed by 1 Plan and the approvals line): the definition of law_amend in
+// this file (its params, reading, register check and card line) belongs to
+// plan (legislation); changes to it are proposed by plan. The approvals line
+// keeps the gate it borrows: the card store, push, expiry, audit, the law
+// track and the executed event. Plan moves this file into its own package
+// later and changes the ownership table then.
 package actions
 
 import (
