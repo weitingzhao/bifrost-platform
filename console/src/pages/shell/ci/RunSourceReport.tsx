@@ -22,7 +22,7 @@ function usePlatformRead(pipeline: string, run: string, enabled: boolean): Read 
 /** The engine backend's report of the same run (/engine/v1/report?kind=run). */
 function useEngineRead(pipeline: string, run: string, enabled: boolean): Read {
   const query = useQuery(engineRunReportOptions(pipeline, run, enabled))
-  return { report: query.data?.report, failure: query.error ?? undefined, at: query.errorUpdatedAt || query.dataUpdatedAt }
+  return { report: query.data, failure: query.error ?? undefined, at: query.errorUpdatedAt || query.dataUpdatedAt }
 }
 
 function ReportView({ read, source }: { read: Read; source: string }) {

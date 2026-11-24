@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { authedFetch } from '@/api/client'
+import { engineQueryKey, engineUnreachableText, readEngine } from '@/api/engine'
 import type { ObservationReport } from '@bifrost/ui/city/observationReport'
 import type { ReadEvidence } from '@bifrost/ui/city/observation'
 
@@ -41,29 +41,38 @@ export function reportSource(viewerEnv?: string | null): ReportSource {
   return env === 'dev' || env === 'stg' || env === 'prod' ? REPORT_SOURCE_BY_ENV[env] : 'platform'
 }
 
-/** The engine's answer (API v1): who read what, and the report or null when a read failed. */
-export type EngineEnvelope<T> = { version: 1; model: string; capturedAt: string; evidence: ReadEvidence[]; data: T | null }
+/** What /engine/v1/report reads: a pipeline's retained runs, one run's record, or one run's log tail. */
+export type EngineReportQuery =
+  | { kind: 'pipeline'; pipeline: string }
+  | { kind: 'run'; pipeline: string; run: string }
+  | { kind: 'logs'; run: string }
 
-export const engineRunReportPath = (pipeline: string, run: string) =>
-  `/engine/v1/report?${new URLSearchParams({ kind: 'run', pipeline, run })}`
+const ENGINE_REPORT = '/engine/v1/report'
 
-/** The engine's run report. A failed upstream read comes back as an error naming the engine's own evidence. */
-export async function fetchEngineRunReport(pipeline: string, run: string, signal?: AbortSignal): Promise<{ report: ObservationReport; envelope: EngineEnvelope<ObservationReport> }> {
-  const response = await authedFetch('Engine run report', engineRunReportPath(pipeline, run), { signal })
-  const body = await response.json() as EngineEnvelope<ObservationReport>
-  if (body?.version !== 1 || body.model !== 'report' || !Array.isArray(body.evidence)) throw new Error('Engine run report: not an engine v1 report answer')
-  if (body.data == null) {
-    const why = body.evidence.map(e => `${e.source}: ${e.outcome}${e.detail ? ` (${e.detail})` : ''}`).join('; ')
-    throw new Error(`Engine run report: no report; ${why || 'the engine gave no evidence'}`)
+/**
+ * The engine's report, through the shell's one engine read (api/engine.ts, step 0). An engine that cannot be read
+ * says "engine unreachable" and why; one that read and got nothing says which read failed (its own evidence). Never a
+ * quiet fall back to the platform.
+ */
+export async function fetchEngineReport(query: EngineReportQuery, signal?: AbortSignal): Promise<ObservationReport> {
+  const answer = await readEngine<ObservationReport>(ENGINE_REPORT, { query: query as Record<string, string>, signal })
+  if (!answer.reached) throw new Error(engineUnreachableText(answer))
+  if (answer.data == null) {
+    const why = answer.evidence.map(e => `${e.source}: ${e.outcome}${e.detail ? ` (${e.detail})` : ''}`).join('; ')
+    throw new Error(`Engine report: no report; ${why || 'the engine gave no evidence'}`)
   }
-  return { report: body.data, envelope: body }
+  return answer.data
 }
 
-export function engineRunReportOptions(pipeline: string, run: string, enabled = true) {
-  return queryOptions({ queryKey: ['engine', 'report', 'run', pipeline, run] as const,
-    queryFn: ({ signal }) => fetchEngineRunReport(pipeline, run, signal), enabled: enabled && !!pipeline && !!run,
-    staleTime: 30_000, refetchInterval: 30_000, retry: false })
+export function engineReportOptions(query: EngineReportQuery, enabled = true) {
+  const ready = query.kind === 'logs' ? !!query.run : query.kind === 'run' ? !!query.pipeline && !!query.run : !!query.pipeline
+  return queryOptions({ queryKey: engineQueryKey(ENGINE_REPORT, query as Record<string, string>),
+    queryFn: ({ signal }) => fetchEngineReport(query, signal), enabled: enabled && ready,
+    staleTime: 30_000, refetchInterval: query.kind === 'logs' ? false : 30_000, retry: false })
 }
+
+export const engineRunReportOptions = (pipeline: string, run: string, enabled = true) =>
+  engineReportOptions({ kind: 'run', pipeline, run }, enabled)
 
 /**
  * Every difference between the Console's report and the engine's for one run: panels, objects and the evidence each

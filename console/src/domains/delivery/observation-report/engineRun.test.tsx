@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PipelineTimings } from '@/api/ciTimings'
 import { runReport } from './run'
-import { compareRunReports, fetchEngineRunReport, REPORT_SOURCE_BY_ENV, REPORT_SOURCE_KEY, reportSource } from './engineRun'
+import { compareRunReports, fetchEngineReport, REPORT_SOURCE_BY_ENV, REPORT_SOURCE_KEY, reportSource } from './engineRun'
 import { RunSourceReport } from '@/pages/shell/ci/RunSourceReport'
 
 const wire = vi.hoisted(() => ({ read: vi.fn() }))
@@ -69,9 +69,10 @@ it('compares the two reads and says equal, or lists every difference', async () 
 // Same task: an engine that could not read says so with its own evidence; it is never shown as an empty report.
 it('turns an engine answer with no report into an error naming its evidence', async () => {
   wire.read.mockResolvedValue(Response.json(envelope(null, [{ source: '/api/v1/delivery/pipelines/p/timings', outcome: 'error', receivedAt: 'x', detail: 'viewer token required' } as never])))
-  await expect(fetchEngineRunReport('p', 'r')).rejects.toThrow('/api/v1/delivery/pipelines/p/timings: error (viewer token required)')
+  await expect(fetchEngineReport({ kind: 'run', pipeline: 'p', run: 'r' })).rejects.toThrow('/api/v1/delivery/pipelines/p/timings: error (viewer token required)')
+  // 2026-11-24, Engine (step 0): an answer that is not the engine's is "engine unreachable", never read as a report.
   wire.read.mockResolvedValue(Response.json({ runs: [] }))
-  await expect(fetchEngineRunReport('p', 'r')).rejects.toThrow('not an engine v1 report answer')
+  await expect(fetchEngineReport({ kind: 'run', pipeline: 'p', run: 'r' })).rejects.toThrow('engine unreachable: the answer is not an engine v1 envelope')
 })
 
 // 2026-11-24, 箭10: the engine runs on STG, so STG's cell is on; DEV and PROD stay on the Console's read (PROD has no
