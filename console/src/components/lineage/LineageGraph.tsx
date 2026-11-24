@@ -1,6 +1,7 @@
 import { useMemo, useState, type MouseEvent, type UIEvent } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import type { LineageGraphCommit, LineageGraphMarker, LineageRepoGraph, LineageThread } from '@/api/lineage'
+import { laneHeaderHeight, laneLabel, shortRepo } from '@/components/lineage/laneLabel'
 
 /**
  * Multi-repo commit graph: one row per commit, one vertical lane per repo
@@ -15,6 +16,8 @@ const PAD = 10
 const OVERSCAN = 12
 const VIEW_ROWS = 28
 const HEADER_H = 112
+/** Room the commit column keeps beside the lanes; on a narrow screen the graph scrolls sideways instead. */
+const COMMIT_COLUMN_MIN = 360
 
 /** Distinct hues readable on dark and light surfaces (git-graph style). */
 const PALETTE = ['#f472b6', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee', '#fb923c', '#a3e635', '#e879f9']
@@ -58,10 +61,6 @@ export type LineageGraphProps = {
   graph: LineageRepoGraph[]
   threads: LineageThread[]
   showHelp: boolean
-}
-
-function shortRepo(repo: string): string {
-  return repo.replace(/^bifrost-/, '')
 }
 
 function threadLabel(session: string): string {
@@ -326,6 +325,11 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
   const first = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN)
   const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW) + OVERSCAN)
   const graphW = PAD * 2 + Math.max(lanes.length - 1, 0) * LANE
+  // Every lane's name reads whole at any width (箭10 2026-11-23, the 390 sweep: names cut to "ready/ci-cc…" lost which
+  // line a lane is): the header is as tall as the longest vertical name, and header and graph scroll sideways together
+  // with room for the commit column, so a phone scrolls instead of cutting the names or the column.
+  const headerH = laneHeaderHeight(lanes.map(laneLabel), HEADER_H)
+  const contentW = graphW + COMMIT_COLUMN_MIN
 
   const chip = (on: boolean) =>
     `inline-flex h-6 items-center gap-1 rounded-[var(--control-radius)] px-2 text-[var(--text-dense-caption)] ${
@@ -445,7 +449,9 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
         <p className="py-4 text-center text-[var(--text-dense-meta)] text-muted-foreground">No commits match these filters.</p>
       ) : (
         <>
-          <div className="relative" style={{ height: HEADER_H }} aria-label="Lanes">
+          <div className="overflow-x-auto" data-lineage-scroll>
+          <div style={{ minWidth: contentW }}>
+          <div className="relative" style={{ height: headerH }} aria-label="Lanes">
             {groups.map(g =>
               g.group % 2 === 0 ? (
                 <span
@@ -459,10 +465,11 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
               <span
                 key={l.key}
                 title={l.branch != null ? `${l.repo} ⎇ ${l.branch} (changes not on ${shortRepo(l.repo)}'s main)` : `${l.repo} — default branch`}
-                className={`absolute bottom-1 truncate text-[10px] leading-[14px] ${l.branch != null ? 'text-warning' : 'font-semibold text-foreground'}`}
-                style={{ left: l.x - 7, width: 14, maxHeight: HEADER_H - 6, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                data-lane-label
+                className={`absolute bottom-1 whitespace-nowrap text-[10px] leading-[14px] ${l.branch != null ? 'text-warning' : 'font-semibold text-foreground'}`}
+                style={{ left: l.x - 7, width: 14, maxHeight: headerH - 6, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
               >
-                {l.branch != null ? `↳ ${l.branch.replace(/^(claude|fix|chore|td-batch|debt|feat)\//, '')}` : shortRepo(l.repo)}
+                {laneLabel(l)}
               </span>
             ))}
             <span className="absolute bottom-0 text-[var(--text-dense-meta)] text-muted-foreground" style={{ left: graphW + 4 }}>
@@ -471,7 +478,7 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
           </div>
 
           <div
-            className="relative overflow-y-auto rounded-[var(--control-radius)] bg-[var(--field-fill)]"
+            className="relative overflow-x-hidden overflow-y-auto rounded-[var(--control-radius)] bg-[var(--field-fill)]"
             style={{ height: Math.min(viewH, rows.length * ROW) + 2 }}
             onScroll={(e: UIEvent<HTMLDivElement>) => setScrollTop(e.currentTarget.scrollTop)}
           >
@@ -613,6 +620,8 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
                 )
               })}
             </div>
+          </div>
+          </div>
           </div>
         </>
       )}

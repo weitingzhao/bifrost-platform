@@ -1218,7 +1218,9 @@
         "console/src/components/lineage/LineageGraph.tsx",
         "console/src/components/lineage/LinesAtAGlance.tsx",
         "console/src/components/lineage/__tests__/LineageGraph.kinds.test.tsx",
+        "console/src/components/lineage/__tests__/laneLabel.test.ts",
         "console/src/components/lineage/__tests__/threadFilter.test.ts",
+        "console/src/components/lineage/laneLabel.ts",
         "console/src/components/lineage/threadFilter.ts"
       ],
       "imports": [
