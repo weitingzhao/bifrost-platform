@@ -580,6 +580,8 @@ var catalog = []Action{
 			"standards is a list of {id, standard, measure}, at least one for add and amend; revert says how to undo it. " +
 			"op repeal_many repeals several laws on one card: repeals is a list of {law, before, reason} (before is the law's text as it stands; reason why it goes), and law, before, after and standards stay empty. " +
 			"op purge deletes repealed laws for good, with repeals in the same form (each law must be repealed; before is its text as it stands); the register keeps only a tombstone with the number and approval ids. A law repealed seven days ago is deleted without a card. " +
+			"op add_many adds up to 15 laws on one card, none of them enforced yet: adds is a list of {after, standards, frame}, each read as an add card, numbered in order; law, before, after, standards and frame stay empty. " +
+			"op archive retires material (transcribed laws) that a law in force absorbs (its frame.absorbs): repeals is a list of {law, reason}, up to 100, no before; each must be material and absorbed, or the card is refused. " +
 			"add and amend carry frame (法的框架 v1): {level 0-4, scope, subject, modality 必须|禁止|允许, condition, parent, depends_on, supersedes, distinct_from, executor, enforcement, evidence, expires_on, review {by, at, verdict 可量}}; what each level needs is checked at creation, with conflicts, duplicates, dependencies and the parent against the register.",
 		Params: []Param{
 			{Name: "op", Type: "string", Required: true, In: "body"},
@@ -588,6 +590,7 @@ var catalog = []Action{
 			{Name: "after", Type: "string", In: "body"},
 			{Name: "standards", Type: "array", In: "body"},
 			{Name: "repeals", Type: "array", In: "body"},
+			{Name: "adds", Type: "array", In: "body"},
 			{Name: "frame", Type: "json", In: "body"},
 			{Name: "revert", Type: "string", Required: true, In: "body"},
 		},

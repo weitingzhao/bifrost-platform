@@ -370,16 +370,65 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 		}
 		return "", true, nil
 	}
+	if c.Op == "archive" {
+		return "", true, archiveMaterial(ctx, tx, c)
+	}
+	if c.Op == "add_many" {
+		for _, a := range c.Adds {
+			a.ApprovalID, a.Number, a.DecidedOn = c.ApprovalID, c.Number, c.DecidedOn
+			n, err := nextLawNumber(ctx, tx)
+			if err != nil {
+				return "", false, err
+			}
+			if _, err := registerOne(ctx, tx, a, n); err != nil {
+				return "", false, err
+			}
+		}
+		return "", true, nil
+	}
 	n := c.Law
 	if c.Op == "add" {
 		n = next
 	}
+	num, err := registerOne(ctx, tx, c, n)
+	return num, err == nil, err
+}
+
+// archiveMaterial repeals the material an archive card names that a law in
+// force still absorbs; the reason names the laws that absorb it.
+func archiveMaterial(ctx context.Context, tx pgx.Tx, c LawCard) error {
+	laws, err := currentLaws(ctx, tx)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	absorbed := AbsorbedBy(laws, now)
+	for _, rp := range c.Repeals {
+		prev, have, err := lastLaw(ctx, tx, rp.Law)
+		if err != nil {
+			return err
+		}
+		if !have || LawState(prev, now) != StateMaterial || len(absorbed[rp.Law]) == 0 {
+			continue
+		}
+		l := prev
+		l.Op, l.Status, l.ApprovalID, l.Standards = "repeal", RepealedStatus, c.ApprovalID, nil
+		l.Source = "归档：被第 " + strings.Join(absorbed[rp.Law], "、") + " 条吸收（law_amend " + c.ApprovalID + "：" + rp.Reason + "）"
+		if err := appendLaw(ctx, tx, prev, true, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// registerOne writes one add, amend or repeal of law n.
+func registerOne(ctx context.Context, tx pgx.Tx, c LawCard, n string) (string, error) {
 	prev, have, err := lastLaw(ctx, tx, n)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if c.Op != "add" && !have {
-		return "", false, eventlog.Invalid("law_amend %s: the register has no law %s", c.ApprovalID, n)
+		return "", eventlog.Invalid("law_amend %s: the register has no law %s", c.ApprovalID, n)
 	}
 	var standards []any
 	for _, s := range c.Standards {
@@ -400,14 +449,14 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 		l.SaidOn = c.DecidedOn
 	}
 	if err := appendLaw(ctx, tx, prev, have, l); err != nil {
-		return "", false, err
+		return "", err
 	}
 	// What it supersedes is repealed with it (framework: 取代).
 	if l.Frame != nil {
 		for _, sn := range l.Frame.Supersedes {
 			old, ok, err := lastLaw(ctx, tx, sn)
 			if err != nil {
-				return "", false, err
+				return "", err
 			}
 			if !ok || old.Status == RepealedStatus {
 				continue
@@ -415,9 +464,9 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 			r := old
 			r.Op, r.Status, r.Source, r.ApprovalID, r.Standards = "repeal", RepealedStatus, "被第 "+n+" 条取代（law_amend "+c.ApprovalID+"）", c.ApprovalID, nil
 			if err := appendLaw(ctx, tx, old, true, r); err != nil {
-				return "", false, err
+				return "", err
 			}
 		}
 	}
-	return n, true, nil
+	return n, nil
 }
