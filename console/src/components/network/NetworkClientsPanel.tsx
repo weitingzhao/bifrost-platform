@@ -1,21 +1,17 @@
-import {
-  DenseDataTable,
-  DenseTableBody,
-  DenseTableCell,
-  DenseTableHead,
-  DenseTableHeadRow,
-  DenseTableHeader,
-  DenseTableRow,
-  DenseTag,
-} from '@bifrost/ui'
+import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import type { NetworkClientsResponse } from '@/api/networkTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { networkClientsTable } from './networkClientsTable'
 
 interface NetworkClientsPanelProps {
   data: NetworkClientsResponse | undefined
   isLoading: boolean
 }
 
+/**
+ * LAN clients in the shared Ledger (Ledger line, 2026-11-24: PROD returned 99 clients and the table drew the first 50,
+ * so 51–99 could not be seen; now every client, filtered, sorted, 50 a page). No row opens anything.
+ */
 export function NetworkClientsPanel({ data, isLoading }: NetworkClientsPanelProps) {
   const clients = data?.clients ?? []
 
@@ -27,53 +23,14 @@ export function NetworkClientsPanel({ data, isLoading }: NetworkClientsPanelProp
       {data?.hint != null && data.error == null && clients.length === 0 && (
         <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">{data.hint}</p>
       )}
-      <DenseDataTable>
-        <DenseTableHeader>
-          <DenseTableHeadRow>
-            <DenseTableHead>Host</DenseTableHead>
-            <DenseTableHead>IP</DenseTableHead>
-            <DenseTableHead>MAC</DenseTableHead>
-            <DenseTableHead>Network</DenseTableHead>
-            <DenseTableHead>Link</DenseTableHead>
-          </DenseTableHeadRow>
-        </DenseTableHeader>
-        <DenseTableBody>
-          {isLoading ? (
-            <DenseTableRow>
-              <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                Loading…
-              </DenseTableCell>
-            </DenseTableRow>
-          ) : clients.length === 0 ? (
-            <DenseTableRow>
-              <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                No clients returned
-              </DenseTableCell>
-            </DenseTableRow>
-          ) : (
-            clients.slice(0, 50).map((client, index) => (
-              <DenseTableRow key={`${client.mac ?? client.ip ?? index}`}>
-                <DenseTableCell className="font-medium">{client.hostname ?? client.name ?? '—'}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{client.ip ?? '—'}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular text-[var(--text-dense-meta)]">
-                  {client.mac ?? '—'}
-                </DenseTableCell>
-                <DenseTableCell>{client.network ?? '—'}</DenseTableCell>
-                <DenseTableCell>
-                  <DenseTag variant={client.is_wired === true ? 'neutral' : 'info'}>
-                    {client.is_wired === true ? 'Wired' : 'Wireless'}
-                  </DenseTag>
-                </DenseTableCell>
-              </DenseTableRow>
-            ))
-          )}
-        </DenseTableBody>
-      </DenseDataTable>
-      {clients.length > 50 && (
-        <p className="m-0 px-3 py-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-          Showing first 50 of {clients.length} clients.
-        </p>
-      )}
+      <div className="min-w-0 px-3 py-2">
+        {isLoading ? (
+          <p className="m-0 text-[var(--muted-foreground)]">…</p>
+        ) : (
+          <LedgerGrid table={networkClientsTable(clients)} selected="" onSelect={() => {}}
+            scope={`LAN clients the network controller returns: ${clients.length}${data?.count != null && data.count !== clients.length ? ` (it counts ${data.count})` : ''}`} />
+        )}
+      </div>
     </OpsSection>
   )
 }

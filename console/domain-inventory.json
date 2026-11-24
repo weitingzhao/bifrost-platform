@@ -1369,7 +1369,9 @@
         "console/src/components/network/NetworkClientsPanel.tsx",
         "console/src/components/network/NetworkDevicesPanel.tsx",
         "console/src/components/network/NetworkFirewallPanel.tsx",
-        "console/src/components/network/NetworkSlaPanel.tsx"
+        "console/src/components/network/NetworkSlaPanel.tsx",
+        "console/src/components/network/__tests__/NetworkClientsPanel.test.tsx",
+        "console/src/components/network/networkClientsTable.ts"
       ],
       "imports": [
         "console/src/api/networkTypes.ts",
@@ -1378,10 +1380,16 @@
         "console/src/hooks/useNetworkLiveProbe.ts",
         "console/src/hooks/usePlatformAuth.ts"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/api/networkTypes.ts"
+      ],
       "external_imports": [
         "@bifrost/ui",
-        "react"
+        "@bifrost/ui/city/cards",
+        "@bifrost/ui/city/ledger",
+        "@testing-library/react",
+        "react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],
