@@ -115,7 +115,7 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 		}
 		// A repealed law leaves the plan too: the steps of its items that are
 		// not done are dropped, so it is no longer measured or enforced.
-		if c.Op == "repeal" || c.Op == "repeal_many" {
+		if c.Op == "repeal" || c.Op == "repeal_many" || c.Op == "archive" {
 			if err := dropRepealedSteps(ctx, db, c); err != nil {
 				errs = append(errs, fmt.Errorf("law_amend %s: plan: %w", c.ApprovalID, err))
 			}

@@ -2,8 +2,11 @@ package planstore_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
@@ -105,4 +108,48 @@ func TestLawAddManyAndArchive(t *testing.T) {
 		t.Fatal("the archive repealed material 2, which no law absorbs")
 	}
 	w.chainHolds(t, planstore.LawStream("1"))
+}
+
+// Material that came in by a card before the framework (laws 83 to 85 in
+// PROD) has a plan item; archiving it drops the item's live steps, as a
+// repeal does, so the archived material is no longer measured.
+func TestArchivedMaterialLeavesThePlan(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	announce := func(id string, n int) {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "card:" + id, Type: "approval.card.executed", Actor: "controller",
+				Body: map[string]any{"id": id, "card": fmt.Sprintf("#%d", n), "subject": fmt.Sprintf("#%d", n), "key": fmt.Sprintf("#%d", n), "number": n,
+					"action": "law_amend", "status": "executed", "ref": "/api/v1/approvals/" + id, "change": "executed"}})
+			return err
+		}))
+	}
+	old := planstore.LawCard{ApprovalID: "appr_00000000000000c1", Number: 801, Op: "add", After: "a law from before the framework",
+		Standards: []planstore.LawStandard{{ID: "s1", Standard: "x", Measure: "y"}}}
+	announce(old.ApprovalID, 801)
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{old})
+	ok(t, err)
+	live := `SELECT count(*) FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
+	  WHERE strpos(i.title, $1) > 0 AND s.node_kind = 'step' AND s.state IN ('planned', 'active')`
+	if n := w.count(t, live, old.ApprovalID); n != 1 {
+		t.Fatalf("the old law has %d live steps, want 1", n)
+	}
+	lv := 2
+	batch := planstore.LawCard{ApprovalID: "appr_00000000000000c2", Number: 802, Op: "add_many", Adds: []planstore.LawCard{
+		{Op: "add", After: "absorbs law 3", Standards: old.Standards, Frame: &planstore.LawFrame{Level: &lv, Absorbs: []string{"3"}}}}}
+	arch := planstore.LawCard{ApprovalID: "appr_00000000000000c3", Number: 803, Op: "archive", Repeals: []planstore.LawRepeal{{Law: "3", Reason: "covered by 4"}}}
+	announce(batch.ApprovalID, 802)
+	announce(arch.ApprovalID, 803)
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{batch, arch})
+	ok(t, err)
+	if l, _, _ := planstore.CurrentLaw(ctx, w.rt, "3"); l.Status != planstore.RepealedStatus {
+		t.Fatalf("law 3 after the archive = %+v", l)
+	}
+	if n := w.count(t, live, old.ApprovalID); n != 0 {
+		t.Fatalf("archived material still has %d live steps", n)
+	}
 }
