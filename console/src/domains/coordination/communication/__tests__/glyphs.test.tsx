@@ -8,13 +8,14 @@ afterEach(cleanup)
 const seat=(domain:string|null)=>({seat:'s',organization:'Platform',domain,role:'owner' as const})
 const snapshot={version:1 as const,coverage:{state:'ready' as const,note:'',truncated:false,updatedAt:'2026-11-23T12:00:00Z'},
  members:[{id:'a',label:'Alice',memberships:[seat('coordination')]},{id:'b',label:'Bob',memberships:[seat(null)]},{id:'c',label:'Cat',memberships:[]}],exchanges:[]}
-const heading=(c:HTMLElement,text:string)=>[...c.querySelectorAll('.agent-directory h2')].find(h=>h.textContent?.includes(text))!
+// Either wording: ui 0.68 says Outside domains / Membership unresolved, ui 0.69 says No domain / Not in the seat roster (2026-11-24, tests first).
+const heading=(c:HTMLElement,...texts:string[])=>[...c.querySelectorAll('.agent-directory h2')].find(h=>texts.some(t=>h.textContent?.includes(t)))!
 
 it('draws the domain glyph from the shared table and marks the departments it cannot match unknown', () => {
  const {container}=render(<AgentWorld snapshot={snapshot} stationImage="" cityHref="#city" consoleHref="#console" glyphOf={d=>DOMAIN_GLYPH[d]}/>)
  expect(heading(container,'coordination').querySelector('svg[aria-label="coordination domain"]')).not.toBeNull()
- expect(heading(container,'Outside domains').querySelector('.is-unknown')?.textContent).toBe('unknown')
- expect(heading(container,'Membership unresolved').querySelector('.is-unknown')).not.toBeNull()
+ expect(['unknown','no domain']).toContain(heading(container,'Outside domains','No domain').querySelector('.is-unknown')?.textContent)
+ expect(heading(container,'Membership unresolved','Not in the seat roster').querySelector('.is-unknown')).not.toBeNull()
 })
 
 it('draws no glyph or unknown mark when the host gives no table (control)', () => {

@@ -77,7 +77,8 @@ it.each(['scene','ledger'])('does not replace a missing requested message in the
  expect(root.getAttribute('data-selection-state')).toBe('missing')
  expect(root.getAttribute('data-requested-exchange')).toBe('message:missing')
  expect(root.getAttribute('data-resolved-exchange')).toBeNull()
- expect(screen.getByText(/Requested communication message:missing/)).toBeTruthy()
+ // The ledger names the request; from ui 0.69 the scene says it in plain words instead (2026-11-24, tests first: either passes).
+ expect(screen.queryByText(/Requested communication message:missing/)??screen.queryByText('This letter is older than the history loaded here')).toBeTruthy()
  expect(onSelected).not.toHaveBeenCalled()
  view.rerender(kind==='scene'?<AgentWorld {...props} selectedId="message:existing" cityHref="#city" consoleHref="#console"/>:<WorkingStudio {...props} selectedId="message:existing" ledgerOnly/>)
  expect(root.getAttribute('data-resolved-exchange')).toBe('message:existing')
