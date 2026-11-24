@@ -3600,6 +3600,7 @@
       "files": [
         "console/src/lib/shell/__tests__/consoleFrame.test.ts",
         "console/src/lib/shell/__tests__/consoleRoutes.lineagePick.test.ts",
+        "console/src/lib/shell/__tests__/consoleRoutes.query.test.ts",
         "console/src/lib/shell/__tests__/consoleRoutes.test.tsx",
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
         "console/src/lib/shell/__tests__/fiveDomains.test.tsx",

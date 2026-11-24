@@ -310,9 +310,10 @@ export function shellNavEntry(id: ShellRouteId) {
 export function hashQueryWithoutTaskMode(rawHash: string): string {
   const q = rawHash.indexOf('?')
   if (q < 0) return ''
-  const params = new URLSearchParams(rawHash.slice(q + 1))
-  params.delete('taskMode')
-  return params.toString()
+  // Only the taskMode pair goes; every other pair keeps its own spelling. URLSearchParams.toString() would re-encode
+  // them, and City's at=delivery/gitops came back as at=delivery%2Fgitops after the shell's canonical rewrite (Engine's
+  // City 390 sweep, item 8, 2026-11-24).
+  return rawHash.slice(q + 1).split('&').filter(pair => pair !== '' && pair.split('=')[0] !== 'taskMode').join('&')
 }
 
 /**
