@@ -279,6 +279,23 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	if err != nil || next == "" {
 		return "", false, err
 	}
+	if c.Op == "repeal_many" {
+		for _, rp := range c.Repeals {
+			prev, have, err := lastLaw(ctx, tx, rp.Law)
+			if err != nil {
+				return "", false, err
+			}
+			if !have {
+				return "", false, eventlog.Invalid("law_amend %s: the register has no law %s", c.ApprovalID, rp.Law)
+			}
+			l := prev
+			l.Op, l.Status, l.Source, l.ApprovalID, l.Standards = "repeal", RepealedStatus, "law_amend "+c.ApprovalID+"："+rp.Reason, c.ApprovalID, nil
+			if err := appendLaw(ctx, tx, prev, true, l); err != nil {
+				return "", false, err
+			}
+		}
+		return "", true, nil
+	}
 	n := c.Law
 	if c.Op == "add" {
 		n = next

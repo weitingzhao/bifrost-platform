@@ -127,6 +127,24 @@ func TestLawRegister(t *testing.T) {
 	if _, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{ghost}); err == nil {
 		t.Fatal("an amend of a law the register does not hold was taken")
 	}
+	// A batch repeal (2026-11-24): each law it names becomes 废止, with the
+	// card and the reason as its source; once, however often it is found.
+	batch := planstore.LawCard{ApprovalID: "appr_00000000000000b5", Number: 105, Op: "repeal_many",
+		Repeals: []planstore.LawRepeal{{Law: "2", Before: amend.After, Reason: "duplicate of 3"}, {Law: "3", Before: "structure follows need", Reason: "not a law"}}}
+	announce(batch.ApprovalID, 105)
+	for range 2 {
+		_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{batch})
+		ok(t, err)
+	}
+	for _, n := range []string{"2", "3"} {
+		l, _, _ := planstore.CurrentLaw(ctx, w.rt, n)
+		if l.Status != planstore.RepealedStatus || l.Op != "repeal" || l.ApprovalID != batch.ApprovalID {
+			t.Fatalf("law %s after the batch = %+v", n, l)
+		}
+	}
+	if c := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'law_recorded' AND body_json->>'approval_id' = $1`, batch.ApprovalID); c != 2 {
+		t.Fatalf("the batch wrote %d records, want 2", c)
+	}
 	laws, err := planstore.CurrentLaws(ctx, w.rt)
 	ok(t, err)
 	if len(laws) != 3 || laws[0].Law != "1" || laws[2].Law != "3" {

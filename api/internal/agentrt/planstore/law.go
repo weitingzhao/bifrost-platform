@@ -41,7 +41,8 @@ type LawCard struct {
 	After      string // the law's new text; empty for a repeal
 	Before     string
 	Standards  []LawStandard
-	DecidedOn  string // the day the Owner approved it, YYYY-MM-DD
+	Repeals    []LawRepeal // op repeal_many: the laws it repeals
+	DecidedOn  string      // the day the Owner approved it, YYYY-MM-DD
 }
 
 // lawNote marks the plan_changed event that recorded a card's law: a card is
@@ -50,6 +51,13 @@ func lawNote(approvalID string) string { return "law_amend " + approvalID }
 
 // LawTitle is the item's title: the law, the change and the version.
 func LawTitle(c LawCard) string {
+	if c.Op == "repeal_many" {
+		ns := make([]string, 0, len(c.Repeals))
+		for _, rp := range c.Repeals {
+			ns = append(ns, rp.Law)
+		}
+		return fmt.Sprintf("废止 %d 条法（标准版本 %s #%d）：%s", len(ns), c.ApprovalID, c.Number, strings.Join(ns, "、"))
+	}
 	law := "新法"
 	if c.Law != "" {
 		law = "法 " + c.Law

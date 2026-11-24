@@ -83,3 +83,33 @@ func TestLawCardMustMatchTheRegister(t *testing.T) {
 		t.Fatal("card accepted with no register wired")
 	}
 }
+
+// 2026-11-24, Owner: clear the register's duplicates, superseded laws and
+// entries that are not laws, one card for a batch. Each law must be in force
+// and quoted as it stands; one law that does not read refuses the card.
+func TestLawCardRepealMany(t *testing.T) {
+	reg := fakeLookup("80")
+	good := map[string]any{"op": "repeal_many", "revert": "add them back",
+		"repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "superseded by 80"}}}
+	if err := planstore.CheckLawCard(context.Background(), reg, good); err != nil {
+		t.Fatalf("good batch refused: %v", err)
+	}
+	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law repeal ×1: 79" {
+		t.Fatalf("summary = %q", got)
+	}
+	bad := map[string]map[string]any{
+		"empty":         {"op": "repeal_many", "revert": "r", "repeals": []any{}},
+		"no reason":     {"op": "repeal_many", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a"}}},
+		"twice":         {"op": "repeal_many", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}, map[string]any{"law": "79", "before": "a", "reason": "y"}}},
+		"stale before":  {"op": "repeal_many", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "old", "reason": "x"}}},
+		"repealed":      {"op": "repeal_many", "revert": "r", "repeals": []any{map[string]any{"law": "5", "before": "old", "reason": "x"}}},
+		"not in reg":    {"op": "repeal_many", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}, map[string]any{"law": "999", "before": "z", "reason": "x"}}},
+		"top-level law": {"op": "repeal_many", "law": "79", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}}},
+		"no revert":     {"op": "repeal_many", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}}},
+	}
+	for name, p := range bad {
+		if err := planstore.CheckLawCard(context.Background(), reg, p); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+}

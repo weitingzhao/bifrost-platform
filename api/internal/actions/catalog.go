@@ -577,13 +577,15 @@ var catalog = []Action{
 		Description: "Change one law: add, amend or repeal it, with the measurable standards it is judged by. Tier D: only the Owner approves. " +
 			"The platform runs nothing; the approved card is that version of the law and is never edited (a new version is a new card). approval.card.executed announces it; read the card at its ref. " +
 			"op is add, amend or repeal; law is the law's number (empty for add: the plan domain numbers it); before and after are the text before and after (before empty for add, after empty for repeal); " +
-			"standards is a list of {id, standard, measure}, at least one for add and amend; revert says how to undo it.",
+			"standards is a list of {id, standard, measure}, at least one for add and amend; revert says how to undo it. " +
+			"op repeal_many repeals several laws on one card: repeals is a list of {law, before, reason} (before is the law's text as it stands; reason why it goes), and law, before, after and standards stay empty.",
 		Params: []Param{
 			{Name: "op", Type: "string", Required: true, In: "body"},
 			{Name: "law", Type: "string", In: "body"},
 			{Name: "before", Type: "string", In: "body"},
 			{Name: "after", Type: "string", In: "body"},
 			{Name: "standards", Type: "array", In: "body"},
+			{Name: "repeals", Type: "array", In: "body"},
 			{Name: "revert", Type: "string", Required: true, In: "body"},
 		},
 	},

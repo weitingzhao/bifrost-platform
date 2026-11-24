@@ -35,8 +35,21 @@ type LawAmend struct {
 	Before    string        `json:"before,omitempty"`
 	After     string        `json:"after,omitempty"`
 	Standards []LawStandard `json:"standards,omitempty"`
+	Repeals   []LawRepeal   `json:"repeals,omitempty"`
 	Revert    string        `json:"revert"`
 }
+
+// LawRepeal is one law a repeal_many card repeals (2026-11-24: the Owner
+// asked to clear the register's duplicates, superseded laws and entries that
+// are not laws; one card for a batch, each law with its text as it stands
+// and why it goes).
+type LawRepeal struct {
+	Law    string `json:"law"`
+	Before string `json:"before"`
+	Reason string `json:"reason"`
+}
+
+const lawCardMaxRepeals = 30
 
 // ReadLawAmend reads and checks normalized params; the error says what is
 // wrong, before a card is written.
@@ -62,8 +75,40 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 		if la.After != "" {
 			return la, errors.New("law_amend repeal: after must be empty")
 		}
+	case "repeal_many":
+		if la.Law != "" || la.Before != "" || la.After != "" || params["standards"] != nil {
+			return la, errors.New("law_amend repeal_many: law, before, after and standards stay empty; name each law in repeals")
+		}
+		raw, _ := params["repeals"].([]any)
+		if len(raw) == 0 || len(raw) > lawCardMaxRepeals {
+			return la, fmt.Errorf("law_amend repeal_many: repeals names 1 to %d laws", lawCardMaxRepeals)
+		}
+		seen := map[string]bool{}
+		for i, r := range raw {
+			m, ok := r.(map[string]any)
+			if !ok {
+				return la, fmt.Errorf("law_amend repeal_many: repeals[%d] must be an object", i)
+			}
+			f := func(k string) string { v, _ := m[k].(string); return strings.TrimSpace(v) }
+			rp := LawRepeal{Law: f("law"), Before: f("before"), Reason: f("reason")}
+			if rp.Law == "" || rp.Before == "" || rp.Reason == "" {
+				return la, fmt.Errorf("law_amend repeal_many: repeals[%d] needs law, before and reason", i)
+			}
+			if len(rp.Before) > lawCardMaxText || len(rp.Reason) > lawCardMaxText {
+				return la, fmt.Errorf("law_amend repeal_many: repeals[%d] is too long", i)
+			}
+			if seen[rp.Law] {
+				return la, fmt.Errorf("law_amend repeal_many: law %s appears twice", rp.Law)
+			}
+			seen[rp.Law] = true
+			la.Repeals = append(la.Repeals, rp)
+		}
+		if la.Revert == "" {
+			return la, errors.New("law_amend: revert (how to undo it) is required")
+		}
+		return la, nil
 	default:
-		return la, fmt.Errorf("law_amend: op must be add, amend or repeal, not %q", la.Op)
+		return la, fmt.Errorf("law_amend: op must be add, amend, repeal or repeal_many, not %q", la.Op)
 	}
 	if la.Revert == "" {
 		return la, errors.New("law_amend: revert (how to undo it) is required")
@@ -153,18 +198,32 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 		}
 		return nil
 	}
-	law, ok, err := reg.Current(ctx, la.Law)
+	if la.Op == "repeal_many" {
+		for _, rp := range la.Repeals {
+			if err := checkInForce(ctx, reg, la.Op, rp.Law, rp.Before); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return checkInForce(ctx, reg, la.Op, la.Law, la.Before)
+}
+
+// checkInForce says whether law n is in the register, not repealed, and
+// reads as before.
+func checkInForce(ctx context.Context, reg LawLookup, op, n, before string) error {
+	law, ok, err := reg.Current(ctx, n)
 	if err != nil {
 		return fmt.Errorf("law_amend: reading the register: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("law_amend %s: law %s is not in the register", la.Op, la.Law)
+		return fmt.Errorf("law_amend %s: law %s is not in the register", op, n)
 	}
 	if law.Status == RepealedStatus {
-		return fmt.Errorf("law_amend %s: law %s is already repealed", la.Op, la.Law)
+		return fmt.Errorf("law_amend %s: law %s is already repealed", op, n)
 	}
-	if strings.TrimSpace(law.Text) != la.Before {
-		return fmt.Errorf("law_amend %s: before is not law %s as it stands; it reads: %s", la.Op, la.Law, strings.TrimSpace(law.Text))
+	if strings.TrimSpace(law.Text) != before {
+		return fmt.Errorf("law_amend %s: before is not law %s as it stands; it reads: %s", op, n, strings.TrimSpace(law.Text))
 	}
 	return nil
 }
@@ -180,6 +239,16 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 			}
 		}
 		return "Law add"
+	}
+	if op == "repeal_many" {
+		if la, err := ReadLawAmend(params); err == nil {
+			ns := make([]string, 0, len(la.Repeals))
+			for _, rp := range la.Repeals {
+				ns = append(ns, rp.Law)
+			}
+			return fmt.Sprintf("Law repeal ×%d: %s", len(ns), strings.Join(ns, ", "))
+		}
+		return "Law repeal (several)"
 	}
 	return strings.TrimSpace("Law " + op + " " + law)
 }
