@@ -35,7 +35,8 @@ function placeAt(tree: Place, path: readonly string[]): Place {
 export default function CityScreen() {
   const [q, setQ] = useState(() => readCityQuery(queryOf()))
   // A line picked in the Console (sel=<session>) comes first on the Lines card; a room id is not a session and matches no row.
-  const content = useCityContent(q.sel)
+  // The district looked at is read first (its buildings come back first).
+  const content = useCityContent(q.sel, q.path[0] ?? null)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const status = useShellStatusLine()
   // Return: the place this journey came from (the trail every view's frame reads), not the level above.

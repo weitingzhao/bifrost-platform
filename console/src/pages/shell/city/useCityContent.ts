@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { authedFetch } from '@/api/client'
 import { fetchCiDomains } from '@/api/ciDomains'
@@ -24,6 +24,7 @@ import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLin
 const EVERY = 30_000
 // What a domain owns, read only when its district is entered (the map's domain read).
 const readDomain = fetchDomainPage as unknown as ReadDomain
+// Which domain each line sits: the seat roster, not served by the platform yet (asked 2026-11-23; the map line serves it).
 const NO_ROSTER: RosterRead = { error: 'no read yet' }
 const getJson = async (path: string): Promise<unknown> => (await authedFetch('city', path)).json()
 
@@ -32,7 +33,7 @@ const getJson = async (path: string): Promise<unknown> => (await authedFetch('ci
  * read live through the platform every 30 s, with each computer's CPU, memory and disk rooms. One query,
  * so switching looks shows the same reading. The districts are the domains the map line reads, on the same beat.
  */
-export function useCityContent(focus?: string | null): CityContent {
+export function useCityContent(focus?: string | null, at?: string | null): CityContent {
   const reads = useQuery({
     queryKey: ['city', 'gen2', 'hardware'],
     queryFn: async () => {
@@ -52,17 +53,24 @@ export function useCityContent(focus?: string | null): CityContent {
   const traffic = useMemo(() => ({ ...tripsOf(contract.data, bus.events, bus.receipts, places), connection: bus.connection, detail: bus.detail }), [contract.data, bus.events, bus.receipts, bus.connection, bus.detail, places])
   // The monitoring's own judgment (the metrics line's alert rules), on the hardware's beat.
   const firing = useQuery({ queryKey: ['city', 'gen2', 'alerts'], queryFn: fetchTelemetryAlerts, refetchInterval: EVERY })
-  // Each domain's buildings (the map's read of what it owns), every 5 minutes: the districts' insides.
-  const ids = (domains.data?.domains ?? []).map(x => x.id).join(',')
-  const holdings = useQuery({
-    queryKey: ['city', 'gen2', 'holdings', ids],
-    queryFn: async () => Object.fromEntries((await Promise.all(ids.split(',').filter(Boolean).map(id => readDomain(id).then(h => [id, h] as const, () => null)))).filter((x): x is readonly [string, DomainHoldings] => x !== null)),
-    enabled: ids !== '', refetchInterval: 5 * 60_000,
-  })
+  // Each domain's buildings (the map's read of what it owns), every 5 minutes: the districts' insides. One query per
+  // domain, so a district draws as soon as its own read comes back (2026-11-24, PROD: the platform answers these reads
+  // one after another, about a second each; read all at once behind one Promise.all, a district waited for the slowest,
+  // 20–45 s). The district being looked at is read first, the others after it.
+  const ids = (domains.data?.domains ?? []).map(x => x.id)
+  const first = at && ids.includes(at) ? at : null
+  const holdingQuery = (id: string, enabled: boolean) => ({ queryKey: ['city', 'gen2', 'holding', id], queryFn: () => readDomain(id), enabled, refetchInterval: 5 * 60_000, retry: false })
+  const firstRead = useQuery(holdingQuery(first ?? '', first != null))
+  const restReads = useQueries({ queries: ids.filter(id => id !== first).map(id => holdingQuery(id, first == null || firstRead.isFetched)) })
+  const holdingsKey = [firstRead.dataUpdatedAt, ...restReads.map(r => r.dataUpdatedAt)].join(',')
+  const holdings = useMemo(() => {
+    const out: Record<string, DomainHoldings> = {}
+    for (const r of [firstRead, ...restReads]) if (r.data) out[(r.data as DomainHoldings).id] = r.data as DomainHoldings
+    return { data: out }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingsKey])
   // What each line did (the lineage read), over the window the Console's Commit lineage opens with, so both count the same.
   const lineage = useQuery({ queryKey: ['city', 'gen2', 'lineage', LINES_DAYS], queryFn: () => fetchLineage(LINES_DAYS), refetchInterval: 5 * 60_000, retry: false })
-  // Which domain each line sits: the seat roster, not served by the platform yet (asked 2026-11-23; the map line serves it).
-  const roster: RosterRead = NO_ROSTER
   // The counters' readings for this environment's platform (counterQueriesFor): requests and 5xx a minute per route over
   // the last hour, every minute; an environment with no platform namespace reads none and says so.
   const viewer = useShellStatusLine()
@@ -92,6 +100,6 @@ export function useCityContent(focus?: string | null): CityContent {
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
-      { read: { data: lineage.data, error: lineage.error }, roster, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract, counterQ?.perMin ?? '')
+      { read: { data: lineage.data, error: lineage.error }, roster: NO_ROSTER, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract, counterQ?.perMin ?? '')
   }, [counterQ?.perMin, offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }
