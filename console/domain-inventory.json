@@ -1701,14 +1701,12 @@
         "console/src/domains/delivery/observation-report/README.md",
         "console/src/domains/delivery/observation-report/engineRun.test.tsx",
         "console/src/domains/delivery/observation-report/engineRun.ts",
-        "console/src/domains/delivery/observation-report/index.ts",
         "console/src/domains/delivery/observation-report/run.test.tsx",
         "console/src/domains/delivery/observation-report/run.ts"
       ],
       "imports": [
         "console/src/api",
-        "console/src/api/ciTimings.ts",
-        "console/src/domains/delivery/api"
+        "console/src/api/ciTimings.ts"
       ],
       "test_imports": [
         "console/src/api/ciTimings.ts",
@@ -2132,7 +2130,6 @@
       ],
       "test_imports": [
         "console/src/api/client.ts",
-        "console/src/api/deliveryTypes.ts",
         "console/src/api/marketDataQueueHistory.ts",
         "console/src/domains/delivery/observation-report",
         "console/src/domains/foundation/runtime-observation",

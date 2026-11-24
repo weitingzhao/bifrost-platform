@@ -1,13 +1,6 @@
 # Pipeline report adapter
 
-pipelineReportOptions(name) reuses the raw ['delivery','runs',name] cache contract
-of Releases. It fetches only that pipeline, with AbortSignal; it loads no logs,
-other pipelines or workflow actions. Existing consumers keep their own fetch
-options until their owners migrate; sharing a key does not prove all have migrated.
-pipelineReport(data, receivedAt) supplies a portable ObservationReport: cluster /
-namespace / run identity, original revision/status/reason/times, source generation
-time and reachability. No deployment success or relation across rebased SHAs is
-inferred. Backend run retention limits remain explicit; missing expiry is unknown.
+A pipeline's retained runs are read from the engine (`engineReportOptions({kind:'pipeline', pipeline})`, engineRun.ts; /engine/v1/report?kind=pipeline), the projection moved there (bifrost-engine src/report.ts pipelineReport). 2026-11-24 STG check: 24 run lists equal to the direct read. The Console's own projection (index.ts) is gone; revert that commit to bring it back.
 
 ## Exact run and independently requested logs
 

@@ -3,7 +3,7 @@ import { RunReportPreview } from './RunReport'
 import { useQuery } from '@tanstack/react-query'
 import { ObservationReportView, type ObservationReport } from '@bifrost/ui/city/observationReport'
 import type { ReadEvidence } from '@bifrost/ui/city/observation'
-import { pipelineReport, pipelineReportOptions } from '@/domains/delivery/observation-report'
+import { engineReportOptions } from '@/domains/delivery/observation-report/engineRun'
 import { queueHistoryReport, queueHistoryReportOptions } from '@/domains/tenant/market-observation/observation-report'
 
 function Reader({report,error,failedAt}:{report?:ObservationReport;error:Error|null;failedAt:number}) {
@@ -12,9 +12,9 @@ function Reader({report,error,failedAt}:{report?:ObservationReport;error:Error|n
   return <ObservationReportView report={report} selected={selected} onSelect={setSelected} at={new Date().toISOString()} failure={failure}/>
 }
 function Pipeline() {
-  const query=useQuery(pipelineReportOptions('bifrost-ci-platform'))
-  const report=useMemo(()=>query.data?pipelineReport(query.data,new Date(query.dataUpdatedAt).toISOString()):undefined,[query.data,query.dataUpdatedAt])
-  return <Reader report={report} error={query.error} failedAt={query.errorUpdatedAt}/>
+  // The engine's report (engine step 6, kind=pipeline; 2026-11-24 STG check: 24 run lists equal to the direct read).
+  const query=useQuery(engineReportOptions({kind:'pipeline',pipeline:'bifrost-ci-platform'}))
+  return <Reader report={query.data} error={query.error} failedAt={query.errorUpdatedAt}/>
 }
 function Queue() {
   const query=useQuery(queueHistoryReportOptions(6))
