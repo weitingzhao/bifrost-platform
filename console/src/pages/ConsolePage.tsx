@@ -1,4 +1,5 @@
 import { WorldJourney } from '@/components/shell/world-journey/WorldJourney'
+import { useIdleReloadWhenStale } from '@/lib/shell/newVersion'
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
 import { ConsoleHeader, type HeaderBack, type HeaderLooks } from '@/components/ConsoleHeader'
@@ -23,9 +24,7 @@ import {
 import { yoursNavBadge } from '@/pages/shell/owner/ownerModel'
 import { useOwnerYours } from '@/pages/shell/owner/useOwnerYours'
 import { syncAppBadge } from '@/pwa/appBadge'
-import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { RouteLoading } from '@/pwa/ConsoleCrashScreen'
-import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   CONSOLE_ADDRESS_EVENT,
   HOME_ROUTE,
@@ -134,10 +133,6 @@ function looksFor(location: ConsoleLocation): HeaderLooks | undefined {
   return { on: 'page', city: cityHref(path), ledger: ledgerHref(path), page: formatShellHash(location.id) }
 }
 
-function ShellBuildBanner() {
-  const stale = useConsoleBuildDrift()
-  return <ConsoleBuildBanner stale={stale} />
-}
 
 function ConsolePageInner() {
   const status = useShellStatusLine()
@@ -153,6 +148,9 @@ function ConsolePageInner() {
       window.history.replaceState(null, '', resolved.canonical)
     }
   }, [])
+
+  // A newer build live: the frame says so, an idle page reloads itself (lib/shell/newVersion, 箭10 2026-11-23).
+  useIdleReloadWhenStale()
 
   useEffect(() => {
     applyHash()
@@ -262,7 +260,6 @@ function ConsolePageInner() {
             {layout !== 'side' && domain && <DomainNav entry={domain} />}
           </div>
           <PageShell padding="compact" className={cn('ops-page-content flex w-full min-w-0 flex-col gap-4', entry !== 'command' && location.kind !== 'approval' && location.kind !== 'question' && 'ops-workspace')}>
-            {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
             {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}

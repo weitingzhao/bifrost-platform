@@ -1,5 +1,6 @@
 /** How often an open page compares itself with the console the server would serve now. */
-export const CONSOLE_BUILD_CHECK_MS = 3 * 60_000
+// A minute (箭10 2026-11-23): the frame's "New version" should follow a deploy closely; the read is one small HTML fetch.
+export const CONSOLE_BUILD_CHECK_MS = 60_000
 
 export const NEWER_CONSOLE_BANNER = 'A newer Console has been deployed. Reload before approving.'
 

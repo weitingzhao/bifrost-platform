@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { useQuery } from '@tanstack/react-query'
 import CityGen2 from '@bifrost/ui/city/CityGen2'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
@@ -50,10 +51,12 @@ export default function CityScreen() {
   }, [])
   const place = useMemo(() => placeAt(content.tree, q.path), [content.tree, q.path])
   const at = hardware.data?.at
+  const notice = useNewVersionNotice()
   return (
     <div className="city-screen">
       <WorldFrame
         here="city"
+        notice={notice}
         back={back}
         crumbs={crumbsOf(content.tree, q.path)}
         hrefs={{ city: cityHref(q.path, q.sel), signals: '#observation', agents: '#collaboration', console: consoleHrefOf(place, q.path, null) }}

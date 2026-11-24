@@ -1612,7 +1612,8 @@
         "console/src/domains/foundation/observation-display",
         "console/src/domains/foundation/runtime-observation",
         "console/src/domains/foundation/shell",
-        "console/src/domains/owner/city"
+        "console/src/domains/owner/city",
+        "console/src/lib/shell"
       ],
       "test_imports": [
         "console/src/api",
@@ -3591,6 +3592,7 @@
         "console/src/lib/shell/__tests__/consoleRoutes.test.tsx",
         "console/src/lib/shell/__tests__/domainMigration.test.tsx",
         "console/src/lib/shell/__tests__/fiveDomains.test.tsx",
+        "console/src/lib/shell/__tests__/newVersion.test.ts",
         "console/src/lib/shell/__tests__/shellStatusLine.test.ts",
         "console/src/lib/shell/__tests__/staleIsFail.test.ts",
         "console/src/lib/shell/__tests__/stateWords.test.ts",
@@ -3600,6 +3602,7 @@
         "console/src/lib/shell/consoleFrame.ts",
         "console/src/lib/shell/consoleRoutes.ts",
         "console/src/lib/shell/governanceReferences.ts",
+        "console/src/lib/shell/newVersion.ts",
         "console/src/lib/shell/shellNavItems.ts",
         "console/src/lib/shell/shellStatusLine.ts",
         "console/src/lib/shell/stateWords.ts",
@@ -3612,7 +3615,8 @@
         "console/src/api/checklist.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/lib/control-room",
-        "console/src/lib/control-room/fleetSnapshot.ts"
+        "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/pwa"
       ],
       "test_imports": [
         "console/src/api",
@@ -4540,6 +4544,7 @@
         "console/src/domains/foundation/observation-display",
         "console/src/domains/foundation/shell",
         "console/src/domains/owner/city",
+        "console/src/lib/shell",
         "console/src/pages/shell/data",
         "console/src/pages/shell/ib",
         "console/src/pages/shell/infrastructure",

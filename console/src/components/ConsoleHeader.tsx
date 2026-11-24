@@ -1,4 +1,5 @@
 import { communicationHref } from '@/domains/coordination/communication/looks'
+import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
 import { SignalsPinNote } from '@/components/shell/world-journey/SignalsPinNote'
@@ -76,10 +77,12 @@ export function ConsoleHeader({
     communicationHref('agents', new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('exchange')),
     window.location.hash,
   )
+  const notice = useNewVersionNotice()
   return (
     <div className="ops-console-header ops-console-frame">
       <WorldFrame
         here="console"
+        notice={notice}
         crumbs={crumbs ?? consoleCrumbs(back ?? null, pageTitle)}
         hrefs={places.hrefs}
         env={viewerEnvLoading ? undefined : viewerEnvBadgeLabel(viewerEnv)}
