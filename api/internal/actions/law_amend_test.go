@@ -49,3 +49,27 @@ func TestLawAmendGateUsesLegislationsRules(t *testing.T) {
 		t.Fatalf("executor did not record legislation's reading: %v", out)
 	}
 }
+
+// 2026-11-24 (found by the approvals line on 5ea44034): the frame param of
+// the framework of laws carries a number (level) and an object (review), so
+// it must pass the catalog's normalization as it is; declared "object" it was
+// refused as "an object of strings" before any check ran. The control:
+// standards and repeals, also passed as they are.
+func TestLawAmendFrameSurvivesNormalize(t *testing.T) {
+	a, _ := ByID(LawAmendAction)
+	in := map[string]any{"op": "add", "after": "a law", "revert": "repeal it",
+		"standards": []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}},
+		"frame": map[string]any{"level": float64(2), "scope": "全系统", "depends_on": []any{"83"},
+			"review": map[string]any{"by": "audit", "at": "2026-11-24T10:00Z", "verdict": "可量"}}}
+	out, err := a.Normalize(in)
+	if err != nil {
+		t.Fatalf("normalize refused a framed card: %v", err)
+	}
+	f, ok := out["frame"].(map[string]any)
+	if !ok || f["level"] != float64(2) || f["review"] == nil {
+		t.Fatalf("frame after normalize = %#v", out["frame"])
+	}
+	if _, ok := out["standards"].([]any); !ok {
+		t.Fatalf("standards after normalize = %#v", out["standards"])
+	}
+}

@@ -587,7 +587,7 @@ var catalog = []Action{
 			{Name: "after", Type: "string", In: "body"},
 			{Name: "standards", Type: "array", In: "body"},
 			{Name: "repeals", Type: "array", In: "body"},
-			{Name: "frame", Type: "object", In: "body"},
+			{Name: "frame", Type: "json", In: "body"},
 			{Name: "revert", Type: "string", Required: true, In: "body"},
 		},
 	},
