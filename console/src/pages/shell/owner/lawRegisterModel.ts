@@ -67,7 +67,7 @@ export function lawRegisterTable(laws: readonly RegisterLaw[]): Extract<Block, {
     kind: 'table',
     head: [
       { label: 'Law', num: true }, { label: 'Text' }, { label: 'Status' }, { label: 'Said on' }, { label: 'Enforced by' },
-      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true },
+      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true }, { label: 'State' },
     ],
     rows: laws.map(l => {
       const has = l.counts != null
@@ -80,6 +80,7 @@ export function lawRegisterTable(laws: readonly RegisterLaw[]): Extract<Block, {
         count(l.counts?.reached, 'ok', has),
         count(l.counts?.missed, 'warn', has),
         count(l.counts?.unmeasured, 'unknown', has),
+        l.state ?? { text: 'unknown', title: 'The platform did not say this law\'s state' },
       ]
       return { key: l.law, cells }
     }),
