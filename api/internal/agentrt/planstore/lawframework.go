@@ -83,14 +83,19 @@ type LawReview struct {
 
 // LawFrame is what the framework asks of a law beyond its text and standards.
 type LawFrame struct {
-	Level        *int     `json:"level,omitempty"`
-	Scope        string   `json:"scope,omitempty"`
-	Subject      string   `json:"subject,omitempty"`
-	Modality     string   `json:"modality,omitempty"`
-	Condition    string   `json:"condition,omitempty"`
-	Parent       string   `json:"parent,omitempty"`
-	DependsOn    []string `json:"depends_on,omitempty"`
-	Supersedes   []string `json:"supersedes,omitempty"`
+	Level      *int     `json:"level,omitempty"`
+	Scope      string   `json:"scope,omitempty"`
+	Subject    string   `json:"subject,omitempty"`
+	Modality   string   `json:"modality,omitempty"`
+	Condition  string   `json:"condition,omitempty"`
+	Parent     string   `json:"parent,omitempty"`
+	DependsOn  []string `json:"depends_on,omitempty"`
+	Supersedes []string `json:"supersedes,omitempty"`
+	// Absorbs names the material (素材) this law distils: the numbers of the
+	// transcribed rows it takes in (Owner 2026-11-24, step two: distil the
+	// material law by law, then confirm once that the new laws cover all of
+	// it before the material is repealed).
+	Absorbs      []string `json:"absorbs,omitempty"`
 	DistinctFrom string   `json:"distinct_from,omitempty"`
 	Executor     string   `json:"executor,omitempty"`
 	Enforcement  string   `json:"enforcement,omitempty"` // the check that enforces it, or 自觉
@@ -126,7 +131,7 @@ func readLawFrame(raw any) (*LawFrame, error) {
 		return out
 	}
 	f := &LawFrame{Scope: s("scope"), Subject: s("subject"), Modality: s("modality"), Condition: s("condition"), Parent: s("parent"),
-		DependsOn: list("depends_on"), Supersedes: list("supersedes"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
+		DependsOn: list("depends_on"), Supersedes: list("supersedes"), Absorbs: list("absorbs"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
 		Enforcement: s("enforcement"), Evidence: s("evidence"), ExpiresOn: s("expires_on"), Enforce: s("enforce")}
 	switch v := m["level"].(type) {
 	case float64:
@@ -258,6 +263,14 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 			notes = append(notes, fmt.Sprintf("要取代的第 %s 条不在名录或已废止", sn))
 		}
 	}
+	for _, a := range f.Absorbs {
+		if l, ok := by[a]; !ok || LawState(l, now) != StateMaterial {
+			notes = append(notes, fmt.Sprintf("吸收的第 %s 条不是素材", a))
+		}
+	}
+	if lv >= LevelFundamental && len(f.Absorbs) == 0 {
+		notes = append(notes, "没写吸收了哪些素材（absorbs）")
+	}
 	if f.Scope == "" || f.Subject == "" {
 		return notes, nil
 	}
@@ -312,10 +325,12 @@ type Framework struct {
 	ScopeForms []string         `json:"scope_forms"`
 	Modalities []string         `json:"modalities"`
 	States     map[string]int   `json:"states"` // how many laws are in each state now
-	Enforce    []string         `json:"enforce"`
-	Between    []string         `json:"between"`   // the rules between laws (notes on a card)
-	Integrity  []string         `json:"integrity"` // what refuses a card
-	StageNote  string           `json:"stage_note"`
+	// Coverage is how much of the material the laws in force absorb.
+	Coverage  FrameworkCoverage `json:"coverage"`
+	Enforce   []string          `json:"enforce"`
+	Between   []string          `json:"between"`   // the rules between laws (notes on a card)
+	Integrity []string          `json:"integrity"` // what refuses a card
+	StageNote string            `json:"stage_note"`
 }
 
 // TheFramework is the framework with the register's counts.
@@ -348,6 +363,7 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			{"parent", "上位法", "它落实或细化的是哪一条"},
 			{"depends_on", "依存", "要先有哪几条成立"},
 			{"supersedes", "取代", "它取代哪几条；被取代的随之废止"},
+			{"absorbs", "吸收的素材", "它从哪几条素材提炼而来；素材全被吸收后可一次废止"},
 			{"executor", "执行者", "哪条线负责执行"},
 			{"enforcement", "强制方式", "哪道机器检查强制，或写明靠自觉"},
 			{"evidence", "证据", "从哪个读口取证，是否系统存档"},
@@ -376,12 +392,44 @@ func TheFramework(laws []Law, now time.Time) Framework {
 		},
 		StageNote: "现阶段框架的发现只在卡面提示、不拦；执法一条一条开，力度随项目阶段定",
 	}
+	absorbed := AbsorbedBy(laws, now)
+	fw.Coverage.Uncovered = []string{}
 	for _, l := range laws {
 		st := LawState(l, now)
 		fw.States[st]++
 		if st == StateInForce && l.Frame != nil && l.Frame.Level != nil {
 			fw.Levels[*l.Frame.Level].InForce++
 		}
+		if st == StateMaterial {
+			fw.Coverage.Material++
+			if len(absorbed[l.Law]) > 0 {
+				fw.Coverage.Covered++
+			} else {
+				fw.Coverage.Uncovered = append(fw.Coverage.Uncovered, l.Law)
+			}
+		}
 	}
 	return fw
+}
+
+// AbsorbedBy maps each material row to the laws in force that absorb it.
+func AbsorbedBy(laws []Law, now time.Time) map[string][]string {
+	out := map[string][]string{}
+	for _, l := range laws {
+		if LawState(l, now) != StateInForce || l.Frame == nil {
+			continue
+		}
+		for _, a := range l.Frame.Absorbs {
+			out[a] = append(out[a], l.Law)
+		}
+	}
+	return out
+}
+
+// FrameworkCoverage is how much of the material the laws in force absorb:
+// the material, how many of it at least one law absorbs, and which none does.
+type FrameworkCoverage struct {
+	Material  int      `json:"material"`
+	Covered   int      `json:"covered"`
+	Uncovered []string `json:"uncovered"`
 }

@@ -144,7 +144,7 @@ func frameBody(f *LawFrame) map[string]any {
 			m[k] = v
 		}
 	}
-	for k, v := range map[string][]string{"depends_on": f.DependsOn, "supersedes": f.Supersedes} {
+	for k, v := range map[string][]string{"depends_on": f.DependsOn, "supersedes": f.Supersedes, "absorbs": f.Absorbs} {
 		if len(v) > 0 {
 			l := make([]any, len(v))
 			for i, x := range v {

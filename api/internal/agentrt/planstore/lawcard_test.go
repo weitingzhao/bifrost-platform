@@ -190,7 +190,9 @@ func TestLawCardFramework(t *testing.T) {
 		}
 	}
 	// A complete frame with no finding has only the enforcement note.
-	if n := planstore.LawCardNotes(ctx, reg, card(frame(2))); len(n) != 1 {
+	complete := frame(2)
+	complete["absorbs"] = []any{"79"}
+	if n := planstore.LawCardNotes(ctx, reg, card(complete)); len(n) != 1 {
 		t.Errorf("a complete frame has notes %v", n)
 	}
 	// The integrity: a malformed frame, or loosening a fundamental law.
@@ -255,5 +257,41 @@ func TestTheFramework(t *testing.T) {
 	}, now)
 	if one.States[planstore.StateInForce] != 1 || one.States[planstore.StateRepealed] != 1 || one.Levels[2].InForce != 1 {
 		t.Fatalf("counts = %+v, level 2 = %d", one.States, one.Levels[2].InForce)
+	}
+}
+
+// 2026-11-24, step two (Owner: distil the material law by law, then confirm
+// once that the new laws cover all of it before it is repealed): a law names
+// the material it absorbs; the framework counts the coverage, and a material
+// row knows which laws absorb it.
+func TestFrameworkCoverage(t *testing.T) {
+	now, _ := time.Parse("2006-01-02", "2026-11-24")
+	lv := 2
+	laws := []planstore.Law{
+		{Law: "1", Op: "transcribed", Status: "已落"},
+		{Law: "2", Op: "transcribed", Status: "未落"},
+		{Law: "3", Op: "transcribed", Status: "未落"},
+		{Law: "4", Op: "repeal", Status: planstore.RepealedStatus},
+		{Law: "90", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv, Absorbs: []string{"1", "2"}}},
+		{Law: "91", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv, Absorbs: []string{"2"}}},
+	}
+	fw := planstore.TheFramework(laws, now)
+	if c := fw.Coverage; c.Material != 3 || c.Covered != 2 || len(c.Uncovered) != 1 || c.Uncovered[0] != "3" {
+		t.Fatalf("coverage = %+v", c)
+	}
+	by := planstore.AbsorbedBy(laws, now)
+	if len(by["2"]) != 2 || len(by["1"]) != 1 || len(by["3"]) != 0 {
+		t.Fatalf("absorbed by = %v", by)
+	}
+	// On a card: absorbing a law in force, or none at all, is a note.
+	reg := fakeLookup("92")
+	std := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}
+	f := frame(2)
+	f["absorbs"] = []any{"90"}
+	if n := planstore.LawCardSummary(context.Background(), reg, map[string]any{"op": "add", "after": "a", "standards": std, "revert": "r", "frame": f}); !strings.Contains(n, "不是素材") {
+		t.Fatalf("absorbing a law in force: %q", n)
+	}
+	if n := planstore.LawCardSummary(context.Background(), reg, map[string]any{"op": "add", "after": "a", "standards": std, "revert": "r", "frame": frame(2)}); !strings.Contains(n, "absorbs") {
+		t.Fatalf("absorbing nothing: %q", n)
 	}
 }

@@ -110,10 +110,12 @@ type LawCounts struct {
 // current version (when an approved card made one) and its numbers.
 type LawView struct {
 	Law
-	State  string     `json:"state"` // 现行, 素材 or 废止 (the framework)
-	Item   string     `json:"plan_item,omitempty"`
-	Counts *LawCounts `json:"counts,omitempty"`
-	Steps  []LawStep  `json:"steps,omitempty"`
+	State string `json:"state"` // 现行, 素材 or 废止 (the framework)
+	// AbsorbedBy, on a material row, is the laws in force that absorb it.
+	AbsorbedBy []string   `json:"absorbed_by,omitempty"`
+	Item       string     `json:"plan_item,omitempty"`
+	Counts     *LawCounts `json:"counts,omitempty"`
+	Steps      []LawStep  `json:"steps,omitempty"`
 }
 
 // LawsView is the register, by number, with each law's numbers.
@@ -142,8 +144,12 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 			s := func(k string) string { v, _ := r.Body[k].(string); return v }
 			grade[s("step")] = LawStep{Grade: s("grade"), Version: s("version")}
 		}
+		absorbed := AbsorbedBy(laws, time.Now())
 		for _, l := range laws {
 			v := LawView{Law: l, State: LawState(l, time.Now())}
+			if v.State == StateMaterial {
+				v.AbsorbedBy = absorbed[l.Law]
+			}
 			if l.ApprovalID != "" {
 				var item string
 				err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.plan_node WHERE node_kind = 'item' AND strpos(title, $1) > 0
