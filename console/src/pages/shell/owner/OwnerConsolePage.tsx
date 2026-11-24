@@ -1,4 +1,5 @@
 import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
+import { CollapsibleSection } from '@/components/shell/CollapsibleSection'
 import { LawRegister } from './LawRegister'
 import { AuditConclusions } from './AuditConclusions'
 import { DomainSection } from '@/components/shell/DomainSection'
@@ -19,7 +20,7 @@ import { OwnerSystem } from './OwnerSystem'
 import { RuntimeHealthNotice } from './RuntimeHealthNotice'
 import { OwnerWaiting } from './OwnerWaiting'
 import { OwnerWork } from './OwnerWork'
-import { OwnerYou } from './OwnerYou'
+import { OwnerForYourInfo, OwnerYou } from './OwnerYou'
 import { TONE_COLOR, ago, type Verdict } from './ownerModel'
 import { useOwnerConsole } from './useOwnerConsole'
 import { current } from './useOwnerYours'
@@ -69,11 +70,12 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <HarnessPreview />}
     {blocks.you && <OwnerGpuPower nodes={data.nodes} openApprovals={current(data.needsYou.query)} recentApprovals={current(data.needsYou.handledQuery)} now={data.now} />}
     {blocks.you && <OwnerYou data={data} />}
+    {/* Owner 2026-11-24: the laws up (right after what he approves), For your info down; every section folds, open by default. */}
+    {blocks.you && <CollapsibleSection id="laws" label="Laws"><LawRegister /></CollapsibleSection>}
     {blocks.you && <OwnerWaiting />}
-    {/* The register of laws (箭10 2026-11-24): its own entry on Command, beside what waits on him; a law card links here. */}
-    {blocks.you && <DomainSection id="laws" label="Laws"><LawRegister /></DomainSection>}
     {/* The audit's conclusions on those laws' standards (箭10 2026-11-24): what the audit found, beside the laws. */}
-    {blocks.you && <DomainSection id="audit" label="Audit conclusions"><AuditConclusions /></DomainSection>}
+    {blocks.you && <CollapsibleSection id="audit" label="Audit conclusions"><AuditConclusions /></CollapsibleSection>}
+    {blocks.you && <CollapsibleSection id="for-your-info" label="For your info"><OwnerForYourInfo data={data} /></CollapsibleSection>}
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}

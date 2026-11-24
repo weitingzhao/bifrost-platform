@@ -43,25 +43,16 @@ function Row({ row }: { row: OwnerRow }) {
  * (law 46: recorded with how to undo it). The first two are his and counted.
  */
 export function OwnerYou({ data }: { data: OwnerConsoleData }) {
-  const [showAll, setShowAll] = useState(false)
-  const [showAllDone, setShowAllDone] = useState(false)
-  const done = data.done
   const { needsYou, alerts } = data
   const approve: OwnerRow[] = needsYou.decisionItems.map(waitingRow)
   const hands: OwnerRow[] = alerts?.yours ?? []
-  const silent = needsYou.silentItems.length
-  const worth: OwnerRow[] = [...(alerts?.worth ?? []), ...(silent > 0 ? [{
-    id: 'silent-threads', title: `${plural(silent, 'Claude thread')} went quiet mid-turn`, detail: 'Claude sessions, not system work',
-    tone: 'muted' as const, whose: 'The coordinator checks them', href: NEEDS_YOU_HREF, action: 'See them',
-  }] : [])]
   // One count for the verdict and the tab: what he approves and what needs his hands.
   const count = data.yours
   const unknown = count.state === 'unknown' ? count.reason : null
   const recent = needsYou.recentCount.state === 'known' ? String(needsYou.recentCount.count) : needsYouCountText(needsYou.recentCount)
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="sr-only">For you</h2>
-    <div className="ops-you-grid">
-      <div className="ops-you-primary">
+    <div className="ops-you-primary">
       {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so these lists may be short: {unknown}</p>}
       <Card label="To approve" title={`To approve · ${needsYou.count.state === 'known' ? approve.length : needsYou.count.state === 'unknown' ? 'Unknown' : '…'}`} accent={approve.length > 0} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
         {approve.length > 0
@@ -87,9 +78,25 @@ export function OwnerYou({ data }: { data: OwnerConsoleData }) {
         <SignoffWaitingLink />
       </Card>
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
-      </div>
-      {/* The right column: what is only to know about, and what was done for him. */}
-      <div className="ops-you-side">
+    </div>
+  </section>
+}
+
+/**
+ * What is only to know about, and what was done for him (Owner 2026-11-24: "for your info 优先级不高，排到下面"): its
+ * own block, drawn below the laws and the audit on Command.
+ */
+export function OwnerForYourInfo({ data }: { data: OwnerConsoleData }) {
+  const [showAll, setShowAll] = useState(false)
+  const [showAllDone, setShowAllDone] = useState(false)
+  const done = data.done
+  const { needsYou, alerts } = data
+  const silent = needsYou.silentItems.length
+  const worth: OwnerRow[] = [...(alerts?.worth ?? []), ...(silent > 0 ? [{
+    id: 'silent-threads', title: `${plural(silent, 'Claude thread')} went quiet mid-turn`, detail: 'Claude sessions, not system work',
+    tone: 'muted' as const, whose: 'The coordinator checks them', href: NEEDS_YOU_HREF, action: 'See them',
+  }] : [])]
+  return <div className="ops-you-side">
       <Card label="For your information" title={`For your information · ${alerts ? worth.length : data.alertsError ? 'Unknown' : '…'}`} more={{ href: '#status', text: 'Status' }}>
         <p className="m-0 text-sm text-muted-foreground">To know about; not yours to fix.</p>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
@@ -111,7 +118,5 @@ export function OwnerYou({ data }: { data: OwnerConsoleData }) {
         {done && done.rows.length > WORTH_SHOWN && <button type="button" onClick={() => setShowAllDone(v => !v)} className="min-h-11 rounded-[var(--control-radius)] border border-[var(--card-border)] text-sm font-semibold">
           {showAllDone ? 'Show fewer' : `Show ${done.rows.length - WORTH_SHOWN} more`}</button>}
       </Card>
-      </div>
-    </div>
-  </section>
+  </div>
 }

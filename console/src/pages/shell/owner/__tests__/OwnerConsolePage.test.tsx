@@ -354,6 +354,10 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('region', { name: 'Needs your hands' })).toHaveTextContent('Nothing needs your hands right now.')
     const worth = screen.getByRole('region', { name: 'For your information' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
+    // 2026-11-24 the Owner: "for your info 优先级不高，排到下面，把法提起来": the laws come before For your info.
+    const laws = document.getElementById('laws')!
+    expect(laws.compareDocumentPosition(worth) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'To approve' }).compareDocumentPosition(laws) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(worth).toHaveTextContent('6 DaemonSet alerts that fit gpu-server being on standby')
     expect(worth).toHaveTextContent('Likely the planned standby; not proven')
     expect(worth).toHaveTextContent('IB secondary slot has no TWS session')

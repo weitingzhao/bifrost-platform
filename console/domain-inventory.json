@@ -1438,6 +1438,7 @@
       "files": [
         "console/src/components/shell/AgentThreadRow.tsx",
         "console/src/components/shell/AppearanceMenu.tsx",
+        "console/src/components/shell/CollapsibleSection.tsx",
         "console/src/components/shell/ConsoleNavSlotItem.tsx",
         "console/src/components/shell/DetailPageLinks.tsx",
         "console/src/components/shell/DomainName.tsx",
@@ -1449,6 +1450,7 @@
         "console/src/components/shell/MorePage.tsx",
         "console/src/components/shell/RequestActionButton.tsx",
         "console/src/components/shell/SystemVerdictLine.tsx",
+        "console/src/components/shell/__tests__/CollapsibleSection.test.tsx",
         "console/src/components/shell/__tests__/DomainName.test.tsx",
         "console/src/components/shell/__tests__/EntryNav.test.tsx",
         "console/src/components/shell/__tests__/MorePage.test.tsx",
