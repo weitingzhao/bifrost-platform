@@ -148,9 +148,13 @@ func completedRuns(rows []eventlog.Row, kind string, w Window) map[string]*runSt
 	return by
 }
 
-// ciReadings: kind=ci runs (ci-* and land-*, the CI line confirmed
-// 2026-11-20), one set per pipeline. Run time is started_at to completed_at,
-// The queue is read from Prometheus (promReadings, ciQueueReadings).
+// ciReadings: kind=ci runs (ci-*), one set per pipeline. Run time is
+// started_at to completed_at. Landing runs (bifrost-land) are not here: the
+// ledger records them as another kind, and the CI line ruled on 2026-11-24
+// that they stay a class of their own, since most land failures are refusals
+// (no CI run, a rebase conflict, the freeze chain), not red tests, and would
+// read the CI failure rate high. The queue is read from Prometheus
+// (promReadings, ciQueueReadings) and does count land-* pods.
 func ciReadings(rows []eventlog.Row, w Window) []Reading {
 	src := "event ledger pipeline_seen kind=ci, latest fact per run uid, completed in window"
 	by := completedRuns(rows, "ci", w)
