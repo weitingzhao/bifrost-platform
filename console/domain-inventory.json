@@ -1388,9 +1388,11 @@
     {
       "path": "console/src/components/research",
       "files": [
+        "console/src/components/research/HitMark.tsx",
         "console/src/components/research/ResearchDbtCatalogTab.tsx",
         "console/src/components/research/ResearchHealthLayersStrip.tsx",
         "console/src/components/research/SignalHealthAgeMeters.tsx",
+        "console/src/components/research/__tests__/HitMark.test.tsx",
         "console/src/components/research/__tests__/researchEngineAgentPack.test.ts",
         "console/src/components/research/researchEngineAgentPack.ts"
       ],
@@ -1405,6 +1407,7 @@
       "test_imports": [],
       "external_imports": [
         "@bifrost/ui",
+        "@testing-library/react",
         "lucide-react",
         "vitest"
       ],

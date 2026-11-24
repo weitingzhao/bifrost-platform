@@ -59,6 +59,7 @@ import {
   openMassiveReadiness,
 } from '@/lib/research/massiveNav'
 import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
+import { HitMark } from '@/components/research/HitMark'
 import { ResearchHealthLayersStrip } from '@/components/research/ResearchHealthLayersStrip'
 import {
   AgeMeterCell,
@@ -461,13 +462,7 @@ export function ResearchEnginePage({
                         {r.symbol}
                       </DenseTableCell>
                       <DenseTableCell>
-                        {r.path_hit == null ? (
-                          <DenseTag variant="neutral">—</DenseTag>
-                        ) : r.path_hit ? (
-                          <DenseTag variant="success">HIT</DenseTag>
-                        ) : (
-                          <DenseTag variant="warning">MISS</DenseTag>
-                        )}
+                        <HitMark hit={r.path_hit} />
                         <span className="ml-1 text-dense-meta text-muted-foreground">
                           {r.path_hit_count ?? 0}/{r.path_total ?? 0}
                         </span>
