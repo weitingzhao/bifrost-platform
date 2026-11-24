@@ -447,7 +447,7 @@ export function ResearchEnginePage({
                   <DenseTableHeadRow>
                     <DenseTableHead>Date</DenseTableHead>
                     <DenseTableHead>Symbol</DenseTableHead>
-                    <DenseTableHead>Path hit</DenseTableHead>
+                    <DenseTableHead title="as the research API reports it; see open question">Path hit</DenseTableHead>
                     <DenseTableHead className="text-right">Close miss %</DenseTableHead>
                     <DenseTableHead className="text-right">Expected</DenseTableHead>
                     <DenseTableHead className="text-right">Actual</DenseTableHead>
