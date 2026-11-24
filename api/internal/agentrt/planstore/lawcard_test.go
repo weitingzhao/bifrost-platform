@@ -2,6 +2,7 @@ package planstore_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -227,5 +228,32 @@ func TestLawState(t *testing.T) {
 		if got := planstore.LawState(c.l, now); got != c.want {
 			t.Errorf("%s: %s, want %s", name, got, c.want)
 		}
+	}
+}
+
+// 2026-11-24, Owner: step one is a framework, seen on Ops, with no law in it
+// yet. GET /laws carries the framework itself: five levels with what each
+// requires and how many laws are in force there, the rules, and the states
+// with their counts (a transcribed row is 素材, so an empty frame reads 现行 0).
+func TestTheFramework(t *testing.T) {
+	now, _ := time.Parse("2006-01-02", "2026-11-24")
+	empty := planstore.TheFramework([]planstore.Law{{Law: "1", Op: "transcribed", Status: "已落"}}, now)
+	if len(empty.Levels) != 5 || empty.States[planstore.StateInForce] != 0 || empty.States[planstore.StateMaterial] != 1 {
+		t.Fatalf("an empty frame = %+v", empty.States)
+	}
+	if empty.Levels[3].Name != "领域法" || !slices.Contains(empty.Levels[3].Required, "parent") || slices.Contains(empty.Levels[0].Required, "standards") {
+		t.Fatalf("levels = %+v", empty.Levels)
+	}
+	if len(empty.Integrity) != 3 || len(empty.Fields) == 0 || len(empty.Subjects) == 0 {
+		t.Fatalf("framework = %+v", empty)
+	}
+	lv := 2
+	one := planstore.TheFramework([]planstore.Law{
+		{Law: "1", Op: "transcribed", Status: "已落"},
+		{Law: "2", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv}},
+		{Law: "3", Op: "repeal", Status: planstore.RepealedStatus},
+	}, now)
+	if one.States[planstore.StateInForce] != 1 || one.States[planstore.StateRepealed] != 1 || one.Levels[2].InForce != 1 {
+		t.Fatalf("counts = %+v, level 2 = %d", one.States, one.Levels[2].InForce)
 	}
 }

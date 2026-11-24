@@ -2,6 +2,7 @@ package planapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
@@ -10,7 +11,9 @@ import (
 // stands (its version, text, status and the card that last changed it), and
 // for a law an approved card changed, its plan item and how many of its
 // standards are reached, missed and unmeasured (closed loop, standard 2;
-// planstore.LawsView). Read-only.
+// planstore.LawsView). Read-only. framework is the framework of laws itself
+// (levels, fields, subjects, rules, states with their counts), so a page
+// shows the frame even when no law is in force.
 func (rt Routes) HandleGetLaws(w http.ResponseWriter, r *http.Request) {
 	laws, err := planstore.LawsView(r.Context(), rt.Host.DB())
 	if err != nil {
@@ -21,5 +24,9 @@ func (rt Routes) HandleGetLaws(w http.ResponseWriter, r *http.Request) {
 	if laws == nil {
 		laws = []planstore.LawView{}
 	}
-	rt.Host.JSON(w, 200, map[string]any{"laws": laws})
+	plain := make([]planstore.Law, len(laws))
+	for i, l := range laws {
+		plain[i] = l.Law
+	}
+	rt.Host.JSON(w, 200, map[string]any{"framework": planstore.TheFramework(plain, time.Now()), "laws": laws})
 }

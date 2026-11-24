@@ -283,3 +283,105 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 	}
 	return notes, nil
 }
+
+// FrameworkLevel is one level as the framework defines it.
+type FrameworkLevel struct {
+	Level    int      `json:"level"`
+	Name     string   `json:"name"`
+	Meaning  string   `json:"meaning"`
+	Required []string `json:"required"` // field names a law at this level carries
+	InForce  int      `json:"in_force"` // laws in force at this level now
+}
+
+// FrameworkField is one part of a law.
+type FrameworkField struct {
+	Name    string `json:"name"`
+	Label   string `json:"label"`
+	Meaning string `json:"meaning"`
+}
+
+// Framework is the framework of laws as the system holds it (法的框架 v1),
+// read with the register so a page shows the frame even when no law is in
+// it yet (Owner 2026-11-24: step one is a framework, empty, seen on Ops).
+type Framework struct {
+	Version    string           `json:"version"`
+	Source     string           `json:"source"`
+	Levels     []FrameworkLevel `json:"levels"`
+	Fields     []FrameworkField `json:"fields"`
+	Subjects   []string         `json:"subjects"`
+	ScopeForms []string         `json:"scope_forms"`
+	Modalities []string         `json:"modalities"`
+	States     map[string]int   `json:"states"` // how many laws are in each state now
+	Enforce    []string         `json:"enforce"`
+	Between    []string         `json:"between"`   // the rules between laws (notes on a card)
+	Integrity  []string         `json:"integrity"` // what refuses a card
+	StageNote  string           `json:"stage_note"`
+}
+
+// TheFramework is the framework with the register's counts.
+func TheFramework(laws []Law, now time.Time) Framework {
+	base := []string{"text", "source"}
+	rule := []string{"scope", "subject", "modality", "executor"}
+	full := []string{"condition", "enforcement", "evidence", "standards", "review"}
+	cat := func(parts ...[]string) []string {
+		var out []string
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	fw := Framework{
+		Version: "v1", Source: "法的框架 v1, approved by the Owner; https://claude.ai/artifact/TR91x7uM1feLXMPrJ639T6",
+		Levels: []FrameworkLevel{
+			{Level: LevelDao, Name: "道", Meaning: "信念和方向；不量、不直接执行，是下面各层的依据；由 Owner 亲自定", Required: base},
+			{Level: LevelFundamental, Name: "根本法", Meaning: "收不回的硬边界（六类）；机器必须拦，任何下位法不能放松", Required: cat(base, rule, full)},
+			{Level: LevelBasic, Name: "基本法", Meaning: "全系统通用的规矩", Required: cat(base, rule, full)},
+			{Level: LevelDomain, Name: "领域法", Meaning: "只适用于某个领域或某条线；不得和上位法抵触", Required: cat(base, rule, full, []string{"parent"})},
+			{Level: LevelDetail, Name: "细则与判例", Meaning: "落实上位法的具体做法和一次性决定；领域 owner 在授权内自定、登记、可撤", Required: cat(base, rule, []string{"parent"})},
+		},
+		Fields: []FrameworkField{
+			{"text", "原文", "一句话说清规矩"},
+			{"scope", "适用范围", "全系统、某个域、某个领域、某个环境或某类动作"},
+			{"subject", "主题", "从主题表里选，用来找重复和冲突"},
+			{"modality", "规定方式", "必须、禁止或允许"},
+			{"condition", "适用条件", "在什么情况下适用（假定）"},
+			{"parent", "上位法", "它落实或细化的是哪一条"},
+			{"depends_on", "依存", "要先有哪几条成立"},
+			{"supersedes", "取代", "它取代哪几条；被取代的随之废止"},
+			{"executor", "执行者", "哪条线负责执行"},
+			{"enforcement", "强制方式", "哪道机器检查强制，或写明靠自觉"},
+			{"evidence", "证据", "从哪个读口取证，是否系统存档"},
+			{"standards", "标准和量法", "审计按什么判达到、没到、没量（后果）"},
+			{"review", "审计复核", "建卡前审计看标准能不能量：谁、何时、可量或量不了"},
+			{"enforce", "执法开关", "未执行或执行中；执行中才进计划、被审计量"},
+			{"expires_on", "有效期", "阶段法的最后一天"},
+			{"source", "出处", "谁在哪天说的、吸收了哪些素材、批准卡号"},
+		},
+		Subjects:   LawSubjects,
+		ScopeForms: []string{"全系统", "域:Trade|Research|Ops", "领域:<领域 id>", "环境:PROD|STG|DEV", "动作:<一类动作>"},
+		Modalities: lawModalities,
+		States:     map[string]int{StateInForce: 0, StateMaterial: 0, StateRepealed: 0},
+		Enforce:    []string{EnforceOff, EnforceOn},
+		Between: []string{
+			"上位优先：下位法和上位法抵触的那一处不执行",
+			"同层：范围窄的优先；同样范围，新批的优先",
+			"冲突：同范围同主题规定方式相反的，应在同一张票里改或废对方",
+			"重复：同范围同主题同方式的，应写明取代或差别",
+			"依存：依存的法必须现行；被依存的要废止时一并处理",
+		},
+		Integrity: []string{
+			"法只经 Owner 批准的修法票增、改、废",
+			"修法票的改前原文必须和名录对得上",
+			"不能放松根本法（与现行第 1 层法冲突的卡被拒）",
+		},
+		StageNote: "现阶段框架的发现只在卡面提示、不拦；执法一条一条开，力度随项目阶段定",
+	}
+	for _, l := range laws {
+		st := LawState(l, now)
+		fw.States[st]++
+		if st == StateInForce && l.Frame != nil && l.Frame.Level != nil {
+			fw.Levels[*l.Frame.Level].InForce++
+		}
+	}
+	return fw
+}
