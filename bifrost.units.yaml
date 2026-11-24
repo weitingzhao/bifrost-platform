@@ -14,8 +14,12 @@ version: 1
 # changes only the keys of what reads something that changed. advance: manual
 # means whoever needs a newer one changes this line (and, for infra, the copy
 # of its pipelines in api/internal/delivery/testdata in the same commit).
+# advance: stg means the platform plans the pin at the commit of that
+# repository in its current STG release, what ships next (TD-588); the line's
+# commit is used only where the release cannot be read (go run ./api/cmd/unitplan,
+# a process that has not read it yet), and the plan's pin says which.
 pins:
-  bifrost-ui: {commit: beeea828dd97bb03ae9e749614e70f92c48da4b5, advance: manual}
+  bifrost-ui: {commit: beeea828dd97bb03ae9e749614e70f92c48da4b5, advance: stg}
   bifrost-trade-infra: {commit: 05fcba3821b4b85688ccefe5c1a3ef81d61e7b51, advance: manual}
 
 modules:

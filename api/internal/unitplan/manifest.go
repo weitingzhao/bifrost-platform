@@ -22,7 +22,8 @@ type Manifest struct {
 }
 
 // Pin is another repository at the commit this one is tested with. Advance
-// says who moves it (manual: whoever changes the file).
+// says who moves it (manual: whoever changes the file; stg: it follows the
+// platform's STG release, follow.go).
 type Pin struct {
 	Commit  string `json:"commit"`
 	Advance string `json:"advance,omitempty"`
@@ -76,6 +77,9 @@ func ParseManifest(doc []byte) (*Manifest, error) {
 	for repo, pin := range m.Pins {
 		if !fullID.MatchString(pin.Commit) {
 			return nil, fmt.Errorf("unitplan: %s: pin %s is not a 40-character commit", ManifestPath, repo)
+		}
+		if pin.Advance != "" && pin.Advance != advanceManual && pin.Advance != advanceSTG {
+			return nil, fmt.Errorf("unitplan: %s: pin %s: advance is manual or stg, not %q", ManifestPath, repo, pin.Advance)
 		}
 	}
 	names := map[string]bool{}

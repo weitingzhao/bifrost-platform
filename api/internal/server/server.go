@@ -252,6 +252,8 @@ func New(cfg *config.Config) (*Server, error) {
 		releasesSvc.Start(kubemetrics.WithSite(context.Background(), "releases.tick"), 5*time.Minute)
 	}
 	srv.releases = releases.NewHandler(releasesSvc)
+	// A unit plan's pin with advance stg follows what STG ships (TD-588).
+	verificationassembly.FollowRelease(releasesSvc.Follow("platform", "stg"))
 	if srv.delivery != nil {
 		releasesSvc.SetRunReader(srv.delivery.GateRuns)
 		srv.delivery.SetNodeMetricsReader(deliveryNodeMetrics(srv.buildNodeMetrics))

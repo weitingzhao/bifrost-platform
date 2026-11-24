@@ -20,6 +20,8 @@ type PlanPin struct {
 	Repo   string `json:"repo"`
 	Commit string `json:"commit"`
 	Tree   string `json:"tree"`
+	// Note says where a pin with advance stg took its commit from (TD-588).
+	Note string `json:"note,omitempty"`
 }
 
 // PlannedTask is one task of one unit: its key and the document the key is
@@ -81,12 +83,13 @@ func buildPlan(repo, commit string, t *Tree, src Source, doc []byte, own bool) (
 		if src.Pinned == nil {
 			return nil, fmt.Errorf("unitplan: %s pins %s and no source reads it", repo, name)
 		}
-		pt, err := src.Pinned(name, m.Pins[name].Commit)
+		at, note := pinCommit(name, m.Pins[name])
+		pt, err := src.Pinned(name, at)
 		if err != nil {
-			return nil, fmt.Errorf("unitplan: pin %s@%s: %w", name, m.Pins[name].Commit, err)
+			return nil, fmt.Errorf("unitplan: pin %s@%s: %w", name, at, err)
 		}
 		pinned[name] = pt
-		plan.Pins = append(plan.Pins, PlanPin{Repo: name, Commit: m.Pins[name].Commit, Tree: pt.RootID})
+		plan.Pins = append(plan.Pins, PlanPin{Repo: name, Commit: at, Tree: pt.RootID, Note: note})
 	}
 	// ref resolves one declared input to the id of what it names: "." is the
 	// whole repository and every pin; "repo:path" a path of a pinned
