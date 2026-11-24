@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useRef, type ReactNode } from 'react'
-import { clearLegacyApprovalToken } from '@/api/approvals'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { clearLegacyApprovalToken, type ApprovalItem } from '@/api/approvals'
 import { fetchLineage } from '@/api/lineage'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -18,6 +18,7 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
+import { kindSummary, splitApprovals, splitQuestions } from '@/pages/shell/needs-you/ticketKind'
 import { SIGNOFF_SECTION_HREF, approvalPart } from '@/pages/shell/progress/progressPart'
 import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
 import { useSignoffWaits } from '@/pages/shell/agents/useRuntimePlan'
@@ -72,6 +73,54 @@ function SignoffGroup() {
 
 function ApprovalList({ children }: { children: ReactNode }) {
   return <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">{children}</ul>
+}
+
+/** The approval groups of one kind: decide, run in a terminal, check, drills (the Owner's lists, unchanged). */
+function ApprovalGroups({ decide, terminal, check, drills, now, groupCount }: {
+  decide: ApprovalItem[]; terminal: ApprovalItem[]; check: ApprovalItem[]; drills: ApprovalItem[]; now: number; groupCount: (n: number) => string
+}) {
+  return (
+    <>
+      {decide.length > 0 ? (
+        <Group label="Decide" count={groupCount(decide.length)}>
+          <ApprovalList>
+            {decide.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} partOf={item.status === 'pending' ? approvalPart(item) : null} planSteps />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {terminal.length > 0 ? (
+        <Group label="Run in a terminal" count={groupCount(terminal.length)}>
+          <ApprovalList>
+            {terminal.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} planSteps />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {check.length > 0 ? (
+        <Group label="Check" count={groupCount(check.length)}>
+          <ApprovalList>
+            {check.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} planSteps />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {drills.length > 0 ? (
+        // Drills (v4 §20.3 rule 8): shown as they would be, not counted; nothing runs and there is nothing to approve.
+        <Group label="Drills" count={groupCount(drills.length)}>
+          <Note>Not counted: a drill shows what a request looks like. Nothing runs, and it cannot be approved.</Note>
+          <ApprovalList>
+            {drills.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={[DRILL_LINE]} />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+    </>
+  )
 }
 
 function HandledRows({ rows }: { rows: HandledRow[] }) {
@@ -161,6 +210,21 @@ export function NeedsYouPage() {
   // A group's count is the approvals list's: unknown, not the last list's length, while it cannot be read (review 488 A2).
   const openedAt = useRef(Date.now())
   const groupCount = (n: number) => (openCount.state === 'unknown' ? '?' : String(n))
+  // Laws and actions apart (the Owner 2026-11-23): each kind its own section and count, read from the data (ticketKind).
+  // Memoized: the same lists keep the same arrays, so the Answer group's memo holds when another read lands.
+  const d = useMemo(() => splitApprovals(decide), [decide])
+  const t = useMemo(() => splitApprovals(terminal), [terminal])
+  const c = useMemo(() => splitApprovals(check), [check])
+  const dr = useMemo(() => splitApprovals(drills), [drills])
+  const q = useMemo(() => splitQuestions(openQuestions), [openQuestions])
+  const qAll = useMemo(() => splitQuestions(questions), [questions])
+  const approvalsKnown = openCount.state === 'known'
+  const questionsKnown = !questionsLoading && !questionsUnreadable && !questionsStale
+  const lawCount = approvalsKnown && questionsKnown ? d.laws.length + t.laws.length + c.laws.length + q.laws.length : null
+  const runtimeKnown = runtimeCount.state === 'known' ? runtimeItems.length : null
+  const actionCount = approvalsKnown && questionsKnown && runtimeKnown != null
+    ? d.actions.length + t.actions.length + c.actions.length + q.actions.length + runtimeKnown
+    : null
   const runtimeUnreadable = runtimeQuery.isError || runtimeQuery.isPaused
   const runtimeReadAt = runtimeQuery.dataUpdatedAt > 0 ? runtimeQuery.dataUpdatedAt : null
 
@@ -214,50 +278,7 @@ export function NeedsYouPage() {
         <p className="m-0 text-sm text-muted-foreground">{EARLIER_NOTIFICATIONS}</p>
       ) : null}
       {openBody}
-      {decide.length > 0 ? (
-        <Group label="Decide" count={groupCount(decide.length)}>
-          <ApprovalList>
-            {decide.map(item => (
-              <ApprovalRow
-                key={item.id}
-                item={item}
-                now={now}
-                partOf={item.status === 'pending' ? approvalPart(item) : null}
-                planSteps
-              />
-            ))}
-          </ApprovalList>
-        </Group>
-      ) : null}
-      {terminal.length > 0 ? (
-        <Group label="Run in a terminal" count={groupCount(terminal.length)}>
-          <ApprovalList>
-            {terminal.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} planSteps />
-            ))}
-          </ApprovalList>
-        </Group>
-      ) : null}
-      {check.length > 0 ? (
-        <Group label="Check" count={groupCount(check.length)}>
-          <ApprovalList>
-            {check.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} planSteps />
-            ))}
-          </ApprovalList>
-        </Group>
-      ) : null}
-      {drills.length > 0 ? (
-        // Drills (v4 §20.3 rule 8): shown as they would be, not counted; nothing runs and there is nothing to approve.
-        <Group label="Drills" count={groupCount(drills.length)}>
-          <Note>Not counted: a drill shows what a request looks like. Nothing runs, and it cannot be approved.</Note>
-          <ApprovalList>
-            {drills.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} lines={[DRILL_LINE]} />
-            ))}
-          </ApprovalList>
-        </Group>
-      ) : null}
+      <p className="m-0 text-sm font-medium" data-kind-summary>{kindSummary(lawCount, actionCount)}</p>
       {questionsLoading ? (
         <p className="m-0 text-sm text-muted-foreground" data-questions-state="loading">
           Loading…
@@ -273,8 +294,21 @@ export function NeedsYouPage() {
           {`Could not refresh questions: ${questionsReason}`}
         </p>
       ) : null}
+      <section aria-label="Laws" data-ticket-kind="law" className="flex w-full min-w-0 flex-col gap-3">
+        <h3 className="m-0 text-sm font-semibold">Laws · {lawCount ?? '?'}</h3>
+        <p className="m-0 text-xs text-muted-foreground">Changes of law and of direction: a law_amend card, a question whose duty is goal or rule.</p>
+        {lawCount === 0 ? <Note>No law waits for you.</Note> : null}
+        <ApprovalGroups decide={d.laws} terminal={t.laws} check={c.laws} drills={dr.laws} now={now} groupCount={groupCount} />
+        {!questionsLoading && !questionsUnreadable ? (
+          <AnswerGroup open={q.laws} questions={qAll.laws} threads={lineageQ.data?.threads} stale={questionsStale} />
+        ) : null}
+      </section>
+      <section aria-label="Actions" data-ticket-kind="action" className="flex w-full min-w-0 flex-col gap-3">
+        <h3 className="m-0 text-sm font-semibold">Actions · {actionCount ?? '?'}</h3>
+        <p className="m-0 text-xs text-muted-foreground">Executive work: requests to run, releases, procedures, and questions that are not about law.</p>
+        <ApprovalGroups decide={d.actions} terminal={t.actions} check={c.actions} drills={dr.actions} now={now} groupCount={groupCount} />
       {!questionsLoading && !questionsUnreadable ? (
-        <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} stale={questionsStale} />
+        <AnswerGroup open={q.actions} questions={qAll.actions} threads={lineageQ.data?.threads} stale={questionsStale} />
       ) : null}
       <Group label="Agent runtime" count={needsYouCountText(runtimeCount)}>
         {runtimeUnreadable
@@ -288,6 +322,7 @@ export function NeedsYouPage() {
           <p><a className="underline" href={item.href}>{item.instruction}</a></p>
         </li>)}</ul>
       </Group>
+      </section>
       <Group label="Silent threads" count={needsYouCountText(silentCount)} collapsed description={SILENT_THREAD_EXPLANATION}>
         <Note>Claude sessions that went quiet.</Note>
         {stalled}

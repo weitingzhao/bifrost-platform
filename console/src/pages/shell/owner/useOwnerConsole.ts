@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { splitApprovals } from '@/pages/shell/needs-you/ticketKind'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@/api/agentRuntimeBus'
 import { operatorToken } from '@/api/client'
@@ -86,7 +87,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const runsLoading = blocks.work && !runsRead && runsError == null
 
   const kinds = needsYou.count.state === 'known' && alerts ? { approve: needsYou.decisionItems.length, hands: alerts.yours.length } : undefined
-  const verdict = ownerVerdict({ yours, kinds, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
+  const verdict = ownerVerdict({ yours, kinds, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null, lawApprovals: needsYou.openCount.state === 'known' ? splitApprovals(needsYou.decide).laws.length : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
 
   const marketData = current(marketQ)
   const marketItems = marketData != null && !isProxyError(marketData) && marketData.ok !== false ? marketData.freshness_summary ?? [] : undefined

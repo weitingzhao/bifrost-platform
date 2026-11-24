@@ -187,11 +187,16 @@ export function ownerVerdict(input: {
   /** The two kinds that are his, told apart in the headline (the Owner, 2026-11-19); absent while either is unread. */
   kinds?: { approve: number; hands: number }
   approvals: number | null
+  /** Of those, how many change the law (law_amend; needs-you/ticketKind): laws and actions are said apart (the Owner 2026-11-23). */
+  lawApprovals?: number | null
   lane: string
   nodes: { ready: number; total: number } | null
 }): Verdict {
   const facts = [
-    input.approvals == null ? 'approvals unknown' : input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
+    input.approvals == null ? 'approvals unknown'
+      : input.approvals === 0 ? 'Nothing to approve'
+      : input.lawApprovals != null ? `${plural(input.lawApprovals, 'law')} · ${plural(input.approvals - input.lawApprovals, 'action')} to approve`
+      : `${plural(input.approvals, 'request')} to approve`,
     input.lane,
     input.nodes == null ? 'nodes unknown' : `${input.nodes.ready} of ${input.nodes.total} nodes ready`,
   ]

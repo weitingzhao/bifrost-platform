@@ -184,6 +184,31 @@ describe('NeedsYouPage', () => {
     window.location.hash = ''
   })
 
+  // 2026-11-23 the Owner (by the coordinator), 箭10 ruled the screen: a change of law and executive work do not share
+  // one queue. A law_amend card stands under Laws, every other request under Actions, each with its own count.
+  it('puts a law_amend card under Laws and other requests under Actions, each counted apart', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    const created = new Date(Date.now() - 60 * 60_000).toISOString()
+    stubFetch(() =>
+      json(
+        buildApprovalListResponse([
+          buildPlatformApproval({ id: 'law-1', action: 'law_amend', created_at: created }),
+          buildPlatformApproval({ id: 'act-1', action: 'drain_node', tier: 'D', created_at: created }),
+          buildPlatformApproval({ id: 'act-2', created_at: created }),
+        ]),
+      ),
+    )
+    render(wrapper(<NeedsYouPage />))
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="3"]')).toBeTruthy())
+    const laws = document.querySelector('[data-ticket-kind="law"]') as HTMLElement
+    const actions = document.querySelector('[data-ticket-kind="action"]') as HTMLElement
+    expect(within(laws).getAllByRole('link')).toHaveLength(1)
+    expect(within(actions).getAllByRole('link')).toHaveLength(2)
+    expect(laws.querySelector(':scope > h3')?.textContent).toBe('Laws · 1')
+    await waitFor(() => expect(actions.querySelector(':scope > h3')?.textContent).toBe('Actions · 2'))
+    await waitFor(() => expect(document.querySelector('[data-kind-summary]')?.textContent).toBe('1 law · 2 actions waiting'))
+  })
+
   it('lists pending requests as links with waited and remaining time, and no approve button', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     const created = new Date(Date.now() - 3 * 60 * 60_000).toISOString()

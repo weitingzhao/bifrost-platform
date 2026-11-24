@@ -3,6 +3,7 @@ import type { LineageThread } from '@/api/lineage'
 import { questionNumberLabel, recommendedLine, type Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { Tick } from '@/pages/shell/progress/progressClock'
+import { KIND_NOT_DECLARED, questionKind } from '@/pages/shell/needs-you/ticketKind'
 
 /**
  * Lineage title for this session. A session id with no lineage title is
@@ -51,6 +52,10 @@ export function QuestionRow({
             text={now => `waited ${formatWaited(question.created_at, now)} · ${formatTimeRemaining(question.expires_at, now)}`}
           />
         </span>
+        {!questionKind(question).declared ? (
+          // Filed under actions until its source declares a duty (ticketKind); said, never guessed.
+          <span className="min-w-0 text-xs text-muted-foreground" data-kind-undeclared>{KIND_NOT_DECLARED}</span>
+        ) : null}
         {recommended != null ? (
           <span className="min-w-0 break-words text-sm text-foreground" data-question-recommended>
             {recommended}

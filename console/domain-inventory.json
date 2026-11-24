@@ -5036,10 +5036,12 @@
         "console/src/pages/shell/needs-you/__tests__/pausedSources.test.tsx",
         "console/src/pages/shell/needs-you/__tests__/questionsNeedsYou.test.tsx",
         "console/src/pages/shell/needs-you/__tests__/silentThread.test.ts",
+        "console/src/pages/shell/needs-you/__tests__/ticketKind.test.ts",
         "console/src/pages/shell/needs-you/mergedNeedsYou.ts",
         "console/src/pages/shell/needs-you/needsYouGroups.ts",
         "console/src/pages/shell/needs-you/needsYouModel.ts",
         "console/src/pages/shell/needs-you/silentThread.ts",
+        "console/src/pages/shell/needs-you/ticketKind.ts",
         "console/src/pages/shell/needs-you/useNeedsYou.ts"
       ],
       "imports": [
