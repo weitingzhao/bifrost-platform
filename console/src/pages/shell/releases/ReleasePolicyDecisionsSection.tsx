@@ -80,13 +80,15 @@ export function ReleasePolicyDecisionsSection({ records, isLoading, error }: Rel
         </span>
       </div>
       {view.decisions.length > 0 && (
-        <DenseDataTable>
+        // Fixed widths for the short columns and a floor the table declares, so a time, a pipeline and a decision read whole;
+        // on a phone the table scrolls sideways in its frame (390 sweep, 2026-11-23: the time lost its minutes, the decision was cut).
+        <DenseDataTable tableClassName="min-w-[68rem] [--table-min:68rem]">
           <DenseTableHeader>
             <DenseTableHeadRow>
-              <DenseTableHead>Time</DenseTableHead>
-              <DenseTableHead>Pipeline</DenseTableHead>
-              <DenseTableHead>Decision</DenseTableHead>
-              <DenseTableHead>Commits</DenseTableHead>
+              <DenseTableHead className="w-40 max-w-none">Time</DenseTableHead>
+              <DenseTableHead className="w-64 max-w-none">Pipeline</DenseTableHead>
+              <DenseTableHead className="w-72 max-w-none">Decision</DenseTableHead>
+              <DenseTableHead className="w-36 max-w-none">Commits</DenseTableHead>
               <DenseTableHead>Reasons</DenseTableHead>
             </DenseTableHeadRow>
           </DenseTableHeader>
