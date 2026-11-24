@@ -42,6 +42,7 @@ type LawCard struct {
 	Before     string
 	Standards  []LawStandard
 	Repeals    []LawRepeal // op repeal_many: the laws it repeals
+	Frame      *LawFrame   // the framework's fields of the new version
 	DecidedOn  string      // the day the Owner approved it, YYYY-MM-DD
 }
 

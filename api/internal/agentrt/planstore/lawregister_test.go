@@ -154,3 +154,45 @@ func TestLawRegister(t *testing.T) {
 		w.chainHolds(t, s)
 	}
 }
+
+// 2026-11-24, the framework of laws v1: an approved card's frame is recorded
+// with the law, what it supersedes is repealed with it, and the register
+// reads each law's state (a transcribed row is 素材, a framed card's law
+// 现行, a superseded one 废止).
+func TestLawFrameRecorded(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	id := "appr_00000000000000e1"
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "card:" + id, Type: "approval.card.executed", Actor: "controller",
+			Body: map[string]any{"id": id, "card": "#401", "subject": "#401", "key": "#401", "number": 401, "action": "law_amend",
+				"status": "executed", "ref": "/api/v1/approvals/" + id, "change": "executed"}})
+		return err
+	}))
+	lv := 2
+	card := planstore.LawCard{ApprovalID: id, Number: 401, Op: "add", After: "a framed law",
+		Standards: []planstore.LawStandard{{ID: "s1", Standard: "x", Measure: "y"}},
+		Frame: &planstore.LawFrame{Level: &lv, Scope: "全系统", Subject: "计划", Modality: "必须", Executor: "legislation",
+			Supersedes: []string{"1"}, Review: &planstore.LawReview{By: "audit", At: "2026-11-24T10:00Z", Verdict: "可量"}}}
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{card})
+	ok(t, err)
+	l3, _, err := planstore.CurrentLaw(ctx, w.rt, "3")
+	ok(t, err)
+	if l3.Frame == nil || l3.Frame.Level == nil || *l3.Frame.Level != 2 || l3.Frame.Subject != "计划" || l3.Frame.Review == nil || l3.Frame.Review.Verdict != "可量" {
+		t.Fatalf("law 3's frame = %+v", l3.Frame)
+	}
+	view, err := planstore.LawsView(ctx, w.rt)
+	ok(t, err)
+	state := map[string]string{}
+	for _, v := range view {
+		state[v.Law.Law] = v.State
+	}
+	if state["1"] != planstore.StateRepealed || state["2"] != planstore.StateMaterial || state["3"] != planstore.StateInForce {
+		t.Fatalf("states = %v", state)
+	}
+	w.chainHolds(t, "law:1")
+}

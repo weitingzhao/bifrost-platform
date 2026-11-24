@@ -110,6 +110,7 @@ type LawCounts struct {
 // current version (when an approved card made one) and its numbers.
 type LawView struct {
 	Law
+	State  string     `json:"state"` // 现行, 素材 or 废止 (the framework)
 	Item   string     `json:"plan_item,omitempty"`
 	Counts *LawCounts `json:"counts,omitempty"`
 	Steps  []LawStep  `json:"steps,omitempty"`
@@ -142,7 +143,7 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 			grade[s("step")] = LawStep{Grade: s("grade"), Version: s("version")}
 		}
 		for _, l := range laws {
-			v := LawView{Law: l}
+			v := LawView{Law: l, State: LawState(l, time.Now())}
 			if l.ApprovalID != "" {
 				var item string
 				err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.plan_node WHERE node_kind = 'item' AND strpos(title, $1) > 0

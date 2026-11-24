@@ -2,6 +2,7 @@ package planstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -51,6 +52,7 @@ type Law struct {
 	Source     string    `json:"source"`
 	ApprovalID string    `json:"approval_id,omitempty"`
 	Standards  any       `json:"standards,omitempty"`
+	Frame      *LawFrame `json:"frame,omitempty"`
 	At         time.Time `json:"at"`
 }
 
@@ -125,7 +127,56 @@ func lawOf(r eventlog.Row) Law {
 	v, _ := r.Body["version"].(float64)
 	return Law{Law: s("law"), Version: int(v), Op: s("op"), SaidOn: s("said_on"), Text: s("text"), Where: s("where"),
 		EnforcedBy: s("enforced_by"), Status: s("status"), OldWording: s("old_wording"), Source: s("source"),
-		ApprovalID: s("approval_id"), Standards: r.Body["standards"], At: r.At}
+		ApprovalID: s("approval_id"), Standards: r.Body["standards"], Frame: frameOf(r.Body["frame"]), At: r.At}
+}
+
+// frameBody is a frame as an event body holds it: integers as int, lists as
+// []any, only the fields set (the ledger's canonical form).
+func frameBody(f *LawFrame) map[string]any {
+	m := map[string]any{}
+	if f.Level != nil {
+		m["level"] = *f.Level
+	}
+	for k, v := range map[string]string{"scope": f.Scope, "subject": f.Subject, "modality": f.Modality, "condition": f.Condition,
+		"parent": f.Parent, "distinct_from": f.DistinctFrom, "executor": f.Executor, "enforcement": f.Enforcement,
+		"evidence": f.Evidence, "expires_on": f.ExpiresOn} {
+		if v != "" {
+			m[k] = v
+		}
+	}
+	for k, v := range map[string][]string{"depends_on": f.DependsOn, "supersedes": f.Supersedes} {
+		if len(v) > 0 {
+			l := make([]any, len(v))
+			for i, x := range v {
+				l[i] = x
+			}
+			m[k] = l
+		}
+	}
+	if r := f.Review; r != nil {
+		rv := map[string]any{"by": r.By, "at": r.At, "verdict": r.Verdict}
+		if r.Note != "" {
+			rv["note"] = r.Note
+		}
+		m["review"] = rv
+	}
+	return m
+}
+
+// frameOf reads a recorded frame back.
+func frameOf(raw any) *LawFrame {
+	if raw == nil {
+		return nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var f LawFrame
+	if json.Unmarshal(b, &f) != nil {
+		return nil
+	}
+	return &f
 }
 
 // CurrentLaws is every law in the register as it stands, by number.
@@ -203,6 +254,9 @@ func appendLaw(ctx context.Context, tx pgx.Tx, prev Law, have bool, l Law) error
 	}
 	if l.Standards != nil {
 		body["standards"] = l.Standards
+	}
+	if l.Frame != nil {
+		body["frame"] = frameBody(l.Frame)
 	}
 	_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: LawStream(l.Law), Type: "law_recorded", Actor: "controller", Body: body})
 	return err
@@ -313,6 +367,9 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	}
 	l := Law{Law: n, Op: c.Op, Text: c.After, Status: "已批（law_amend " + c.ApprovalID + "）", Source: "law_amend " + c.ApprovalID, ApprovalID: c.ApprovalID,
 		SaidOn: prev.SaidOn, Where: prev.Where, EnforcedBy: prev.EnforcedBy, OldWording: prev.OldWording}
+	if c.Op != "repeal" {
+		l.Frame = c.Frame
+	}
 	if standards != nil {
 		l.Standards = standards
 	}
@@ -322,5 +379,25 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	if c.Op == "add" {
 		l.SaidOn = c.DecidedOn
 	}
-	return n, true, appendLaw(ctx, tx, prev, have, l)
+	if err := appendLaw(ctx, tx, prev, have, l); err != nil {
+		return "", false, err
+	}
+	// What it supersedes is repealed with it (framework: 取代).
+	if l.Frame != nil {
+		for _, sn := range l.Frame.Supersedes {
+			old, ok, err := lastLaw(ctx, tx, sn)
+			if err != nil {
+				return "", false, err
+			}
+			if !ok || old.Status == RepealedStatus {
+				continue
+			}
+			r := old
+			r.Op, r.Status, r.Source, r.ApprovalID, r.Standards = "repeal", RepealedStatus, "被第 "+n+" 条取代（law_amend "+c.ApprovalID+"）", c.ApprovalID, nil
+			if err := appendLaw(ctx, tx, old, true, r); err != nil {
+				return "", false, err
+			}
+		}
+	}
+	return n, true, nil
 }

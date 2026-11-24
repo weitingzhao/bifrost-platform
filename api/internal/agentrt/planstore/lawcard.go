@@ -36,6 +36,7 @@ type LawAmend struct {
 	After     string        `json:"after,omitempty"`
 	Standards []LawStandard `json:"standards,omitempty"`
 	Repeals   []LawRepeal   `json:"repeals,omitempty"`
+	Frame     *LawFrame     `json:"frame,omitempty"`
 	Revert    string        `json:"revert"`
 }
 
@@ -56,6 +57,13 @@ const lawCardMaxRepeals = 30
 func ReadLawAmend(params map[string]any) (LawAmend, error) {
 	s := func(k string) string { v, _ := params[k].(string); return strings.TrimSpace(v) }
 	la := LawAmend{Op: s("op"), Law: s("law"), Before: s("before"), After: s("after"), Revert: s("revert")}
+	if la.Op == "add" || la.Op == "amend" {
+		f, err := readLawFrame(params["frame"])
+		if err != nil {
+			return la, err
+		}
+		la.Frame = f
+	}
 	switch la.Op {
 	case "add":
 		if la.Before != "" {
@@ -150,6 +158,7 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 type LawLookup struct {
 	Current func(ctx context.Context, n string) (Law, bool, error)
 	Next    func(ctx context.Context) (string, error)
+	All     func(ctx context.Context) ([]Law, error)
 }
 
 // DBLawLookup reads the register in db (lawregister.go).
@@ -169,6 +178,13 @@ func DBLawLookup(db func() (eventlog.DB, error)) LawLookup {
 			}
 			return NextLawNumber(ctx, d)
 		},
+		All: func(ctx context.Context) ([]Law, error) {
+			d, err := db()
+			if err != nil {
+				return nil, err
+			}
+			return CurrentLaws(ctx, d)
+		},
 	}
 }
 
@@ -184,6 +200,21 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 	}
 	if reg.Current == nil || reg.Next == nil {
 		return errors.New("law_amend: the register of laws is not available here; no card without it")
+	}
+	// The framework (lawframework.go): a new version of a law carries what its
+	// level asks and does not bring in a conflict, an unexplained duplicate, a
+	// missing dependency or a parent that is not above it.
+	if la.Op == "add" || la.Op == "amend" {
+		if err := checkFrameShape(la.Frame, len(la.Standards)); err != nil {
+			return err
+		}
+		self := ""
+		if la.Op == "amend" {
+			self = la.Law
+		}
+		if err := checkFrameAgainst(ctx, reg, self, la.Frame); err != nil {
+			return err
+		}
 	}
 	if la.Op == "add" {
 		next, err := reg.Next(ctx)

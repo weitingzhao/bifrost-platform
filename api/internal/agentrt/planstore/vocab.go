@@ -71,7 +71,8 @@ var planBodies = map[string][]eventlog.Field{
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),
 		field("text", eventlog.Str, false), field("status", eventlog.Str, false), field("source", eventlog.Str, false),
 		field("said_on", eventlog.Str, true), field("where", eventlog.Str, true), field("enforced_by", eventlog.Str, true),
-		field("old_wording", eventlog.Str, true), field("approval_id", eventlog.Str, true), field("standards", eventlog.Any, true)},
+		field("old_wording", eventlog.Str, true), field("approval_id", eventlog.Str, true), field("standards", eventlog.Any, true),
+		field("frame", eventlog.Any, true)},
 }
 
 // statesOf is every state a state machine names.
