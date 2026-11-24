@@ -137,6 +137,33 @@ func TestLawCardRepealMany(t *testing.T) {
 	}
 }
 
+// 2026-11-24, Owner: a repealed law is deleted for good after seven days or
+// when he asks ("我直接要求删"). His purge card names only repealed laws, each
+// quoted as it stands; a law in force or material is refused at creation.
+func TestLawCardPurge(t *testing.T) {
+	reg := fakeLookup("92")
+	good := map[string]any{"op": "purge", "revert": "cannot be undone; add the law again by a new card",
+		"repeals": []any{map[string]any{"law": "5", "before": "old", "reason": "Owner asked"}}}
+	if err := planstore.CheckLawCard(context.Background(), reg, good); err != nil {
+		t.Fatalf("purge of a repealed law refused: %v", err)
+	}
+	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law purge (delete for good) ×1: 5" {
+		t.Fatalf("summary = %q", got)
+	}
+	bad := map[string]map[string]any{
+		"in force":     {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "90", "before": "approvals go by law", "reason": "x"}}},
+		"material":     {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}}},
+		"stale before": {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "5", "before": "new", "reason": "x"}}},
+		"not in reg":   {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "999", "before": "z", "reason": "x"}}},
+		"no reason":    {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "5", "before": "old"}}},
+	}
+	for name, p := range bad {
+		if err := planstore.CheckLawCard(context.Background(), reg, p); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+}
+
 // 2026-11-24, the framework of laws v1, step by step (Owner: first a
 // framework that can hold good laws, then the laws in it, then enforcement
 // law by law): what the framework finds goes on the card as notes; only a

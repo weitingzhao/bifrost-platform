@@ -276,6 +276,10 @@ func (l *Loop) Laws(ctx context.Context) (int, error) {
 			}
 		}
 	}
+	// A law repealed seven days ago is deleted (planstore.PurgeRepealedLaws).
+	if _, err := planstore.PurgeRepealedLaws(ctx, l.DB, time.Now()); err != nil {
+		return transcribed, err
+	}
 	if l.Sources.Laws == nil {
 		return transcribed, nil
 	}

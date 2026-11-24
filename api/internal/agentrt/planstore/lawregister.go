@@ -235,10 +235,22 @@ func NextLawNumber(ctx context.Context, db eventlog.DB) (string, error) {
 
 func nextLawNumber(ctx context.Context, tx pgx.Tx) (string, error) {
 	laws, err := currentLaws(ctx, tx)
-	if err != nil || len(laws) == 0 {
+	if err != nil {
 		return "", err
 	}
-	return strconv.Itoa(lawNumber(laws[len(laws)-1].Law) + 1), nil
+	// A purged law's number is never given again (lawpurge.go).
+	purged, _, err := purgedLaws(ctx, tx)
+	if err != nil || len(laws)+len(purged) == 0 {
+		return "", err
+	}
+	top := 0
+	if len(laws) > 0 {
+		top = lawNumber(laws[len(laws)-1].Law)
+	}
+	for _, n := range purged {
+		top = max(top, n)
+	}
+	return strconv.Itoa(top + 1), nil
 }
 
 func appendLaw(ctx context.Context, tx pgx.Tx, prev Law, have bool, l Law) error {
@@ -326,6 +338,14 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	}
 	if done, err := eventlog.HasBody(ctx, tx, "law_recorded", "", map[string]any{"approval_id": c.ApprovalID}); err != nil || done {
 		return "", false, err
+	}
+	// A card whose law was purged stays out (lawpurge.go: the tombstone
+	// keeps its approval id).
+	if _, purged, err := purgedLaws(ctx, tx); err != nil || purged[c.ApprovalID] {
+		return "", false, err
+	}
+	if c.Op == "purge" {
+		return "", true, purgeByCard(ctx, tx, c)
 	}
 	// Nothing transcribed yet: no number is safe and no law is there to
 	// amend; the card waits for a later pass.

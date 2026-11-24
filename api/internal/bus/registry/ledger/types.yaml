@@ -49,6 +49,7 @@ types:
   - {type: host_retired, domain: compute}
   - {type: host_slots_set, domain: compute}
   - {type: host_state_changed, domain: compute}
+  - {type: law_purged, domain: plan, note: "the tombstone of a repealed law deleted for good (law-purged:<n>): its number and the approval ids its records carried, none of its text; planstore lawpurge (migration 0047, 2026-11-24)"}
   - {type: law_recorded, domain: plan, note: "a version of a law in the register (law:<n>): transcribed from OWNER_LAW.md or written by an approved law_amend card; planstore (migration 0044, 2026-11-23)"}
   - {type: legacy_imported, domain: foundation}
   - {type: message_acked, domain: coordination}

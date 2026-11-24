@@ -31,6 +31,8 @@ var planTypes = []string{
 	"plan_step_judged",
 	// An attribution on a standard's step, read by step (lawsview.go; migration 0046).
 	"plan_step_attributed",
+	// A purged law's tombstone (lawpurge.go; migration 0047).
+	"law_purged",
 	// note: a free note on a plan node (plannote) or an architecture row's
 	// note (planimport). The plan's since 2026-11-17 (TD-583); every other
 	// record that was a note has its own type now, and their old rows stay.
@@ -68,6 +70,8 @@ var planBodies = map[string][]eventlog.Field{
 		field("note_event_id", eventlog.Int, false), field("cause", eventlog.Str, true), field("destination", eventlog.Str, true), field("version", eventlog.Str, true)},
 	"plan_step_judged": {field("step", eventlog.Str, false), field("standard", eventlog.Str, false), field("grade", eventlog.Str, false),
 		field("note_event_id", eventlog.Int, false), field("version", eventlog.Str, true)},
+	"law_purged": {field("law", eventlog.Str, false), field("events", eventlog.Int, false), field("reason", eventlog.Str, false),
+		field("repealed_at", eventlog.Str, false), field("approval_ids", eventlog.IDs, true)},
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),
 		field("text", eventlog.Str, false), field("status", eventlog.Str, false), field("source", eventlog.Str, false),
 		field("said_on", eventlog.Str, true), field("where", eventlog.Str, true), field("enforced_by", eventlog.Str, true),

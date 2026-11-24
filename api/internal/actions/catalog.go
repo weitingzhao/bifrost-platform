@@ -579,6 +579,7 @@ var catalog = []Action{
 			"op is add, amend or repeal; law is the law's number (empty for add: the plan domain numbers it); before and after are the text before and after (before empty for add, after empty for repeal); " +
 			"standards is a list of {id, standard, measure}, at least one for add and amend; revert says how to undo it. " +
 			"op repeal_many repeals several laws on one card: repeals is a list of {law, before, reason} (before is the law's text as it stands; reason why it goes), and law, before, after and standards stay empty. " +
+			"op purge deletes repealed laws for good, with repeals in the same form (each law must be repealed; before is its text as it stands); the register keeps only a tombstone with the number and approval ids. A law repealed seven days ago is deleted without a card. " +
 			"add and amend carry frame (法的框架 v1): {level 0-4, scope, subject, modality 必须|禁止|允许, condition, parent, depends_on, supersedes, distinct_from, executor, enforcement, evidence, expires_on, review {by, at, verdict 可量}}; what each level needs is checked at creation, with conflicts, duplicates, dependencies and the parent against the register.",
 		Params: []Param{
 			{Name: "op", Type: "string", Required: true, In: "body"},
