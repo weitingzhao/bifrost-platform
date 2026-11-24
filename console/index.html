@@ -23,37 +23,70 @@
       // Before React: if the app never draws (its script failed to load or threw at
       // start), say so on the page with what a diagnosis needs, instead of white.
       // It never writes into #root, which React owns.
+      // 2026-11-24 the Owner's phone could not open ops.bifrost.lan after a deploy: mid-rollout the new
+      // build's script answered 502 and the page stayed white. A script that failed to load is said at
+      // once as "New version loading failed" with a Reload; the page retries by itself at most twice.
       (() => {
         const seen = [];
+        const note = m => { if (!seen.includes(m)) seen.push(m) };
+        let loadFailed = false;
         addEventListener('error', e => {
           const t = e.target;
-          if (t && t !== window && (t.src || t.href)) seen.push('failed to load ' + (t.src || t.href));
-          else if (e.message) seen.push(e.message);
+          if (t && t !== window && (t.src || t.href)) { note('failed to load ' + (t.src || t.href)); if (t.tagName === 'SCRIPT') loadFailed = true; }
+          else if (e.message) note(e.message);
         }, true);
-        addEventListener('unhandledrejection', e => seen.push(String((e.reason && e.reason.message) || e.reason)));
+        addEventListener('unhandledrejection', e => {
+          const m = String((e.reason && e.reason.message) || e.reason);
+          note(m);
+          if (/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(m)) loadFailed = true;
+        });
+        const RETRY = 'console-boot-retries';
+        const retries = () => { try { return Number(sessionStorage.getItem(RETRY)) || 0 } catch { return 2 } };
         const started = Date.now();
         const timer = setInterval(() => {
           const root = document.getElementById('root');
           const report = document.getElementById('console-boot-report');
-          if (root && root.childElementCount > 0) { if (report) report.remove(); clearInterval(timer); return; }
+          if (root && root.childElementCount > 0) {
+            if (report) report.remove();
+            try { sessionStorage.removeItem(RETRY) } catch {}
+            clearInterval(timer);
+            return;
+          }
           if (Date.now() - started > 120000) clearInterval(timer);
-          if (report || document.hidden || innerWidth === 0 || Date.now() - started < 12000) return;
+          if (report || document.hidden || innerWidth === 0) return;
+          if (!loadFailed && Date.now() - started < 12000) return;
           const s = document.querySelector('script[type="module"][src]');
-          const box = document.createElement('pre');
+          const box = document.createElement('div');
           box.id = 'console-boot-report';
           box.setAttribute('role', 'alert');
-          box.style.cssText = 'margin:16px;padding:12px;white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,monospace;border:1px solid #888;border-radius:6px';
-          box.textContent = [
-            'The Console did not start on this page (nothing drawn after ' + Math.round((Date.now() - started) / 1000) + ' s).',
-            'Take a screenshot before reloading.',
+          box.style.cssText = 'margin:16px;padding:12px;font:12px/1.5 ui-monospace,monospace;border:1px solid #888;border-radius:6px';
+          const head = document.createElement('div');
+          head.style.cssText = 'display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-weight:600;margin-bottom:8px';
+          head.textContent = loadFailed ? 'New version loading failed' : 'The Console did not start on this page';
+          const again = document.createElement('button');
+          again.type = 'button';
+          again.textContent = 'Reload';
+          again.style.cssText = 'font:inherit;padding:4px 12px;border:1px solid #888;border-radius:4px;background:transparent;color:inherit;cursor:pointer';
+          again.onclick = () => location.reload();
+          head.appendChild(again);
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'margin:0;white-space:pre-wrap;word-break:break-word;font:inherit';
+          const n = retries();
+          pre.textContent = [
+            loadFailed ? 'A script of this page did not load (often a deploy in progress).' : 'Nothing drawn after ' + Math.round((Date.now() - started) / 1000) + ' s.',
+            loadFailed && n < 2 ? 'Retrying by itself in 5 s (' + (n + 1) + ' of 2).' : 'Take a screenshot before reloading.',
             'build: ' + (s ? s.getAttribute('src') : 'unknown'),
             'at: ' + (location.hash || '/'),
             'viewport: ' + innerWidth + '×' + innerHeight + ' @' + devicePixelRatio + 'x',
             'when: ' + new Date().toISOString(),
             'errors: ' + (seen.length ? seen.slice(0, 5).join(' | ') : 'none seen'),
           ].join('\n');
+          box.append(head, pre);
           document.body.appendChild(box);
-        }, 3000);
+          if (loadFailed && n < 2) {
+            setTimeout(() => { try { sessionStorage.setItem(RETRY, String(n + 1)) } catch {} location.reload() }, 5000);
+          }
+        }, 1000);
       })();
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />

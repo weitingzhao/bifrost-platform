@@ -113,4 +113,49 @@ describe('index.html boot watchdog', () => {
     vi.advanceTimersByTime(9_000)
     expect(document.getElementById('console-boot-report')).toBeNull()
   })
+  // 2026-11-24 the Owner's phone could not open ops.bifrost.lan after a deploy: mid-rollout the new build's script
+  // answered 502 and the page stayed white with no way out but knowing to reload. A failed script is said at once,
+  // with a Reload; the page retries by itself, at most twice per tab, so a broken build cannot loop forever.
+  describe('when a script of the page failed to load', () => {
+    afterEach(() => sessionStorage.clear())
+    function bootFailing() {
+      vi.useFakeTimers()
+      document.body.innerHTML = '<div id="root"></div>'
+      const loc = { hash: '', reload: vi.fn() }
+      new Function('location', source ?? '')(loc)
+      const s = document.createElement('script')
+      s.src = '/assets/index-NEW.js'
+      document.body.appendChild(s)
+      s.dispatchEvent(new Event('error'))
+      return loc
+    }
+    it('says "New version loading failed" with a Reload at once, and retries by itself', () => {
+      const loc = bootFailing()
+      vi.advanceTimersByTime(1_000)
+      const report = document.getElementById('console-boot-report')
+      expect(report?.textContent).toContain('New version loading failed')
+      expect(report?.textContent).toContain('failed to load')
+      const button = report?.querySelector('button')
+      expect(button?.textContent).toBe('Reload')
+      button?.click()
+      expect(loc.reload).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(5_000)
+      expect(loc.reload).toHaveBeenCalledTimes(2)
+      expect(sessionStorage.getItem('console-boot-retries')).toBe('1')
+    })
+    it('stops retrying by itself after two tries in this tab', () => {
+      sessionStorage.setItem('console-boot-retries', '2')
+      const loc = bootFailing()
+      vi.advanceTimersByTime(10_000)
+      expect(document.getElementById('console-boot-report')?.textContent).toContain('Take a screenshot')
+      expect(loc.reload).not.toHaveBeenCalled()
+    })
+    it('forgets the tries once the page draws', () => {
+      sessionStorage.setItem('console-boot-retries', '1')
+      boot()
+      document.getElementById('root')!.appendChild(document.createElement('div'))
+      vi.advanceTimersByTime(1_000)
+      expect(sessionStorage.getItem('console-boot-retries')).toBeNull()
+    })
+  })
 })

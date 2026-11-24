@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
+import { moduleScriptSrc } from '@/pwa/consoleBuild'
 import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 
 /*
@@ -17,6 +18,25 @@ export function onDecisionPage(hash: string = window.location.hash): boolean {
 }
 
 export const IDLE_MS = 5 * 60_000
+
+/**
+ * Whether the newer build can actually load: its index.html answers and names a module script, and that script
+ * answers 200. While a rollout still splits requests between old and new replicas, the new page's script can 404 or
+ * 502, and a reload then lands on a white page (2026-11-24, the Owner's phone could not open ops.bifrost.lan after a
+ * deploy). Reload only when this is true; otherwise keep the page that works.
+ */
+export async function liveBuildReady(fetcher: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const index = await fetcher('/index.html', { cache: 'no-store' })
+    if (!index.ok) return false
+    const src = moduleScriptSrc(await index.text())
+    if (!src) return false
+    const script = await fetcher(src, { cache: 'no-store' })
+    return script.ok
+  } catch {
+    return false
+  }
+}
 const IDLE_CHECK_MS = 30_000
 
 /** Reload on its own only when a newer build is live and nobody has touched the page for `idleMs`. */
@@ -29,9 +49,9 @@ export function shouldAutoReload(stale: boolean, lastInputMs: number, nowMs: num
  * opened, not from when the newer build was found (箭10 2026-11-23): a page nobody has touched for ten minutes
  * reloads the moment a newer build is found; one touched a minute ago waits until it has sat five.
  */
-export function useIdleReloadWhenStale(opts: { reload?: () => void; now?: () => number; idleMs?: number } = {}): void {
+export function useIdleReloadWhenStale(opts: { reload?: () => void; now?: () => number; idleMs?: number; ready?: () => Promise<boolean> } = {}): void {
   const stale = useConsoleBuildDrift()
-  const { reload = () => window.location.reload(), now = Date.now, idleMs = IDLE_MS } = opts
+  const { reload = () => window.location.reload(), now = Date.now, idleMs = IDLE_MS, ready = () => liveBuildReady() } = opts
   const lastInput = useRef<number>(now())
   useEffect(() => {
     const touch = () => { lastInput.current = now() }
@@ -43,8 +63,11 @@ export function useIdleReloadWhenStale(opts: { reload?: () => void; now?: () => 
   }, [])
   useEffect(() => {
     if (!stale) return
+    let checking = false
     const check = () => {
-      if (!onDecisionPage() && shouldAutoReload(true, lastInput.current, now(), idleMs)) reload()
+      if (checking || onDecisionPage() || !shouldAutoReload(true, lastInput.current, now(), idleMs)) return
+      checking = true
+      void ready().then(ok => { checking = false; if (ok) reload() })
     }
     check()
     const timer = window.setInterval(check, Math.min(IDLE_CHECK_MS, idleMs))
@@ -55,7 +78,13 @@ export function useIdleReloadWhenStale(opts: { reload?: () => void; now?: () => 
 }
 
 /** The frame's notice while a newer build is live: "New version · Reload" (info: information, not a judgement). */
-export function useNewVersionNotice(): { word: 'info'; text: string; action: { label: string; onActivate: () => void } } | undefined {
+export function useNewVersionNotice(): { word: 'info' | 'warn'; text: string; action: { label: string; onActivate: () => void } } | undefined {
   const stale = useConsoleBuildDrift()
-  return stale && !onDecisionPage() ? { word: 'info', text: 'New version', action: { label: 'Reload', onActivate: () => window.location.reload() } } : undefined
+  const [notReady, setNotReady] = useState(false)
+  if (!stale || onDecisionPage()) return undefined
+  // A click reloads only when the newer build loads; otherwise the page stays and says so (liveBuildReady).
+  const onActivate = () => { void liveBuildReady().then(ok => { if (ok) window.location.reload(); else setNotReady(true) }) }
+  return notReady
+    ? { word: 'warn', text: 'New version not ready', action: { label: 'Retry', onActivate } }
+    : { word: 'info', text: 'New version', action: { label: 'Reload', onActivate } }
 }
