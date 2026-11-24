@@ -36,16 +36,16 @@ function BusClients() {
     <>
       {q.data?.receipts_error ? <p className="m-0 mb-2 text-sm text-destructive">Receipts not read: {q.data.receipts_error}</p> : null}
       <DenseDataTable aria-label="Bus clients">
-        <DenseTableHead>
+        <DenseTableHeader>
           <DenseTableHeadRow>
-            <DenseTableHeader>Client</DenseTableHeader>
-            <DenseTableHeader>Status</DenseTableHeader>
-            <DenseTableHeader>Kind</DenseTableHeader>
-            <DenseTableHeader>Last seen</DenseTableHeader>
-            <DenseTableHeader>Receipts 24h</DenseTableHeader>
-            <DenseTableHeader>Lost after</DenseTableHeader>
+            <DenseTableHead>Client</DenseTableHead>
+            <DenseTableHead>Status</DenseTableHead>
+            <DenseTableHead>Kind</DenseTableHead>
+            <DenseTableHead>Last seen</DenseTableHead>
+            <DenseTableHead>Receipts 24h</DenseTableHead>
+            <DenseTableHead>Lost after</DenseTableHead>
           </DenseTableHeadRow>
-        </DenseTableHead>
+        </DenseTableHeader>
         <DenseTableBody>
           {rows.length === 0 ? (
             <DenseTableRow><DenseTableCell colSpan={6}>No client declared or seen.</DenseTableCell></DenseTableRow>

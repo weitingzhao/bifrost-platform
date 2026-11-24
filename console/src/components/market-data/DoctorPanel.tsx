@@ -163,19 +163,22 @@ export function DoctorPanel() {
           {q.isFetching ? 'Running the doctor…' : 'No report yet.'}
         </p>
       ) : (
-        <DenseDataTable>
-          <DenseTableHead>
+        // Fixed widths for the short columns and a floor for the table, so Detail keeps a readable width; on a phone
+        // the table scrolls sideways in its frame instead of folding Detail into a tall ribbon (2026-11-23). The `!`
+        // outranks the workspace's phone floor (720px) and the header cells' max-w-0, which would undo both.
+        <DenseDataTable tableClassName="!min-w-[64rem]">
+          <DenseTableHeader>
             <DenseTableHeadRow>
-              <DenseTableHeader>Sev</DenseTableHeader>
-              <DenseTableHeader>Check</DenseTableHeader>
-              <DenseTableHeader>Slot</DenseTableHeader>
-              <DenseTableHeader>Expected</DenseTableHeader>
-              <DenseTableHeader>Actual</DenseTableHeader>
-              <DenseTableHeader>Detail</DenseTableHeader>
-              <DenseTableHeader>Fix</DenseTableHeader>
-              <DenseTableHeader>Action</DenseTableHeader>
+              <DenseTableHead className="w-20 !max-w-none">Sev</DenseTableHead>
+              <DenseTableHead className="w-36 !max-w-none">Check</DenseTableHead>
+              <DenseTableHead className="w-28 !max-w-none">Slot</DenseTableHead>
+              <DenseTableHead className="w-32 !max-w-none">Expected</DenseTableHead>
+              <DenseTableHead className="w-24 !max-w-none">Actual</DenseTableHead>
+              <DenseTableHead>Detail</DenseTableHead>
+              <DenseTableHead className="w-36 !max-w-none">Fix</DenseTableHead>
+              <DenseTableHead className="w-20 !max-w-none">Action</DenseTableHead>
             </DenseTableHeadRow>
-          </DenseTableHead>
+          </DenseTableHeader>
           <DenseTableBody>
             {findings.map(f => (
               <FindingRow

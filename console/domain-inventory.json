@@ -1192,6 +1192,7 @@
         "console/src/components/layout/OpsVerdictStrip.tsx",
         "console/src/components/layout/PageToolbar.tsx",
         "console/src/components/layout/SectionRefreshButton.tsx",
+        "console/src/components/layout/__tests__/denseTableHeadOrder.test.ts",
         "console/src/components/layout/collapseExpandAria.ts"
       ],
       "imports": [],
@@ -1199,7 +1200,10 @@
       "external_imports": [
         "@bifrost/ui",
         "lucide-react",
-        "react"
+        "node:fs",
+        "node:path",
+        "react",
+        "vitest"
       ],
       "source_inputs": [],
       "test_inputs": [],

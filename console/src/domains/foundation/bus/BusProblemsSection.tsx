@@ -46,15 +46,15 @@ export function BusProblemsSection() {
           </p>
         )}
         <DenseDataTable aria-label="Open problem cases">
-          <DenseTableHead>
+          <DenseTableHeader>
             <DenseTableHeadRow>
-              <DenseTableHeader>Kind</DenseTableHeader>
-              <DenseTableHeader>Subject</DenseTableHeader>
-              <DenseTableHeader>Receiver</DenseTableHeader>
-              <DenseTableHeader>Age</DenseTableHeader>
-              <DenseTableHeader>State</DenseTableHeader>
+              <DenseTableHead>Kind</DenseTableHead>
+              <DenseTableHead>Subject</DenseTableHead>
+              <DenseTableHead>Receiver</DenseTableHead>
+              <DenseTableHead>Age</DenseTableHead>
+              <DenseTableHead>State</DenseTableHead>
             </DenseTableHeadRow>
-          </DenseTableHead>
+          </DenseTableHeader>
           <DenseTableBody>
             {open.length === 0 ? (
               <DenseTableRow><DenseTableCell colSpan={5}>No open case.</DenseTableCell></DenseTableRow>
