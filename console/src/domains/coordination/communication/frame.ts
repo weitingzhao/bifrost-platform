@@ -13,11 +13,11 @@ import { cityHref } from '@/domains/owner/city/gen2/content/looks'
 /** Agents › the person in focus › the selected letter, by name; a request not in the loaded window says so. */
 export function crumbsOf(snapshot: CommunicationSnapshot, projection: CommunicationProjection | null): { label: string; href?: string }[] {
   const out: { label: string; href?: string }[] = [{ label: 'Agents', href: '#collaboration' }]
-  const name = (id?: string) => snapshot.members.find(m => m.id === id)?.label ?? id ?? 'Unknown member'
+  const name = (id?: string) => snapshot.members.find(m => m.id === id)?.label ?? id ?? 'Unknown'
   if (projection?.scope.member) out.push({ label: name(projection.scope.member) })
   if (!projection?.requested) return out
   const x = projection.resolved ? projection.exchanges.find(e => e.channel + ':' + e.id === projection.resolved) : undefined
-  return [...out, { label: x ? name(x.from) + ' → ' + name(x.to) : 'Not in loaded evidence' }]
+  return [...out, { label: x ? name(x.from) + ' → ' + name(x.to) : 'Letter not in view' }]
 }
 
 /** Live is the newest ledger read; a fixed cutoff is pinned at that cutoff. */

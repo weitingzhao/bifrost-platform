@@ -14,7 +14,10 @@ const members: Member[] = ([
 const times=['22:42:00','22:42:04','22:42:08','22:42:12','22:42:16']
 function Demo(){
   const [look,setLook]=useState(()=>window.location.hash.includes('console')?'console':'agents')
-  const [selected,setSelected]=useState<string>()
+  // ?select=message:demo-m-014&through=<ISO> reproduces a request arriving pinned before the letter (the Owner's 2026-11-24 phone case).
+  const query=new URLSearchParams(window.location.search)
+  const [selected,setSelected]=useState<string|undefined>(()=>query.get('select')??undefined)
+  const [through,setThrough]=useState(()=>query.get('through')??'')
   useEffect(()=>{const on=()=>setLook(window.location.hash.includes('console')?'console':'agents');window.addEventListener('hashchange',on);return()=>window.removeEventListener('hashchange',on)},[])
   const [step,setStep]=useState(0),[playing,setPlaying]=useState(false),[run,setRun]=useState(0)
   useEffect(()=>{if(!playing)return;const timer=setTimeout(()=>{setStep(s=>{if(s>=2)setPlaying(false);return Math.min(s+1,3)})},3200);return()=>clearTimeout(timer)},[playing,step])
@@ -27,7 +30,7 @@ function Demo(){
   const snapshot={version:1 as const,members:active,exchanges,coverage:{state:'ready' as const,updatedAt:`2026-11-22T${times[step]}Z`,note:'Illustrative scenario only. No platform requests. Work status, delivery and issue evidence are demonstration data.',truncated:false}}
   const controls=<><button onClick={()=>{setStep(0);setRun(r=>r+1);setPlaying(true)}}>{playing?'Restart':'Play sequence'}</button><button onClick={()=>setPlaying(p=>!p)} disabled={step>=3}>{playing?'Pause':'Resume'}</button><button onClick={()=>{setPlaying(false);setStep(4)}}>Show recovery</button><small>{['Request recorded · delivery unknown','Delivery recorded','ACK recorded','Request blocked · other work continues','Completion recorded'][step]}</small></>
   if(look==='console')return <main style={{fontFamily:'Arial,sans-serif',maxWidth:1400,margin:'0 auto',padding:24}}><header style={{display:'flex',justifyContent:'space-between'}}><h2>Communication records</h2><nav aria-label="Observation mode"><a href="#agents" style={button}>Agents</a> <a href="/#city" style={button}>City</a> <span>Console</span></nav></header><p>Illustrative scenario · same data, record view</p><WorkingStudio snapshot={snapshot} stationImage="/communication/station.png" ledgerOnly selectedId={selected} onSelected={setSelected}/></main>
-  return <AgentWorld snapshot={snapshot} stationImage="/communication/station.png" cityHref="/#city" glyphOf={d=>DOMAIN_GLYPH[d]} consoleHref="#console" selectedId={selected} onSelected={setSelected} notice="Design preview · illustrative data" controls={controls}/>
+  return <AgentWorld snapshot={snapshot} stationImage="/communication/station.png" cityHref="/#city" glyphOf={d=>DOMAIN_GLYPH[d]} consoleHref="#console" selectedId={selected} onSelected={setSelected} through={through} onThrough={setThrough} notice="Design preview · illustrative data" controls={controls}/>
 
 }
 const button={background:'#31464c',color:'#e2e9e5',border:'1px solid #496067',borderRadius:8,padding:'10px 14px',cursor:'pointer'}

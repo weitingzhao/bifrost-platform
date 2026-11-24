@@ -11,7 +11,7 @@ const snapshot={version:1 as const,coverage:{state:'ready' as const,note:'',trun
 it('names the selected letter by its parties and says when the request is not in the window', () => {
  expect(crumbsOf(snapshot, null)).toEqual([{label:'Agents',href:'#collaboration'}])
  expect(crumbsOf(snapshot, projectCommunication(snapshot.exchanges,'',{channel:'message',member:''},'message:m1')).at(-1)).toEqual({label:'Alice → Bob'})
- expect(crumbsOf(snapshot, projectCommunication(snapshot.exchanges,'',{channel:'message',member:''},'message:gone')).at(-1)).toEqual({label:'Not in loaded evidence'})
+ expect(crumbsOf(snapshot, projectCommunication(snapshot.exchanges,'',{channel:'message',member:''},'message:gone')).at(-1)).toEqual({label:'Letter not in view'})
  // 2026-11-23 World's rescore: the person in focus belongs in the crumbs too.
  expect(crumbsOf(snapshot, projectCommunication(snapshot.exchanges,'',{channel:'message',member:'a'},'message:m1')).map(c=>c.label)).toEqual(['Agents','Alice','Alice → Bob'])
 })
