@@ -85,7 +85,42 @@ func createdDue(a Approval, now time.Time) bool {
 	if a.InlineGPUShutdown && now.Sub(a.CreatedAt) < createdFallbackAfter {
 		return false
 	}
-	return a.Status == StatusPending && now.Before(a.ExpiresAt) && !reminderHeld(a, approvalnotify.KindCreated, now)
+	return a.Status == StatusPending && now.Before(a.ExpiresAt) && !createdHeld(a, now)
+}
+
+// A card's first notice that failed is tried again, spaced and a few times.
+// 2026-11-24 00:53-02:09Z: ntfy answered 429 to the first notice of #715,
+// #716, #718, #719, #720, #721; each was tried once (TD-286) and the Owner's
+// phone heard nothing until the 4-hour reminder.
+const (
+	createdRetryAfter = 2 * time.Minute
+	createdTries      = 3
+)
+
+// createdHeld: the first notice is out (or being sent), or its failures are
+// used up, or the last one is too recent to try again.
+func createdHeld(a Approval, now time.Time) bool {
+	failed := 0
+	var last time.Time
+	for _, d := range a.Deliveries {
+		if d.Kind != approvalnotify.KindCreated {
+			continue
+		}
+		switch {
+		case d.Result == deliveryClaimed:
+			if d.ClaimExpiresAt.After(now) {
+				return true
+			}
+		case d.Result == approvalnotify.ResultFailed:
+			failed++
+			if d.At.After(last) {
+				last = d.At
+			}
+		default:
+			return true
+		}
+	}
+	return failed >= createdTries || (failed > 0 && now.Sub(last) < createdRetryAfter)
 }
 
 // NotifyCreated sends the first notice of every waiting card that has none:
@@ -115,8 +150,9 @@ func (s *Service) deliverClaimed(ctx context.Context, kind string, rec Approval,
 	}
 	ds := noticeDeliveries(approvalnotify.Send(ctx, kind, noticeItem(rec), now))
 	evs := noticeAudit(rec.ID, ds)
-	// A card's first notice is tried once and its failure stays on the card
-	// (TD-286); a reminder is tried again on the next pass.
+	// A failed first notice stays on the card with its reason (TD-286) and is
+	// tried again after createdRetryAfter, at most createdTries times
+	// (createdHeld); a reminder is tried again on the next pass.
 	if allFailed(ds) && kind != approvalnotify.KindCreated {
 		if err := s.releaseReminder(rec.ID, kind, claimID); err != nil {
 			evs = append(evs, event{"approval.notify", rec.ID, approvalnotify.ResultFailed, "release reminder: " + err.Error()})

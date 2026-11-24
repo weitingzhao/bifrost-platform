@@ -128,3 +128,58 @@ func TestAFirstNoticeSaysTheCardAndKeepsItsFailure(t *testing.T) {
 		t.Fatalf("the first card has %d deliveries", n)
 	}
 }
+
+// 2026-11-24: ntfy answered 429 to six first notices in an hour and each was
+// tried once. A failed first notice is tried again after two minutes, three
+// times in all, and each failure stays on the card.
+func TestAFailedFirstNoticeIsTriedAgainSpaced(t *testing.T) {
+	f := relay(t)
+	f.mu.Lock()
+	f.fail = true
+	f.mu.Unlock()
+	a, _, _ := twoPods(t)
+	base := time.Now().UTC()
+	at := base
+	a.SetClock(func() time.Time { return at })
+	c := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-r"})
+	failedOf := func() int {
+		n := 0
+		for _, d := range deliveriesOf(t, a, c.Approval.ID) {
+			if d.Kind == "created" && d.Result == "failed" {
+				n++
+			}
+		}
+		return n
+	}
+	a.NotifyCreated(context.Background())
+	a.NotifyCreated(context.Background()) // too soon: not again
+	if n := failedOf(); n != 1 {
+		t.Fatalf("after two passes at once: %d failures", n)
+	}
+	at = base.Add(createdRetryAfter + time.Second)
+	a.NotifyCreated(context.Background())
+	at = base.Add(2*createdRetryAfter + 2*time.Second)
+	a.NotifyCreated(context.Background())
+	at = base.Add(3*createdRetryAfter + 3*time.Second)
+	a.NotifyCreated(context.Background()) // tries used up
+	if n := failedOf(); n != createdTries {
+		t.Fatalf("failures = %d, want %d", n, createdTries)
+	}
+	f.mu.Lock()
+	f.fail = false
+	f.mu.Unlock()
+	d := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-s"})
+	f.mu.Lock()
+	f.fail = true
+	f.mu.Unlock()
+	a.NotifyCreated(context.Background())
+	f.mu.Lock()
+	f.fail = false
+	f.mu.Unlock()
+	at = at.Add(createdRetryAfter + time.Second)
+	a.NotifyCreated(context.Background())
+	ds := deliveriesOf(t, a, d.Approval.ID)
+	if len(ds) != 2 || ds[1].Result != "accepted" {
+		t.Fatalf("a retry after the relay recovered: %+v", ds)
+	}
+}
