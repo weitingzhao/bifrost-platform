@@ -109,10 +109,24 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	if status == "" {
 		status = StatusPending
 	}
+	track := strings.TrimSpace(r.URL.Query().Get("track"))
+	if track != "" && track != TrackLaw && track != TrackDaily {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "track must be law or daily"})
+		return
+	}
 	list, code, body := s.list(status)
 	if code != http.StatusOK {
 		writeJSON(w, code, body)
 		return
+	}
+	if track != "" {
+		kept := list[:0:0]
+		for _, a := range list {
+			if TrackOf(a.Action) == track {
+				kept = append(kept, a)
+			}
+		}
+		list = kept
 	}
 	ids := make([]string, 0, len(list))
 	for _, a := range list {

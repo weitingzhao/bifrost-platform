@@ -44,15 +44,19 @@ type Approval struct {
 	// was approved. Empty until then.
 	ApprovedLine string `json:"approved_line,omitempty"`
 	// ApprovalLine is filled by public() for readers. It is not stored.
-	ApprovalLine string    `json:"approval_line,omitempty"`
-	Status       string    `json:"status"`
-	Reason       string    `json:"reason"`
-	Rollback     string    `json:"rollback,omitempty"`
-	Requester    string    `json:"requester"`
-	CreatedAt    time.Time `json:"created_at"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	DecidedAt    time.Time `json:"decided_at,omitempty"`
-	Channel      string    `json:"channel,omitempty"`
+	ApprovalLine string `json:"approval_line,omitempty"`
+	// Track is filled by public(): "law" for a change of law (law_amend),
+	// "daily" for every other card. Owner 2026-11-23: a change of law is
+	// approved through its own channel on Ops, apart from the daily cards.
+	Track     string    `json:"track,omitempty"`
+	Status    string    `json:"status"`
+	Reason    string    `json:"reason"`
+	Rollback  string    `json:"rollback,omitempty"`
+	Requester string    `json:"requester"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	DecidedAt time.Time `json:"decided_at,omitempty"`
+	Channel   string    `json:"channel,omitempty"`
 	// ConfirmedNumber is the number the approver repeated (confirm_number),
 	// stored when it matched: what an executor reads back to know the
 	// number was checked (landing grants, coordinator v3 §5.6 item 4).
@@ -183,5 +187,20 @@ func (a Approval) public() Approval {
 		a.Execution = &e
 	}
 	a.ApprovalLine = CanonicalApprovalLine(a)
+	a.Track = TrackOf(a.Action)
 	return a
+}
+
+// The two tracks of cards.
+const (
+	TrackLaw   = "law"
+	TrackDaily = "daily"
+)
+
+// TrackOf names the track of an action's cards.
+func TrackOf(action string) string {
+	if action == "law_amend" {
+		return TrackLaw
+	}
+	return TrackDaily
 }
