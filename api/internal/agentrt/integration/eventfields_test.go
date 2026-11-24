@@ -40,6 +40,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"plan_change_decided", "decision", "expired", "maybe"},
 		{"law_recorded", "op", "repeal", "rewrite"},
 		{"plan_step_judged", "grade", "部分", "差不多"},
+		{"plan_step_attributed", "category", "工具", "运气"},
 		{"mission_state_changed", "from", "awaiting_owner", "waiting"},
 		{"mission_state_changed", "to", "expired", "closed"},
 		{"artifact_put", "artifact_id", sha, "sha1:abc"},

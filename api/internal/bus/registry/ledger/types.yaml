@@ -73,6 +73,7 @@ types:
   - {type: plan_node_state_changed, domain: plan}
   - {type: plan_observation, domain: plan, note: "a plan verification observation; planstore (migration 0032, was a note with plan_observation; writer moves later)"}
   - {type: plan_observation_pass, domain: plan, note: "a plan verification pass; planstore (migration 0032, was a note with plan_observation_pass; writer moves later)"}
+  - {type: plan_step_attributed, domain: plan, note: "an attribution on a standard's plan step (类别 法|Agent|工具|没核, cause, destination), recorded with the audit line's note; planstore lawsview (migration 0046, 2026-11-24)"}
   - {type: plan_step_judged, domain: plan, note: "a conclusion on a standard's plan step (达到|部分|没达到|没核), recorded with the audit line's note; planstore lawsview (migration 0045, 2026-11-24)"}
   - {type: plan_step_marked_done, domain: plan, note: "a step marked done by hand; planstore (migration 0032, was a note with manual; writer moves later)"}
   - {type: plan_view_adopted, domain: plan, note: "a plan view adopted; planstore (migration 0032, was a note with plan_view; writer moves later)"}

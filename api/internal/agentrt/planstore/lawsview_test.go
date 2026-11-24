@@ -60,6 +60,7 @@ func TestLawsViewCountsConclusions(t *testing.T) {
 	post("a3c", law.Steps[1].Node, "结论 s2（补读数，结论不变：部分）｜标准版本 "+id)
 	post("a4", law.Steps[2].Node, "结论 s3：没核｜标准版本 "+id)
 	post("a5", law.Steps[3].Node, "归因 s4：类别 工具｜原因 none｜去向 修")
+	post("a6", law.Steps[0].Node, "归因 s1（更正，替换上一条）：类别 法｜原因：标准按层分，领域没有层｜去向 改标准开新票｜标准版本 "+id)
 	view, err = planstore.LawsView(ctx, w.rt)
 	ok(t, err)
 	for _, v := range view {
@@ -72,6 +73,16 @@ func TestLawsViewCountsConclusions(t *testing.T) {
 	}
 	if law.Steps[0].Grade != "达到" || law.Steps[0].Version != id || law.Steps[3].Grade != "" {
 		t.Fatalf("steps = %+v", law.Steps)
+	}
+	// The attributions, as data (2026-11-24, the audit line's page).
+	if a := law.Steps[3].Attribution; a == nil || a.Category != "工具" || a.Cause != "none" || a.Destination != "修" {
+		t.Fatalf("s4 attribution = %+v", a)
+	}
+	if a := law.Steps[0].Attribution; a == nil || a.Category != "法" || a.Cause != "标准按层分，领域没有层" || a.Version != id {
+		t.Fatalf("s1 attribution = %+v", a)
+	}
+	if law.Steps[1].Attribution != nil {
+		t.Fatalf("s2 has no attribution: %+v", law.Steps[1].Attribution)
 	}
 	for _, v := range view {
 		if v.Law.Law == "1" && (v.Item != "" || v.Counts != nil) {

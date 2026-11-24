@@ -3,6 +3,7 @@ package planstore
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,6 +28,9 @@ var judgementLine = regexp.MustCompile(`^\s*结论\s*(s[0-9A-Za-z_-]+)\s*(?:（[
 var versionRef = regexp.MustCompile(`标准版本\s*(appr_[0-9a-f]{16})`)
 
 func recordJudgement(ctx context.Context, tx pgx.Tx, root, step string, note int64, text string) error {
+	if err := recordAttribution(ctx, tx, root, step, note, text); err != nil {
+		return err
+	}
 	m := judgementLine.FindStringSubmatch(text)
 	if m == nil {
 		return nil
@@ -40,6 +44,41 @@ func recordJudgement(ctx context.Context, tx pgx.Tx, root, step string, note int
 	return err
 }
 
+// An attribution on a step (the audit line, 2026-11-24, for its page: the
+// category must be read as data, not parsed from text by the page):
+// 「归因 s4：类别 法|Agent|工具|没核｜原因 …｜去向 …｜标准版本 appr_…」, a
+// correction's parenthesis allowed after the standard as for a conclusion.
+var attributionLine = regexp.MustCompile(`^\s*归因\s*(s[0-9A-Za-z_-]+)\s*(?:（[^）]*）|\([^)]*\))?\s*[:：]\s*类别\s*(法|Agent|工具|没核)`)
+
+// attributionPart reads 「原因」 or 「去向」 up to the next 「｜」.
+func attributionPart(text, name string) string {
+	m := regexp.MustCompile(name + `\s*[:：]?\s*([^｜]*)`).FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+func recordAttribution(ctx context.Context, tx pgx.Tx, root, step string, note int64, text string) error {
+	m := attributionLine.FindStringSubmatch(text)
+	if m == nil {
+		return nil
+	}
+	body := map[string]any{"step": step, "standard": m[1], "category": m[2], "note_event_id": note}
+	if v := attributionPart(text, "原因"); v != "" {
+		body["cause"] = clip(v, 500)
+	}
+	if v := attributionPart(text, "去向"); v != "" {
+		body["destination"] = clip(v, 500)
+	}
+	if v := versionRef.FindStringSubmatch(text); v != nil {
+		body["version"] = v[1]
+	}
+	_, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "plan_step_attributed", Actor: "controller", PlanNode: step,
+		Cause: note, Body: body})
+	return err
+}
+
 // LawStep is one standard of a law as its plan step and latest judgement
 // stand.
 type LawStep struct {
@@ -47,6 +86,17 @@ type LawStep struct {
 	Title   string `json:"title"`
 	Grade   string `json:"grade,omitempty"` // 达到, 部分, 没达到, 没核; empty when not judged
 	Version string `json:"version,omitempty"`
+	// The latest attribution on the step, if any: 法, Agent, 工具 or 没核,
+	// with its cause, its destination and the version it was made under.
+	Attribution *StepAttribution `json:"attribution,omitempty"`
+}
+
+// StepAttribution is the audit line's latest attribution on a step.
+type StepAttribution struct {
+	Category    string `json:"category"`
+	Cause       string `json:"cause,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Version     string `json:"version,omitempty"`
 }
 
 // LawCounts are the three numbers of a law's standards.
@@ -76,6 +126,15 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 		judged, err := eventlog.LatestByKey(ctx, tx, "plan_step_judged", "step", time.Time{})
 		if err != nil {
 			return err
+		}
+		attributed, err := eventlog.LatestByKey(ctx, tx, "plan_step_attributed", "step", time.Time{})
+		if err != nil {
+			return err
+		}
+		attribution := map[string]*StepAttribution{}
+		for _, r := range attributed {
+			s := func(k string) string { v, _ := r.Body[k].(string); return v }
+			attribution[s("step")] = &StepAttribution{Category: s("category"), Cause: s("cause"), Destination: s("destination"), Version: s("version")}
 		}
 		grade := map[string]LawStep{}
 		for _, r := range judged {
@@ -107,6 +166,7 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 						if g, ok := grade[st.Node]; ok {
 							st.Grade, st.Version = g.Grade, g.Version
 						}
+						st.Attribution = attribution[st.Node]
 						switch st.Grade {
 						case "达到":
 							v.Counts.Reached++
