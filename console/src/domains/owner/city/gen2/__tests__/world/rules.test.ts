@@ -30,6 +30,17 @@ describe('the frame holds its rules on any content', () => {
     const t = good(); t.children = Array.from({ length: 5 }, (_, i) => p(`d${i}`, 'district', '8x8'))
     expect(rulesBroken({ tree: t }).join()).toMatch(/takes 320 cells/)
   })
+  // 2026-11-24, PROD: the hardware district's sheets were counted as one ground, so 272 cells of devices broke it
+  // whatever land it had. A district of 2 or 4 sheets holds a ground on each; each sheet keeps the ground's rules.
+  it('a district of several sheets holds a ground on each, and each sheet keeps the ground', () => {
+    const bs = (n: number, from = 0) => Array.from({ length: n }, (_, i) => ({ ...p(`b${from + i}`, 'building', '4x4'), sheet: from ? 1 : 0 }))
+    const two = p('town', 'town', '8x8', [p('u', 'district', '4x8', [...bs(16), ...bs(4, 16)])])
+    expect(rulesBroken({ tree: two })).toEqual([])
+    const over = p('town', 'town', '8x8', [p('u', 'district', '4x8', [...bs(16), ...bs(17, 16)])])
+    expect(rulesBroken({ tree: over }).join()).toMatch(/town\/u \(sheet 2 of 2\): holds 17 things/)
+    const one = p('town', 'town', '8x8', [p('u', 'district', '4x4', bs(17))])
+    expect(rulesBroken({ tree: one }).join()).toMatch(/town\/u: holds 17 things/)
+  })
   it('a fourth level, a wrong kind, a shared id, an unknown function are refused', () => {
     const t = good()
     t.children[0].children[0].children[0].children = [p('x', 'room', '1x1')]

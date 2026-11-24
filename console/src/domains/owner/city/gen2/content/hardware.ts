@@ -1,7 +1,7 @@
 import QUERIES from './hardwareQueries.json'
 import { facilityFor, HARDWARE_TOWN } from './binding'
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
-import { DISTRICT, encodePlan, fitsIn, GRID, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
+import { assign, DISTRICT, encodePlan, fitsIn, GRID, MAX_THINGS, planFor, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
 import type { Look, Meter, Place, State } from '@bifrost/ui/city/places'
 
 /**
@@ -109,7 +109,7 @@ const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
 const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p => p.labels?.[key] === value)?.value ?? null
 
 /** The district from what was read. A device the topology does not list is not drawn (RULES.md §2.2). */
-export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', units?: UnitReads): Place {
+export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', units?: UnitReads, maxSheets: Sheets = 1): Place {
   const P = r.prom
   const nodeOfIp = new Map((P.nodeIp ?? []).map(p => [p.labels?.internal_ip ?? '', p.labels?.node ?? '']))
   const zones = new Map<string, Zone>()
@@ -198,43 +198,74 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
     return building
   })
   numberDevices(devices)
-  // Its sheets, when the district grows past one (RULES.md: a district's sheets): by zone, computing first.
-  const ZONE_SHEET: Record<Zone, number> = { compute: 0, trading: 1, storage: 2, office: 3 }
-  for (const b of devices) { const z = zones.get(b.id); if (z) b.sheet = ZONE_SHEET[z] }
-  const placed = fitDevices(devices, zones)
+  // As many sheets as its devices need, up to the land the town has left (sheetDevices); Other only past that.
+  const placed = sheetDevices(devices, zones, maxSheets)
   if (placed.other) zones.set(OTHER_DEVICES, 'office')
   const shown = placed.other ? [...placed.kept, placed.other] : placed.kept
-  // The zoned plan, when it finds every device a plot; else none, and the engine lays them out itself.
-  const zoned = zonedArrangement(shown.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
-  const arrangement = shown.every(b => zoned.at[b.id]) ? zoned : undefined
+  // On one sheet, the zoned plan, when it finds every device a plot; else none, and the engine lays them out itself.
+  // On several, the engine lays each sheet out anew (places.ts onSheet), so no plan is given.
+  const zoned = placed.sheets === 1 ? zonedArrangement(shown.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! }))) : undefined
+  const arrangement = zoned && shown.every(b => zoned.at[b.id]) ? zoned : undefined
   // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
-  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: HARDWARE_TOWN, function: fn, ...(arrangement ? { arrangement } : {}), label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: shown }
+  return { id: 'utilities', kind: 'district', shape: SHEET_SHAPE[placed.sheets], style: HARDWARE_TOWN, function: fn, ...(arrangement ? { arrangement } : {}), label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: shown }
+}
+
+/** A district's sheets: 1, 2 or 4 (places.ts sheetCount), and the land each takes on the city. */
+export type Sheets = 1 | 2 | 4
+export const SHEET_SHAPE: Record<Sheets, Shape> = { 1: DISTRICT, 2: '4x8', 4: '8x8' }
+
+/**
+ * How many sheets the town can give the hardware: its ground less the land of the other districts, one each
+ * (2026-11-24: with 13 other domains the town has 64 cells left, room for a 4×8, two sheets).
+ */
+export function sheetsTheTownGives(otherDistricts: number): Sheets {
+  const free = GRID * GRID - otherDistricts * shapeArea(DISTRICT)
+  return free >= shapeArea('8x8') ? 4 : free >= shapeArea('4x8') ? 2 : 1
 }
 
 export const OTHER_DEVICES = 'other'
 
 /**
- * The devices as they fit the district's ground (2026-11-24, PROD: a new machine, win11-secondary, took the devices
- * to 272 cells on a ground of 256, and the engine refused the whole City). The district's size is the land the
- * Owner gives it on the city level, not ours to grow; so, as a district's buildings do (districtBuildings.ts), the
- * devices that fit stand, computing first, then trading, storage, the office; one 4×4 is kept for Other, and the
- * rest stand in one Other site that names them. Nothing is dropped.
+ * The devices on the district's sheets (2026-11-24, PROD: a new machine, win11-secondary, took the devices to 272
+ * cells, more than one sheet's 256, and the engine refused the whole City; then, contained, Utilities stood empty
+ * and the Owner could not find the servers). A district has 1, 2 or 4 sheets, each a 16×16 ground of at most 16
+ * things (RULES.md: a district's sheets); the devices take the fewest sheets that hold them all, computing first,
+ * then trading, storage, the office, each on the first sheet with room, up to `maxSheets` (the land the town has).
+ * Only what still does not fit stands in one Other site that names it. Nothing is dropped.
  */
-export function fitDevices(devices: Place[], zones: Map<string, Zone>): { kept: Place[]; other?: Place } {
-  const cells = (xs: Place[]) => xs.reduce((a, b) => a + shapeArea(b.shape as Shape), 0)
-  const ground = GRID * GRID
-  if (cells(devices) <= ground) return { kept: devices }
+export function sheetDevices(devices: Place[], zones: Map<string, Zone>, maxSheets: Sheets = 1): { sheets: Sheets; kept: Place[]; other?: Place } {
   const rank: Record<Zone, number> = { compute: 0, trading: 1, storage: 2, office: 3 }
   const order = [...devices].sort((a, b) => rank[zones.get(a.id) ?? 'office'] - rank[zones.get(b.id) ?? 'office'] || a.id.localeCompare(b.id))
-  const room = ground - shapeArea('4x4')
-  const kept: Place[] = []
-  for (const d of order) if (cells([...kept, d]) <= room) kept.push(d)
-  const rest = devices.filter(d => !kept.includes(d))
-  const other: Place = {
-    id: OTHER_DEVICES, kind: 'building', shape: '4x4', landmark: 'site', label: `Other · ${rest.length}`, dashboard: null, children: [],
-    question: `${rest.length} more device${rest.length === 1 ? '' : 's'} do not fit this district's ground: ${rest.map(d => d.label).join(', ')}. Give the district more land on the city level to see them.`,
+  const counts = ([1, 2, 4] as const).filter(n => n <= maxSheets)
+  for (const n of counts) {
+    const sheets: Place[][] = Array.from({ length: n }, () => [])
+    const rest: Place[] = []
+    for (const d of order) { const s = sheets.find(s => holds([...s, d])); if (s) s.push(d); else rest.push(d) }
+    if (rest.length && n !== counts[counts.length - 1]) continue
+    let other: Place | undefined
+    if (rest.length) {
+      // Room for the site itself: on the first sheet that takes one more 4×4, else the last device of the last sheet makes way.
+      const site = (k: number): Place => ({
+        id: OTHER_DEVICES, kind: 'building', shape: '4x4', landmark: 'site', label: `Other · ${k}`, dashboard: null, children: [], question: '',
+      })
+      while (!sheets.some(s => holds([...s, site(0)]))) rest.unshift([...sheets].reverse().find(s => s.length)!.pop()!)
+      other = site(rest.length)
+      other.question = `${rest.length} more device${rest.length === 1 ? '' : 's'} do not fit this district's ${n} sheet${n === 1 ? '' : 's'}: ${rest.map(d => d.label).join(', ')}. Give the district more land on the city level to see them.`
+      sheets.find(s => holds([...s, other!]))!.push(other)
+    }
+    const sheetOf = new Map(sheets.flatMap((s, i) => s.map(d => [d.id, i] as const)))
+    const kept = devices.filter(d => sheetOf.has(d.id))
+    for (const d of [...kept, ...(other ? [other] : [])]) { if (n > 1) d.sheet = sheetOf.get(d.id); else delete d.sheet }
+    return { sheets: n, kept, ...(other ? { other } : {}) }
   }
-  return { kept: devices.filter(d => kept.includes(d)), other }
+  return { sheets: 1, kept: devices }
+}
+
+/** One sheet holds these: at most 16 things, 256 cells, and a cut of its ground that gives each a plot. */
+function holds(items: Place[]): boolean {
+  if (items.length > MAX_THINGS) return false
+  if (items.reduce((a, b) => a + shapeArea(b.shape as Shape), 0) > GRID * GRID) return false
+  return assign(items, plotsOf(planFor(items))).homeless.length === 0
 }
 
 /**

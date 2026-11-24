@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { rulesBroken } from '@bifrost/ui/city/rules'
 import type { Place } from '@bifrost/ui/city/places'
-import { hardwareDistrict, hardwareRulesBroken, OTHER_DEVICES, type HardwareReads } from '../hardware'
+import { sheetsOf } from '@bifrost/ui/city/places'
+import { assign, planFor, plotsOf } from '@bifrost/ui/city/grid'
+import { hardwareDistrict, hardwareRulesBroken, OTHER_DEVICES, sheetsTheTownGives, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 
 // 2026-11-19, the Owner: the hardware district is the first domain to come in through the entry rules
@@ -127,26 +129,55 @@ describe('the units’ rooms in use', () => {
 })
 
 // 2026-11-24, PROD: a new machine (win11-secondary) took the devices to 272 cells on a ground of 256 and the engine
-// refused the whole City ("This content breaks the frame's rules"). The district's size is the land the Owner gives
-// it, so what does not fit stands in one Other site, named, and the City still draws.
+// refused the whole City ("This content breaks the frame's rules"); contained, Utilities then stood empty and the
+// Owner could not find the servers. The district now takes the sheets its devices need (1, 2 or 4, up to the land
+// the town has left); only what still does not fit stands in one Other site, named, and the City still draws.
 describe('more devices than one ground holds', () => {
   const extra = (id: string) => ({ ...reads.topology![0], id, label: id, grid: undefined })
-  const more = { ...reads, topology: [...reads.topology!, extra('extra-host-1'), extra('extra-host-2'), extra('extra-host-3')] } as unknown as HardwareReads
-  const big = hardwareDistrict(more)
-  it('keeps what fits, puts the rest in one Other site that names them, and breaks no rule', () => {
-    const cells = big.children.reduce((a, b) => a + (b.shape === '4x8' ? 32 : b.shape === '8x8' ? 64 : 16), 0)
-    expect(cells).toBeLessThanOrEqual(256)
-    const other = big.children.find(b => b.id === OTHER_DEVICES)!
-    expect(other.landmark).toBe('site')
-    const shownIds = new Set(big.children.map(b => b.id))
-    const missing = more.topology!.map(n => n.id).filter(id => !shownIds.has(id))
-    expect(missing.length).toBeGreaterThan(0)
-    for (const id of missing) expect(other.question).toContain(more.topology!.find(n => n.id === id)!.label ?? id)
-    const town: Place = { id: 'town', kind: 'town', shape: '8x8', label: 'City', question: '', dashboard: null, children: [big] }
+  const withExtra = (k: number) => ({ ...reads, topology: [...reads.topology!, ...Array.from({ length: k }, (_, i) => extra(`extra-host-${i + 1}`))] }) as unknown as HardwareReads
+  const townOf = (u: Place, others = 0): Place => ({ id: 'town', kind: 'town', shape: '8x8', label: 'City', question: '', dashboard: null,
+    children: [u, ...Array.from({ length: others }, (_, i) => ({ id: `d${i}`, kind: 'district' as const, shape: '4x4' as const, label: `d${i}`, question: '', dashboard: null, children: [] }))] })
+  const cells = (xs: Place[]) => xs.reduce((a, b) => a + (b.shape === '4x8' ? 32 : b.shape === '8x8' ? 64 : 16), 0)
+
+  it('takes a second sheet when the land allows: every device stands, each sheet keeps the ground, the town with 13 others draws', () => {
+    const more = withExtra(3)
+    const big = hardwareDistrict(more, 'system', '', undefined, sheetsTheTownGives(13))
+    expect(big.shape).toBe('4x8')
+    expect(big.children.some(b => b.id === OTHER_DEVICES)).toBe(false)
+    expect(big.children.map(b => b.id).sort()).toEqual(more.topology!.map(n => n.id).sort())
+    for (const s of sheetsOf(big)) {
+      expect(cells(s)).toBeLessThanOrEqual(256)
+      expect(assign(s, plotsOf(planFor(s))).homeless).toEqual([])
+    }
+    const town = townOf(big, 13)
     expect(rulesBroken({ tree: town })).toEqual([])
+    expect(assign(town.children, plotsOf(planFor(town.children))).homeless).toEqual([])
     expect(hardwareRulesBroken(big)).toEqual([])
   })
-  it('changes nothing while the devices fit', () => {
-    expect(d.children.some(b => b.id === OTHER_DEVICES)).toBe(false)
+
+  it('past the land it has, keeps what fits and puts the rest in one Other site that names them, breaking no rule', () => {
+    for (const [k, sheets] of [[3, 1], [40, 2]] as const) {
+      const more = withExtra(k)
+      const big = hardwareDistrict(more, 'system', '', undefined, sheets)
+      const other = big.children.find(b => b.id === OTHER_DEVICES)!
+      expect(other.landmark).toBe('site')
+      const shownIds = new Set(big.children.map(b => b.id))
+      const missing = more.topology!.map(n => n.id).filter(id => !shownIds.has(id))
+      expect(missing.length).toBeGreaterThan(0)
+      expect(other.label).toBe(`Other · ${missing.length}`)
+      for (const id of missing) expect(other.question).toContain(more.topology!.find(n => n.id === id)!.label ?? id)
+      expect(rulesBroken({ tree: townOf(big) })).toEqual([])
+      expect(hardwareRulesBroken(big)).toEqual([])
+    }
+  })
+
+  it('the land the town gives: 4 sheets with room for an 8×8, 2 for a 4×8, else 1', () => {
+    expect([sheetsTheTownGives(0), sheetsTheTownGives(12), sheetsTheTownGives(13), sheetsTheTownGives(14), sheetsTheTownGives(15)]).toEqual([4, 4, 2, 2, 1])
+  })
+
+  it('changes nothing while the devices fit one sheet: one 4×4, zoned, no Other', () => {
+    expect(d.shape).toBe('4x4')
+    expect(d.arrangement).toBeTruthy()
+    expect(d.children.some(b => b.id === OTHER_DEVICES || b.sheet != null)).toBe(false)
   })
 })

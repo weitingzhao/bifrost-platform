@@ -4,9 +4,9 @@ import { authedFetch } from '@/api/client'
 import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchDomainPage, fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
 import type { DomainHoldings, ReadDomain } from '@/domains/owner/city/gen2/content/domainOwns'
-import type { InsideRead } from '@/domains/owner/city/gen2/content/domainPlaces'
+import { COMPUTE, type InsideRead } from '@/domains/owner/city/gen2/content/domainPlaces'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
-import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
+import { hardwareDistrict, readHardware, sheetsTheTownGives } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
 import { GRAPH_REPO } from '@/domains/owner/city/gen2/content/techTree'
 import { tripsOf } from '@/domains/owner/city/gen2/content/traffic'
@@ -110,7 +110,9 @@ export function useCityContent(focus?: string | null, at?: string | null): CityC
     void rulers
     const d = reads.data
     const hw = d?.hardware.topology
-      ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units)
+      // As many sheets as the devices need, up to the land the other domains leave on the town (one 4×4 each).
+      ? hardwareDistrict(d.hardware, 'system', `Read every 30 s, the last at ${new Date(d.at).toLocaleTimeString()}.`, d.units,
+        sheetsTheTownGives(places.size - (places.has(COMPUTE) ? 1 : 0)))
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
