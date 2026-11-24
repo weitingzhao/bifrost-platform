@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { resolveConsoleHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 
 const LINKS: Record<EntryRouteId, readonly [string, string][]> = {
-  command: [['Inbox', '#command'], ['Decisions & questions', '#command?section=waiting'], ['Laws', '#command?section=laws'], ['History', '#records?tab=closed']],
+  command: [['Inbox', '#command'], ['Decisions & questions', '#command?section=waiting'], ['Laws', '#command?section=laws'], ['Audit conclusions', '#command?section=audit'], ['History', '#records?tab=closed']],
   crew: [['Capability evidence', '#crew?section=capability-evidence'], ['Laws, skills & tools', '#crew?section=instruments'], ['Rules & reference', '#crew?section=references']],
   work: [['Activity', '#work?section=activity'], ['Plan', '#work?section=plan'], ['Releases', '#releases'], ['Delivery boundaries', '#work?section=delivery-boundaries'], ['CI', '#work?section=ci'], ['History', '#records?tab=work'], ['Commit lineage', '#work?section=commit-lineage']],
   services: [['Overview', '#services'], ['Versions', '#services?section=versions'], ['Applications', '#services?section=applications'], ['Plugins', '#data?section=plugins'], ['Market data', '#data?section=market-data'], ['IB Flex', '#data?section=flex'], ['Research', '#data?section=research'], ['IB connectivity', '#ib']],

@@ -5129,6 +5129,7 @@
     {
       "path": "console/src/pages/shell/owner",
       "files": [
+        "console/src/pages/shell/owner/AuditConclusions.tsx",
         "console/src/pages/shell/owner/CrewInstruments.tsx",
         "console/src/pages/shell/owner/HarnessPreview.tsx",
         "console/src/pages/shell/owner/LastRead.tsx",
@@ -5146,6 +5147,7 @@
         "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
         "console/src/pages/shell/owner/__tests__/HarnessPreview.test.tsx",
         "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
+        "console/src/pages/shell/owner/__tests__/auditConclusionsModel.test.ts",
         "console/src/pages/shell/owner/__tests__/crewInstruments.test.tsx",
         "console/src/pages/shell/owner/__tests__/doneForYou.test.ts",
         "console/src/pages/shell/owner/__tests__/fixtures/pools-utc.json",
@@ -5159,6 +5161,7 @@
         "console/src/pages/shell/owner/__tests__/systemVerdictStrip.test.tsx",
         "console/src/pages/shell/owner/__tests__/useOwnerConsole.test.tsx",
         "console/src/pages/shell/owner/__tests__/yoursFromSources.test.tsx",
+        "console/src/pages/shell/owner/auditConclusionsModel.ts",
         "console/src/pages/shell/owner/dataTiles.ts",
         "console/src/pages/shell/owner/doneForYou.ts",
         "console/src/pages/shell/owner/lawRegisterModel.ts",

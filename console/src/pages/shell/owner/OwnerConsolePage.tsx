@@ -1,5 +1,6 @@
 import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
 import { LawRegister } from './LawRegister'
+import { AuditConclusions } from './AuditConclusions'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
 import { ServiceVersions } from '../services/ServiceVersions'
@@ -71,6 +72,8 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <OwnerWaiting />}
     {/* The register of laws (箭10 2026-11-24): its own entry on Command, beside what waits on him; a law card links here. */}
     {blocks.you && <DomainSection id="laws" label="Laws"><LawRegister /></DomainSection>}
+    {/* The audit's conclusions on those laws' standards (箭10 2026-11-24): what the audit found, beside the laws. */}
+    {blocks.you && <DomainSection id="audit" label="Audit conclusions"><AuditConclusions /></DomainSection>}
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}
