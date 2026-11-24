@@ -422,7 +422,7 @@
           {"method": "POST", "path": "/api/v1/questions/{id}/ack", "handler": "api/internal/questions.HandleAck", "consumers": ["mcp"]},
           {"method": "POST", "path": "/api/v1/questions/{id}/answer", "handler": "api/internal/questions.HandleAnswer", "consumers": ["console"]},
           {"method": "POST", "path": "/api/v1/questions/{id}/withdraw", "handler": "api/internal/questions.HandleWithdraw", "consumers": ["mcp"]},
-          {"method": "GET", "path": "/api/v1/readings/approvals", "handler": "api/internal/server.handleApprovalReadings", "consumers": ["console"]}
+          {"method": "GET", "path": "/api/v1/readings/approvals", "handler": "api/internal/server.handleApprovalReadings", "consumers": ["console", "mcp"]}
         ],
         "events": [
           {"type": "approval.card.created", "version": 1, "guarantee": "durable", "address": "ev.rocket.{env}.approval.card.created", "consumers": ["console", "card-created-notice"]},
@@ -443,6 +443,7 @@
           {"kind": "mcp_tool", "name": "apply_manifest", "routes": ["/api/v1/actuation/manifests/apply"]},
           {"kind": "mcp_tool", "name": "create_job_from_cronjob", "routes": ["/api/v1/actuation/jobs/from-cronjob"]},
           {"kind": "mcp_tool", "name": "delete_finished_jobs", "routes": ["/api/v1/actuation/jobs/delete-finished"]},
+          {"kind": "mcp_tool", "name": "get_approval_readings", "routes": ["/api/v1/readings/approvals"]},
           {"kind": "mcp_tool", "name": "get_question", "routes": ["/api/v1/questions/{id}"]},
           {"kind": "mcp_tool", "name": "get_request", "routes": ["/api/v1/approvals/{id}"]},
           {"kind": "mcp_tool", "name": "get_trust_matrix", "routes": ["/api/v1/agent/governance/trust-matrix"]},

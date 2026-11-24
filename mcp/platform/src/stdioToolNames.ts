@@ -69,6 +69,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_bus_states',
   'list_records',
   'get_evaluation_readings',
+  'get_approval_readings',
   'get_full_ci',
   'check_full_ci_landings',
   'request_unit_evidence',
