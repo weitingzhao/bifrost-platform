@@ -322,7 +322,7 @@ func (s *Service) List(ctx context.Context) ([]Record, error) {
 		}
 		// No row at all: a platform whose recorder has not filled its table.
 		if len(rows) > 0 {
-			sort.Slice(rows, func(i, j int) bool { return rows[i].CompletedAt.After(rows[j].CompletedAt) })
+			sortNewest(rows)
 			return rows, nil
 		}
 	}
@@ -343,7 +343,7 @@ func (s *Service) List(ctx context.Context) ([]Record, error) {
 		}
 		out = append(out, rec)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CompletedAt.After(out[j].CompletedAt) })
+	sortNewest(out)
 	return out, nil
 }
 
@@ -412,4 +412,16 @@ func listRunsOf(ctx context.Context, dyn dynamic.Interface, ns, selector string)
 		}
 		seen[options.Continue] = true
 	}
+}
+
+// sortNewest orders records newest first, and records completed at the same
+// time by run name, so the pages of GET /api/v1/releases?before= neither skip
+// nor repeat one.
+func sortNewest(recs []Record) {
+	sort.Slice(recs, func(i, j int) bool {
+		if !recs[i].CompletedAt.Equal(recs[j].CompletedAt) {
+			return recs[i].CompletedAt.After(recs[j].CompletedAt)
+		}
+		return recs[i].Run > recs[j].Run
+	})
 }
