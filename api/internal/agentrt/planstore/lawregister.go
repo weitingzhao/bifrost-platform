@@ -218,19 +218,34 @@ func lastLaw(ctx context.Context, tx pgx.Tx, n string) (Law, bool, error) {
 
 // TranscribeLaws records the table's rows the register does not hold as they
 // read, and returns how many it recorded. source names the file and commit.
-// A law an approved card changed is left as the card made it.
+// A law an approved card changed is left as the card made it. A row whose
+// number the register lacks is taken only while the register is empty (its
+// seed): from 2026-11-24 a new law comes only by a law_amend card, and
+// OWNER_LAW.md is rendered from the register (infra
+// scripts/laws/render_owner_law.py), not written by hand.
 func TranscribeLaws(ctx context.Context, db eventlog.DB, rows []LawRow, source string) (int, error) {
 	n := 0
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		if err := lockRegister(ctx, tx); err != nil {
 			return err
 		}
+		next, err := nextLawNumber(ctx, tx)
+		if err != nil {
+			return err
+		}
+		seeding := next == ""
 		for _, row := range rows {
 			prev, have, err := lastLaw(ctx, tx, row.Law)
 			if err != nil {
 				return err
 			}
 			if have && prev.Op != "transcribed" {
+				continue
+			}
+			// From 2026-11-24 a law is added only by an approved law_amend
+			// card: a number the register lacks is transcribed only into an
+			// empty register (its seed), never written in by hand later.
+			if !have && !seeding {
 				continue
 			}
 			if have && prev.SaidOn == row.SaidOn && prev.Text == row.Text && prev.Where == row.Where && prev.EnforcedBy == row.EnforcedBy &&

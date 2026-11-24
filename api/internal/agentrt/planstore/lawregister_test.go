@@ -65,6 +65,16 @@ func TestLawRegister(t *testing.T) {
 	if n, _ = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@b"); n != 0 {
 		t.Fatalf("an unchanged table transcribed %d again", n)
 	}
+	// 2026-11-24, the switch (charters/1-plan.md §7): once the register has
+	// laws, a row with a new number is not taken; a new law comes only by a
+	// law_amend card.
+	handAdded := append(append([]planstore.LawRow(nil), rows...), planstore.LawRow{Law: "9", SaidOn: "2026-11-24", Text: "written in by hand", Status: "未落"})
+	if n, _ = planstore.TranscribeLaws(ctx, w.rt, handAdded, "OWNER_LAW.md@hand"); n != 0 {
+		t.Fatalf("a hand-added law was transcribed (%d)", n)
+	}
+	if _, have, _ := planstore.CurrentLaw(ctx, w.rt, "9"); have {
+		t.Fatal("law 9 is in the register though no card added it")
+	}
 	if next, _ := planstore.NextLawNumber(ctx, w.rt); next != "3" {
 		t.Fatalf("next = %q, want 3", next)
 	}
