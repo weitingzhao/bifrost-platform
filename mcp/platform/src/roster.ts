@@ -10,11 +10,15 @@
  * is not used for this: it names a registered seat actor
  * (seat:chief_of_staff), a different thing.
  *
- * Read from the local checkout: a checkout older than the roster's last
- * change resolves to the old session, so the answer names the thread it
- * resolved to. Unread letters do not move when a seat changes session
+ * Read from infra's main, not the working tree (2026-11-24: the shared
+ * checkout was 131 commits behind, and roster:audit resolved three times to
+ * a session the seat had left; the letters were lost there). Each lookup
+ * fetches infra's main and reads the file from origin/main; only when that
+ * fails does it fall back to the working tree, and the answer says so
+ * (roster_source). Unread letters do not move when a seat changes session
  * (not done here).
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -51,7 +55,31 @@ export function resolveRoster(to: string, seats: readonly RosterSeat[]): { to: s
   return { to: `thread:${session}` }
 }
 
-/** The roster from the workspace root (the process's working directory, or BIFROST_WORKSPACE). */
-export function loadRoster(env: NodeJS.ProcessEnv = process.env, read: (p: string) => string = p => readFileSync(p, 'utf8')): RosterSeat[] {
-  return parseRoster(read(join(env.BIFROST_WORKSPACE?.trim() || process.cwd(), ROSTER_PATH)))
+const INFRA_DIR = 'bifrost-trade-infra'
+const ROSTER_IN_INFRA = 'agent-config/charters/seats.yaml'
+
+export type Git = (cwd: string, args: string[]) => string
+
+const runGit: Git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] })
+
+/**
+ * The roster and where it was read: infra's origin/main after a fetch, or,
+ * when git cannot give it, the workspace's working tree (which may be stale).
+ * The workspace root is the process's working directory, or BIFROST_WORKSPACE.
+ */
+export function loadRoster(
+  env: NodeJS.ProcessEnv = process.env,
+  read: (p: string) => string = p => readFileSync(p, 'utf8'),
+  git: Git = runGit,
+): { seats: RosterSeat[]; source: string } {
+  const root = env.BIFROST_WORKSPACE?.trim() || process.cwd()
+  const infra = join(root, INFRA_DIR)
+  try {
+    git(infra, ['fetch', '-q', 'origin', 'main'])
+    const text = git(infra, ['show', `origin/main:${ROSTER_IN_INFRA}`])
+    const sha = git(infra, ['rev-parse', '--short', 'origin/main']).trim()
+    return { seats: parseRoster(text), source: `${INFRA_DIR} origin/main@${sha}` }
+  } catch {
+    return { seats: parseRoster(read(join(root, ROSTER_PATH))), source: `${ROSTER_PATH} working tree (main could not be fetched; may be stale)` }
+  }
 }

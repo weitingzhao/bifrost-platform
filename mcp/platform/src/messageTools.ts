@@ -44,18 +44,23 @@ export interface SendInput {
  * An envelope when type is given (body becomes its text), a plain message otherwise. A roster:<seat>
  * address is resolved to the thread that sits the seat now (roster.ts), and the answer names it.
  */
-export async function send(input: SendInput, d: RuntimeDeps = defaultRuntimeDeps(), roster: () => RosterSeat[] = () => loadRoster()): Promise<unknown> {
+export async function send(
+  input: SendInput,
+  d: RuntimeDeps = defaultRuntimeDeps(),
+  roster: () => { seats: RosterSeat[]; source: string } = () => loadRoster(),
+): Promise<unknown> {
   if (input.to.startsWith(ROSTER_PREFIX)) {
     let seats: RosterSeat[]
+    let source: string
     try {
-      seats = roster()
+      ;({ seats, source } = roster())
     } catch (e) {
       return { error: `${input.to}: the roster cannot be read: ${e instanceof Error ? e.message : String(e)}` }
     }
     const r = resolveRoster(input.to, seats)
     if ('error' in r) return r
     const sent = await send({ ...input, to: r.to }, d, roster)
-    return sent && typeof sent === 'object' ? { ...(sent as Record<string, unknown>), resolved_to: r.to } : sent
+    return sent && typeof sent === 'object' ? { ...(sent as Record<string, unknown>), resolved_to: r.to, roster_source: source } : sent
   }
   if (input.type) {
     if (input.summary == null) return { error: 'a message with a type needs a summary (one line)' }

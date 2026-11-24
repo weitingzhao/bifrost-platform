@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseRoster, resolveRoster } from './roster.js'
+import { loadRoster, parseRoster, resolveRoster, type Git } from './roster.js'
 
 const roster = `version: 1
 seats:
@@ -20,4 +20,28 @@ test('roster:<seat> resolves to the thread that sits it', () => {
   assert.deepEqual(resolveRoster('roster:6-compute', seats), { to: 'thread:local_7dd39a39-1e0e-4878-b829-2e3f44d5589e' })
   assert.ok('error' in resolveRoster('roster:owner', seats))
   assert.ok('error' in resolveRoster('roster:12-audit', seats))
+})
+
+// 2026-11-24: the shared infra checkout was 131 commits behind main and
+// roster:audit resolved three times to the session the seat had left. The
+// roster is read from infra's origin/main after a fetch; the working tree is
+// only the fallback, and the answer says which was read.
+test('the roster is read from infra main, the working tree only when git fails', () => {
+  const env = { BIFROST_WORKSPACE: '/ws' } as NodeJS.ProcessEnv
+  const old = '  - {id: 12-audit, name: audit, session: local_old}\n'
+  const now = '  - {id: 12-audit, name: audit, session: local_new}\n'
+  const calls: string[][] = []
+  const git: Git = (cwd, args) => {
+    calls.push([cwd, ...args])
+    if (args[0] === 'show') return now
+    if (args[0] === 'rev-parse') return 'abc1234\n'
+    return ''
+  }
+  const fromMain = loadRoster(env, () => old, git)
+  assert.deepEqual(resolveRoster('roster:audit', fromMain.seats), { to: 'thread:local_new' })
+  assert.equal(fromMain.source, 'bifrost-trade-infra origin/main@abc1234')
+  assert.deepEqual(calls[0], ['/ws/bifrost-trade-infra', 'fetch', '-q', 'origin', 'main'])
+  const offline = loadRoster(env, () => old, () => { throw new Error('offline') })
+  assert.deepEqual(resolveRoster('roster:audit', offline.seats), { to: 'thread:local_old' })
+  assert.match(offline.source, /working tree .*may be stale/)
 })
