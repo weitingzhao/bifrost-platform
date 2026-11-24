@@ -51,6 +51,19 @@ type Group struct {
 type Day struct {
 	Day    string  `json:"day"`
 	Groups []Group `json:"groups"`
+	// ToOwner is every card of the day that reached the Owner, split by
+	// whether it should have (Owner 2026-11-18/19, laws 31 and 46: only a
+	// change of law and the six classes that stay his). Daily is the gap
+	// the approvals line closes to 0. Six is the requester's own claim
+	// (owner_class); drills are left out.
+	ToOwner ToOwner `json:"to_owner"`
+}
+
+// ToOwner lists request numbers, ascending.
+type ToOwner struct {
+	Law   []int `json:"law"`
+	Six   []int `json:"six"`
+	Daily []int `json:"daily"`
 }
 
 type Readings struct {
@@ -210,6 +223,26 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 	if !oldest.IsZero() {
 		out.Oldest = oldest.UTC().Format(time.RFC3339)
 	}
+	toOwner := map[string]*ToOwner{}
+	for _, a := range items {
+		if a.Drill || a.CreatedAt.IsZero() {
+			continue
+		}
+		d := a.CreatedAt.In(loc).Format("2006-01-02")
+		t := toOwner[d]
+		if t == nil {
+			t = &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}}
+			toOwner[d] = t
+		}
+		switch {
+		case approvals.TrackOf(a.Action) == approvals.TrackLaw:
+			t.Law = append(t.Law, a.Number)
+		case a.OwnerClass != "":
+			t.Six = append(t.Six, a.Number)
+		default:
+			t.Daily = append(t.Daily, a.Number)
+		}
+	}
 	days := map[string][]Group{}
 	for k, g := range groups {
 		for _, list := range []*[]int{&g.Requests, &g.Pending, &g.Rejected, &g.Expired, &g.Approved, &g.Executed, &g.Failed, &g.Unknown, &g.Waiting, &g.Drills} {
@@ -236,7 +269,14 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 			}
 			return list[i].Requester < list[j].Requester
 		})
-		out.Days = append(out.Days, Day{Day: day, Groups: list})
+		t := toOwner[day]
+		if t == nil {
+			t = &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}}
+		}
+		sort.Ints(t.Law)
+		sort.Ints(t.Six)
+		sort.Ints(t.Daily)
+		out.Days = append(out.Days, Day{Day: day, Groups: list, ToOwner: *t})
 	}
 	sort.Slice(out.Days, func(i, j int) bool { return out.Days[i].Day > out.Days[j].Day })
 	return out

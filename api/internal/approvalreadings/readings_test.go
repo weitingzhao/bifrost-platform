@@ -3,6 +3,7 @@ package approvalreadings
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,5 +109,29 @@ func readingsContract(t *testing.T, name string, value any) {
 	}
 	if !bytes.Equal(append(got, '\n'), want) {
 		t.Fatalf("readings contract %s changed: %s", name, got)
+	}
+}
+
+// Origin: the Owner, 2026-11-24 (approvals line, administration): only a
+// change of law and the six classes should reach him (laws 31, 46); the
+// rest is the gap, and the gap must come from the system, not a hand count
+// (law 47). The 11-24 hand count was 101 cards in 5 days, about 95 daily.
+func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-time.Hour)
+	items := []approvals.Approval{
+		{Number: 1, Action: "law_amend", Status: approvals.StatusExecuted, CreatedAt: at},
+		{Number: 2, Action: "owner_run_command", OwnerClass: "H5", Status: approvals.StatusExecuted, CreatedAt: at},
+		{Number: 3, Action: "apply_manifest", Status: approvals.StatusExecuted, CreatedAt: at},
+		{Number: 4, Action: "owner_run_command", Status: approvals.StatusPending, CreatedAt: at},
+		{Number: 5, Action: "cordon_node", Status: approvals.StatusPending, CreatedAt: at, Drill: true},
+	}
+	r := Compute(items, time.UTC, now)
+	if len(r.Days) != 1 {
+		t.Fatalf("days = %+v", r.Days)
+	}
+	got := r.Days[0].ToOwner
+	if fmt.Sprint(got.Law) != "[1]" || fmt.Sprint(got.Six) != "[2]" || fmt.Sprint(got.Daily) != "[3 4]" {
+		t.Fatalf("to_owner = %+v", got)
 	}
 }

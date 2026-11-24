@@ -15,6 +15,8 @@ export interface RequestActionInput {
   requester_thread?: string
   /** A drill: never approved, nothing runs (v4 §20.3 rule 8). */
   drill?: boolean
+  /** H1-H6: which of the six classes that stay the Owner's this request is; leave out otherwise. */
+  owner_class?: string
 }
 
 /** An approval is addressed by its id (appr_…) or its number (57 or #57). */
@@ -32,6 +34,7 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
     ...(input.work_id ? { work_id: input.work_id } : {}),
     ...(input.requester_thread ? { requester_thread: input.requester_thread } : {}),
     ...(input.drill === true ? { drill: true } : {}),
+    ...(input.owner_class ? { owner_class: input.owner_class } : {}),
   })
   return withApproveHint(created)
 }

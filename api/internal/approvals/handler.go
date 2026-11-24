@@ -56,6 +56,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Rollback          string         `json:"rollback"`
 		RequesterThread   string         `json:"requester_thread"`
 		WorkID            string         `json:"work_id"`
+		OwnerClass        string         `json:"owner_class"`
 		Drill             bool           `json:"drill"`
 		InlineGPUShutdown bool           `json:"inline_gpu_shutdown"`
 	}
@@ -76,6 +77,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Params:            body.Params,
 		Thread:            body.RequesterThread,
 		WorkID:            body.WorkID,
+		OwnerClass:        body.OwnerClass,
 		Drill:             body.Drill,
 		InlineGPUShutdown: body.InlineGPUShutdown,
 	})

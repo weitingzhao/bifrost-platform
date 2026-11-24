@@ -163,6 +163,9 @@ type createInput struct {
 	Params    map[string]any
 	Thread    string
 	WorkID    string
+	// OwnerClass names which of the six classes that stay the Owner's this
+	// request is (Approval.OwnerClass); empty for any other request.
+	OwnerClass string
 	// Drill: a request that is never approved (Approval.Drill).
 	Drill             bool
 	InlineGPUShutdown bool
@@ -181,6 +184,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	requester := strings.TrimSpace(in.Requester)
 	thread := strings.TrimSpace(in.Thread)
 	work := strings.TrimSpace(in.WorkID)
+	ownerClass := strings.TrimSpace(in.OwnerClass)
 	if action == "" {
 		return fail(400, "action is required")
 	}
@@ -192,6 +196,9 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	}
 	if work != "" && (len(work) > 40 || !workIDPattern.MatchString(work)) {
 		return fail(400, "work_id must look like W-n, TD-n or LANE-name")
+	}
+	if ownerClass != "" && SixClasses[ownerClass] == "" {
+		return fail(400, "owner_class must be one of H1-H6 (the six classes that stay the Owner's)")
 	}
 	act, ok := actions.ByID(action)
 	if !ok {
@@ -295,6 +302,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		Runner:            act.RunnerOf(norm),
 		RequesterThread:   thread,
 		WorkID:            work,
+		OwnerClass:        ownerClass,
 		Drill:             in.Drill,
 		InlineGPUShutdown: in.InlineGPUShutdown,
 	}

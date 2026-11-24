@@ -74,6 +74,11 @@ type Approval struct {
 	Runner          string `json:"runner,omitempty"`
 	RequesterThread string `json:"requester_thread,omitempty"`
 	WorkID          string `json:"work_id,omitempty"`
+	// OwnerClass is the requester's claim that this card is one of the six
+	// classes that stay the Owner's (SixClasses); empty for a daily card.
+	// Owner 2026-11-18/11-19 (laws 31, 46): only a change of law and the six
+	// classes should reach him; the readings count the rest as the gap.
+	OwnerClass string `json:"owner_class,omitempty"`
 	// Drill marks a request made to exercise the pages and the notices (v4
 	// §20.3 rule 8, §20.5 scenario 9; W-31 2.5 gap 2, Owner 2026-10-21): it
 	// is never approved (approve answers 409), so it never runs; it says so
@@ -189,6 +194,17 @@ func (a Approval) public() Approval {
 	a.ApprovalLine = CanonicalApprovalLine(a)
 	a.Track = TrackOf(a.Action)
 	return a
+}
+
+// SixClasses are the classes that stay the Owner's whatever the rules
+// (agent-config/CLAUDE.md; OWNER_LAW H1-H6).
+var SixClasses = map[string]string{
+	"H1": "trading and money",
+	"H2": "credentials and secrets",
+	"H3": "deleting or changing data",
+	"H4": "Trade PROD release",
+	"H5": "signed rules and the trust root",
+	"H6": "auto mode rules",
 }
 
 // The two tracks of cards.

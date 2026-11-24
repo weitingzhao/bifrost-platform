@@ -25,6 +25,10 @@ export type PlatformApprovalRecord = {
   runner?: string
   requester_thread?: string
   work_id?: string
+  /** H1-H6 when the requester says the card is one of the six classes that stay the Owner's. */
+  owner_class?: string
+  /** law (a change of law) or daily. */
+  track?: 'law' | 'daily'
   /** A drill: never approved, nothing runs (v4 §20.3 rule 8; W-31 2.5 gap 2). Unset on a request that is not one. */
   drill?: boolean
   inline_gpu_shutdown?: boolean
