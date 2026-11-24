@@ -2,6 +2,7 @@ package planstore_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,7 +95,7 @@ func TestLawCardMustMatchTheRegister(t *testing.T) {
 		}
 	}
 	add := map[string]any{"op": "add", "after": "x", "standards": std, "revert": "r", "frame": frame(2)}
-	if got := planstore.LawCardSummary(context.Background(), reg, add); got != "Law add: will become law 80" {
+	if got := planstore.LawCardSummary(context.Background(), reg, add); !strings.HasPrefix(got, "Law add: will become law 80") {
 		t.Fatalf("add summary = %q", got)
 	}
 	if err := planstore.CheckLawCard(context.Background(), fakeLookup(""), add); err == nil {
@@ -135,14 +136,20 @@ func TestLawCardRepealMany(t *testing.T) {
 	}
 }
 
-// 2026-11-24, the framework of laws v1 (Owner: 「挺好的，就按这个来」),
-// written as code so it does not drift: what each level needs, conflicts,
-// duplicates, dependencies and the parent are checked at creation.
+// 2026-11-24, the framework of laws v1, step by step (Owner: first a
+// framework that can hold good laws, then the laws in it, then enforcement
+// law by law): what the framework finds goes on the card as notes; only a
+// malformed frame or a conflict with a fundamental law refuses it.
 func TestLawCardFramework(t *testing.T) {
 	reg := fakeLookup("92")
+	ctx := context.Background()
 	std := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}
 	card := func(f map[string]any) map[string]any {
-		return map[string]any{"op": "add", "after": "a law", "standards": std, "revert": "repeal it", "frame": f}
+		c := map[string]any{"op": "add", "after": "a law", "standards": std, "revert": "repeal it"}
+		if f != nil {
+			c["frame"] = f
+		}
+		return c
 	}
 	with := func(level int, k string, v any) map[string]any {
 		f := frame(level)
@@ -153,47 +160,48 @@ func TestLawCardFramework(t *testing.T) {
 		}
 		return f
 	}
-	good := map[string]map[string]any{
-		"basic":                 card(frame(2)),
-		"domain under 90":       card(frame(3)),
-		"detail under 90":       card(map[string]any{"level": float64(4), "scope": "领域:plan", "subject": "计划", "modality": "允许", "executor": "legislation", "parent": "90"}),
-		"dao":                   card(map[string]any{"level": float64(0)}),
-		"duplicate, superseded": card(with(2, "subject", "审批")),
-		"duplicate, explained": card(func() map[string]any {
-			f := with(2, "subject", "审批")
-			f["distinct_from"] = "only for law cards"
-			return f
-		}()),
+	// Notes, not refusals.
+	notes := map[string]struct {
+		c    map[string]any
+		want string
+	}{
+		"no frame":               {card(nil), "没有框架字段"},
+		"basic without review":   {card(with(2, "review", nil)), "审计复核"},
+		"basic without evidence": {card(with(2, "evidence", nil)), "证据"},
+		"domain without parent":  {card(with(3, "parent", nil)), "上位法"},
+		"parent not above":       {card(with(2, "parent", "90")), "不比它高"},
+		"parent is material":     {card(with(3, "parent", "79")), "不是现行法"},
+		"unknown subject":        {card(with(2, "subject", "心情")), "主题表"},
+		"bad scope":              {card(with(2, "scope", "everywhere")), "格式"},
+		"fundamental by 自觉":      {card(with(1, "enforcement", "自觉")), "机器强制"},
+		"depends on repealed":    {card(with(2, "depends_on", []any{"5"})), "依存"},
+		"duplicate":              {card(with(2, "subject", "审批")), "重复"},
+		"not enforced":           {card(frame(2)), "未执行"},
+		"enforced":               {card(with(2, "enforce", "执行中")), "开始执法"},
 	}
-	good["duplicate, superseded"]["frame"].(map[string]any)["supersedes"] = []any{"90"}
-	for name, c := range good {
-		if err := planstore.CheckLawCard(context.Background(), reg, c); err != nil {
+	for name, c := range notes {
+		if err := planstore.CheckLawCard(ctx, reg, c.c); err != nil {
 			t.Errorf("%s refused: %v", name, err)
+			continue
+		}
+		if line := planstore.LawCardSummary(ctx, reg, c.c); !strings.Contains(line, c.want) {
+			t.Errorf("%s: the card's line %q does not say %q", name, line, c.want)
 		}
 	}
-	bad := map[string]map[string]any{
-		"no frame":                {"op": "add", "after": "a law", "standards": std, "revert": "r"},
-		"no level":                card(with(2, "level", nil)),
-		"level 9":                 card(with(2, "level", float64(9))),
-		"basic without standards": {"op": "add", "after": "a law", "revert": "r", "frame": frame(2)},
-		"basic without review":    card(with(2, "review", nil)),
-		"review not 可量":           card(with(2, "review", map[string]any{"by": "audit", "at": "x", "verdict": "量不了"})),
-		"basic without evidence":  card(with(2, "evidence", nil)),
-		"domain without parent":   card(with(3, "parent", nil)),
-		"parent not above":        card(with(2, "parent", "90")),
-		"parent is material":      card(with(3, "parent", "79")),
-		"unknown subject":         card(with(2, "subject", "心情")),
-		"bad scope":               card(with(2, "scope", "everywhere")),
-		"bad modality":            card(with(2, "modality", "最好")),
-		"fundamental by 自觉":       card(with(1, "enforcement", "自觉")),
-		"depends on repealed":     card(with(2, "depends_on", []any{"5"})),
-		"conflict with 91":        card(func() map[string]any { f := with(2, "subject", "安全"); f["modality"] = "允许"; return f }()),
-		"duplicate, unexplained":  card(with(2, "subject", "审批")),
-		"supersedes repealed":     card(with(2, "supersedes", []any{"5"})),
-		"bad expires_on":          card(with(2, "expires_on", "next week")),
+	// A complete frame with no finding has only the enforcement note.
+	if n := planstore.LawCardNotes(ctx, reg, card(frame(2))); len(n) != 1 {
+		t.Errorf("a complete frame has notes %v", n)
 	}
-	for name, c := range bad {
-		if err := planstore.CheckLawCard(context.Background(), reg, c); err == nil {
+	// The integrity: a malformed frame, or loosening a fundamental law.
+	refused := map[string]map[string]any{
+		"level 9":                card(with(2, "level", float64(9))),
+		"bad modality":           card(with(2, "modality", "最好")),
+		"bad enforce":            card(with(2, "enforce", "maybe")),
+		"bad expires_on":         card(with(2, "expires_on", "next week")),
+		"loosens fundamental 91": card(func() map[string]any { f := with(2, "subject", "安全"); f["modality"] = "允许"; return f }()),
+	}
+	for name, c := range refused {
+		if err := planstore.CheckLawCard(ctx, reg, c); err == nil {
 			t.Errorf("%s accepted", name)
 		}
 	}

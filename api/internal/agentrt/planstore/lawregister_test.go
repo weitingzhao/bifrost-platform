@@ -180,6 +180,10 @@ func TestLawFrameRecorded(t *testing.T) {
 			Supersedes: []string{"1"}, Review: &planstore.LawReview{By: "audit", At: "2026-11-24T10:00Z", Verdict: "可量"}}}
 	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{card})
 	ok(t, err)
+	// Enacted, not enforced: in the register, not in the plan.
+	if n := w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE strpos(title, $1) > 0`, id); n != 0 {
+		t.Fatalf("a law not enforced has %d plan nodes", n)
+	}
 	l3, _, err := planstore.CurrentLaw(ctx, w.rt, "3")
 	ok(t, err)
 	if l3.Frame == nil || l3.Frame.Level == nil || *l3.Frame.Level != 2 || l3.Frame.Subject != "计划" || l3.Frame.Review == nil || l3.Frame.Review.Verdict != "可量" {
@@ -195,4 +199,24 @@ func TestLawFrameRecorded(t *testing.T) {
 		t.Fatalf("states = %v", state)
 	}
 	w.chainHolds(t, "law:1")
+
+	// Enforcement turned on by a later card: the law goes into the plan.
+	on := "appr_00000000000000e2"
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "card:" + on, Type: "approval.card.executed", Actor: "controller",
+			Body: map[string]any{"id": on, "card": "#402", "subject": "#402", "key": "#402", "number": 402, "action": "law_amend",
+				"status": "executed", "ref": "/api/v1/approvals/" + on, "change": "executed"}})
+		return err
+	}))
+	enforced := *card.Frame
+	enforced.Supersedes, enforced.Enforce = nil, planstore.EnforceOn
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{{ApprovalID: on, Number: 402, Op: "amend", Law: "3", Before: "a framed law",
+		After: "a framed law", Standards: card.Standards, Frame: &enforced}})
+	ok(t, err)
+	if n := w.count(t, `SELECT count(*) FROM agentrt.plan_node WHERE node_kind = 'item' AND strpos(title, $1) > 0`, on); n != 1 {
+		t.Fatalf("an enforced law has %d plan items, want 1", n)
+	}
+	if l, _, _ := planstore.CurrentLaw(ctx, w.rt, "3"); l.Frame == nil || l.Frame.Enforce != planstore.EnforceOn || l.Version != 2 {
+		t.Fatalf("law 3 after enforcement = %+v", l)
+	}
 }

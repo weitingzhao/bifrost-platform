@@ -109,6 +109,12 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 				c.Law = law
 			}
 		}
+		// Only an enforced law goes into the plan to be measured: a framed
+		// law enacted but not enforced, and a batch repeal, do not. A card
+		// from before the framework (no frame) keeps its item.
+		if c.Op == "repeal_many" || (c.Frame != nil && c.Frame.Enforce != EnforceOn) {
+			continue
+		}
 		ok, err := recordLaw(ctx, db, c)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("law_amend %s: %w", c.ApprovalID, err))

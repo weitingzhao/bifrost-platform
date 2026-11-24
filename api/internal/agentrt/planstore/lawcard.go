@@ -201,18 +201,15 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 	if reg.Current == nil || reg.Next == nil {
 		return errors.New("law_amend: the register of laws is not available here; no card without it")
 	}
-	// The framework (lawframework.go): a new version of a law carries what its
-	// level asks and does not bring in a conflict, an unexplained duplicate, a
-	// missing dependency or a parent that is not above it.
+	// The framework (lawframework.go): its findings are notes on the card
+	// (LawCardSummary); only a malformed frame or a conflict with a
+	// fundamental law refuses it.
 	if la.Op == "add" || la.Op == "amend" {
-		if err := checkFrameShape(la.Frame, len(la.Standards)); err != nil {
-			return err
-		}
 		self := ""
 		if la.Op == "amend" {
 			self = la.Law
 		}
-		if err := checkFrameAgainst(ctx, reg, self, la.Frame); err != nil {
+		if _, err := FrameNotes(ctx, reg, self, la.Frame, len(la.Standards)); err != nil {
 			return err
 		}
 	}
@@ -263,13 +260,17 @@ func checkInForce(ctx context.Context, reg LawLookup, op, n, before string) erro
 func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) string {
 	op, _ := params["op"].(string)
 	law, _ := params["law"].(string)
-	if op == "add" {
-		if reg.Next != nil {
-			if next, err := reg.Next(ctx); err == nil && next != "" {
-				return "Law add: will become law " + next
+	if op == "add" || op == "amend" {
+		line := strings.TrimSpace("Law " + op + " " + law)
+		if op == "add" {
+			line = "Law add"
+			if reg.Next != nil {
+				if next, err := reg.Next(ctx); err == nil && next != "" {
+					line = "Law add: will become law " + next
+				}
 			}
 		}
-		return "Law add"
+		return line + lawCardNoteLine(ctx, reg, params)
 	}
 	if op == "repeal_many" {
 		if la, err := ReadLawAmend(params); err == nil {
@@ -282,4 +283,32 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		return "Law repeal (several)"
 	}
 	return strings.TrimSpace("Law " + op + " " + law)
+}
+
+// LawCardNotes is what the framework finds about a card (FrameNotes), for
+// the card's line; nil for a card that is not an add or an amend.
+func LawCardNotes(ctx context.Context, reg LawLookup, params map[string]any) []string {
+	la, err := ReadLawAmend(params)
+	if err != nil || (la.Op != "add" && la.Op != "amend") {
+		return nil
+	}
+	self := ""
+	if la.Op == "amend" {
+		self = la.Law
+	}
+	notes, _ := FrameNotes(ctx, reg, self, la.Frame, len(la.Standards))
+	if la.Frame != nil && la.Frame.Enforce == EnforceOn {
+		notes = append(notes, "批了即开始执法：进计划、审计量、接检查")
+	} else if la.Frame != nil {
+		notes = append(notes, "批了只立法，未执行")
+	}
+	return notes
+}
+
+func lawCardNoteLine(ctx context.Context, reg LawLookup, params map[string]any) string {
+	notes := LawCardNotes(ctx, reg, params)
+	if len(notes) == 0 {
+		return ""
+	}
+	return clip(" ｜框架："+strings.Join(notes, "；"), 400)
 }

@@ -139,7 +139,7 @@ func frameBody(f *LawFrame) map[string]any {
 	}
 	for k, v := range map[string]string{"scope": f.Scope, "subject": f.Subject, "modality": f.Modality, "condition": f.Condition,
 		"parent": f.Parent, "distinct_from": f.DistinctFrom, "executor": f.Executor, "enforcement": f.Enforcement,
-		"evidence": f.Evidence, "expires_on": f.ExpiresOn} {
+		"evidence": f.Evidence, "expires_on": f.ExpiresOn, "enforce": f.Enforce} {
 		if v != "" {
 			m[k] = v
 		}

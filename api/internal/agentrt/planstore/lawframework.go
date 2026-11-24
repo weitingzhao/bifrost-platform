@@ -24,6 +24,16 @@ import (
 // within a higher law). Three states: 现行 (in force), 素材 (raw material:
 // what was said, kept with its source, not executed: every transcribed row
 // starts here), 废止.
+//
+// Step by step (Owner 2026-11-24: first a framework that can hold good laws,
+// in the product; then the laws put into it with how each is enforced and
+// judged, not enforced yet; then enforcement law by law): the framework's
+// checks are notes on the card the Owner reads when he approves it, not
+// refusals. Only three things refuse a card, the register's integrity: a
+// law changes only by a card (law_amend itself), its text before matches
+// the register (CheckLawCard), and nothing loosens a fundamental law (a
+// conflict with a level 1 law in force). How hard each rule is enforced
+// follows the project's stage, decided law by law.
 
 // The levels.
 const (
@@ -32,6 +42,12 @@ const (
 	LevelBasic
 	LevelDomain
 	LevelDetail
+)
+
+// Whether a law is enforced.
+const (
+	EnforceOff = "未执行"
+	EnforceOn  = "执行中"
 )
 
 // The states of a law.
@@ -67,20 +83,26 @@ type LawReview struct {
 
 // LawFrame is what the framework asks of a law beyond its text and standards.
 type LawFrame struct {
-	Level        *int       `json:"level,omitempty"`
-	Scope        string     `json:"scope,omitempty"`
-	Subject      string     `json:"subject,omitempty"`
-	Modality     string     `json:"modality,omitempty"`
-	Condition    string     `json:"condition,omitempty"`
-	Parent       string     `json:"parent,omitempty"`
-	DependsOn    []string   `json:"depends_on,omitempty"`
-	Supersedes   []string   `json:"supersedes,omitempty"`
-	DistinctFrom string     `json:"distinct_from,omitempty"`
-	Executor     string     `json:"executor,omitempty"`
-	Enforcement  string     `json:"enforcement,omitempty"` // the check that enforces it, or 自觉
-	Evidence     string     `json:"evidence,omitempty"`
-	ExpiresOn    string     `json:"expires_on,omitempty"` // a stage law's last day, YYYY-MM-DD
-	Review       *LawReview `json:"review,omitempty"`
+	Level        *int     `json:"level,omitempty"`
+	Scope        string   `json:"scope,omitempty"`
+	Subject      string   `json:"subject,omitempty"`
+	Modality     string   `json:"modality,omitempty"`
+	Condition    string   `json:"condition,omitempty"`
+	Parent       string   `json:"parent,omitempty"`
+	DependsOn    []string `json:"depends_on,omitempty"`
+	Supersedes   []string `json:"supersedes,omitempty"`
+	DistinctFrom string   `json:"distinct_from,omitempty"`
+	Executor     string   `json:"executor,omitempty"`
+	Enforcement  string   `json:"enforcement,omitempty"` // the check that enforces it, or 自觉
+	Evidence     string   `json:"evidence,omitempty"`
+	ExpiresOn    string   `json:"expires_on,omitempty"` // a stage law's last day, YYYY-MM-DD
+	// Enforce is whether the law is being enforced: 未执行 (the default:
+	// enacted, how it is enforced and judged is set, nothing is enforced yet)
+	// or 执行中 (it is in the plan, the audit line measures it, its checks
+	// run). It turns on one law at a time, by a card (Owner 2026-11-24:
+	// frame first, then the laws, then enforcement law by law).
+	Enforce string     `json:"enforce,omitempty"`
+	Review  *LawReview `json:"review,omitempty"`
 }
 
 // readLawFrame reads the card's frame param; nil when the card has none.
@@ -105,7 +127,7 @@ func readLawFrame(raw any) (*LawFrame, error) {
 	}
 	f := &LawFrame{Scope: s("scope"), Subject: s("subject"), Modality: s("modality"), Condition: s("condition"), Parent: s("parent"),
 		DependsOn: list("depends_on"), Supersedes: list("supersedes"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
-		Enforcement: s("enforcement"), Evidence: s("evidence"), ExpiresOn: s("expires_on")}
+		Enforcement: s("enforcement"), Evidence: s("evidence"), ExpiresOn: s("expires_on"), Enforce: s("enforce")}
 	switch v := m["level"].(type) {
 	case float64:
 		n := int(v)
@@ -122,61 +144,6 @@ func readLawFrame(raw any) (*LawFrame, error) {
 		f.Review = &LawReview{By: g("by"), At: g("at"), Verdict: g("verdict"), Note: g("note")}
 	}
 	return f, nil
-}
-
-// checkFrameShape checks what a frame must carry at its level, before any
-// other law is read.
-func checkFrameShape(f *LawFrame, standards int) error {
-	if f == nil || f.Level == nil {
-		return errors.New("law_amend: the framework asks every new version of a law for a frame with its level (0 道, 1 根本法, 2 基本法, 3 领域法, 4 细则)")
-	}
-	lv := *f.Level
-	if lv < LevelDao || lv > LevelDetail {
-		return fmt.Errorf("law_amend: level %d is not 0 to 4", lv)
-	}
-	var miss []string
-	need := func(ok bool, name string) {
-		if !ok {
-			miss = append(miss, name)
-		}
-	}
-	if lv >= LevelFundamental {
-		need(f.Scope != "", "scope")
-		need(f.Subject != "", "subject")
-		need(f.Modality != "", "modality")
-		need(f.Executor != "", "executor")
-	}
-	if lv >= LevelFundamental && lv <= LevelDomain {
-		need(f.Condition != "", "condition")
-		need(f.Enforcement != "", "enforcement")
-		need(f.Evidence != "", "evidence")
-		need(standards > 0, "standards")
-		need(f.Review != nil && f.Review.By != "" && f.Review.At != "" && f.Review.Verdict == "可量", "review (the audit line's review, verdict 可量)")
-	}
-	if lv >= LevelDomain {
-		need(f.Parent != "", "parent")
-	}
-	if len(miss) > 0 {
-		return fmt.Errorf("law_amend: a level %d law needs %s", lv, strings.Join(miss, ", "))
-	}
-	if f.Scope != "" && !lawScope.MatchString(f.Scope) {
-		return fmt.Errorf("law_amend: scope %q is not 全系统, 域:Trade|Research|Ops, 领域:<id>, 环境:PROD|STG|DEV or 动作:<kind>", f.Scope)
-	}
-	if f.Subject != "" && !slices.Contains(LawSubjects, f.Subject) {
-		return fmt.Errorf("law_amend: subject %q is not in the subject list %v", f.Subject, LawSubjects)
-	}
-	if f.Modality != "" && !slices.Contains(lawModalities, f.Modality) {
-		return fmt.Errorf("law_amend: modality %q is not one of %v", f.Modality, lawModalities)
-	}
-	if lv == LevelFundamental && f.Enforcement == "自觉" {
-		return errors.New("law_amend: a fundamental law (level 1) is enforced by a machine, not 自觉")
-	}
-	if f.ExpiresOn != "" {
-		if _, err := time.Parse("2006-01-02", f.ExpiresOn); err != nil {
-			return fmt.Errorf("law_amend: expires_on %q is not YYYY-MM-DD", f.ExpiresOn)
-		}
-	}
-	return nil
 }
 
 // LawState is a law's state in the framework: 废止 when repealed or a stage
@@ -197,16 +164,73 @@ func LawState(l Law, today time.Time) string {
 	return StateInForce
 }
 
-// checkFrameAgainst checks a new version of law self (empty for an add)
-// against the register as it stands: its parent, what it depends on, what it
-// supersedes, and conflicts and duplicates on its scope and subject.
-func checkFrameAgainst(ctx context.Context, reg LawLookup, self string, f *LawFrame) error {
+// FrameNotes says what the framework finds about a new version of law self
+// (empty for an add): what its level still lacks, a parent not above it, a
+// dependency or superseded law that is not there, a duplicate or a conflict
+// on its scope and subject. The notes go on the card; they refuse nothing.
+// The error is the one thing that refuses: a malformed frame (a level, a
+// modality, an enforcement state or a date out of range) or a conflict with
+// a fundamental law in force.
+func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, standards int) ([]string, error) {
+	if f == nil || f.Level == nil {
+		return []string{"没有框架字段（层级等）：批了也只算素材，不是现行法"}, nil
+	}
+	lv := *f.Level
+	if lv < LevelDao || lv > LevelDetail {
+		return nil, fmt.Errorf("law_amend: level %d is not 0 to 4", lv)
+	}
+	if f.Modality != "" && !slices.Contains(lawModalities, f.Modality) {
+		return nil, fmt.Errorf("law_amend: modality %q is not one of %v", f.Modality, lawModalities)
+	}
+	if f.Enforce != "" && f.Enforce != EnforceOff && f.Enforce != EnforceOn {
+		return nil, fmt.Errorf("law_amend: enforce %q is not %s or %s", f.Enforce, EnforceOff, EnforceOn)
+	}
+	if f.ExpiresOn != "" {
+		if _, err := time.Parse("2006-01-02", f.ExpiresOn); err != nil {
+			return nil, fmt.Errorf("law_amend: expires_on %q is not YYYY-MM-DD", f.ExpiresOn)
+		}
+	}
+	var notes []string
+	var miss []string
+	need := func(ok bool, name string) {
+		if !ok {
+			miss = append(miss, name)
+		}
+	}
+	if lv >= LevelFundamental {
+		need(f.Scope != "", "范围")
+		need(f.Subject != "", "主题")
+		need(f.Modality != "", "规定方式")
+		need(f.Executor != "", "执行者")
+	}
+	if lv >= LevelFundamental && lv <= LevelDomain {
+		need(f.Condition != "", "适用条件")
+		need(f.Enforcement != "", "强制方式")
+		need(f.Evidence != "", "证据")
+		need(standards > 0, "标准")
+		need(f.Review != nil && f.Review.By != "" && f.Review.At != "" && f.Review.Verdict == "可量", "审计复核（可量）")
+	}
+	if lv >= LevelDomain {
+		need(f.Parent != "", "上位法")
+	}
+	if len(miss) > 0 {
+		notes = append(notes, fmt.Sprintf("第 %d 层还缺：%s", lv, strings.Join(miss, "、")))
+	}
+	if f.Scope != "" && !lawScope.MatchString(f.Scope) {
+		notes = append(notes, fmt.Sprintf("范围「%s」不合格式", f.Scope))
+	}
+	if f.Subject != "" && !slices.Contains(LawSubjects, f.Subject) {
+		notes = append(notes, fmt.Sprintf("主题「%s」不在主题表里", f.Subject))
+	}
+	if lv == LevelFundamental && f.Enforcement == "自觉" {
+		notes = append(notes, "根本法应由机器强制，不能靠自觉")
+	}
 	if reg.All == nil {
-		return errors.New("law_amend: the register of laws cannot be listed here; no card without it")
+		return append(notes, "名录列不出来，没查上位法、依存、冲突和重复"), nil
 	}
 	laws, err := reg.All(ctx)
 	if err != nil {
-		return fmt.Errorf("law_amend: reading the register: %w", err)
+		return append(notes, "名录读不到，没查上位法、依存、冲突和重复"), nil
 	}
 	now := time.Now()
 	by := map[string]Law{}
@@ -218,27 +242,24 @@ func checkFrameAgainst(ctx context.Context, reg LawLookup, self string, f *LawFr
 		return l, ok && LawState(l, now) == StateInForce
 	}
 	if f.Parent != "" {
-		p, ok := inForce(f.Parent)
-		if !ok {
-			return fmt.Errorf("law_amend: parent law %s is not a law in force", f.Parent)
-		}
-		if *p.Frame.Level >= *f.Level {
-			return fmt.Errorf("law_amend: parent law %s is level %d, not above level %d", f.Parent, *p.Frame.Level, *f.Level)
+		if p, ok := inForce(f.Parent); !ok {
+			notes = append(notes, fmt.Sprintf("上位法第 %s 条不是现行法", f.Parent))
+		} else if *p.Frame.Level >= lv {
+			notes = append(notes, fmt.Sprintf("上位法第 %s 条在第 %d 层，不比它高", f.Parent, *p.Frame.Level))
 		}
 	}
 	for _, d := range f.DependsOn {
 		if _, ok := inForce(d); !ok {
-			return fmt.Errorf("law_amend: law %s it depends on is not a law in force", d)
+			notes = append(notes, fmt.Sprintf("依存的第 %s 条不是现行法", d))
 		}
 	}
-	for _, s := range f.Supersedes {
-		l, ok := by[s]
-		if !ok || LawState(l, now) == StateRepealed {
-			return fmt.Errorf("law_amend: law %s it supersedes is not in the register or already repealed", s)
+	for _, sn := range f.Supersedes {
+		if l, ok := by[sn]; !ok || LawState(l, now) == StateRepealed {
+			notes = append(notes, fmt.Sprintf("要取代的第 %s 条不在名录或已废止", sn))
 		}
 	}
 	if f.Scope == "" || f.Subject == "" {
-		return nil
+		return notes, nil
 	}
 	for _, l := range laws {
 		if l.Law == self || slices.Contains(f.Supersedes, l.Law) || LawState(l, now) != StateInForce {
@@ -249,13 +270,16 @@ func checkFrameAgainst(ctx context.Context, reg LawLookup, self string, f *LawFr
 			continue
 		}
 		if o.Modality != f.Modality && (o.Modality == "禁止" || f.Modality == "禁止") {
-			return fmt.Errorf("law_amend: conflicts with law %s (%s, %s: %s against %s); amend or repeal it on this card (supersedes)",
-				l.Law, f.Scope, f.Subject, o.Modality, f.Modality)
+			if *o.Level == LevelFundamental && lv > LevelFundamental {
+				return nil, fmt.Errorf("law_amend: conflicts with fundamental law %s (%s, %s: %s against %s); nothing loosens a fundamental law",
+					l.Law, f.Scope, f.Subject, o.Modality, f.Modality)
+			}
+			notes = append(notes, fmt.Sprintf("和第 %s 条冲突（%s／%s：%s 对 %s），应在同一张票里改或废它", l.Law, f.Scope, f.Subject, o.Modality, f.Modality))
+			continue
 		}
 		if o.Modality == f.Modality && f.DistinctFrom == "" {
-			return fmt.Errorf("law_amend: law %s already rules %s on %s, %s; supersede it or say how this one differs (distinct_from)",
-				l.Law, f.Modality, f.Subject, f.Scope)
+			notes = append(notes, fmt.Sprintf("和第 %s 条重复（%s／%s／%s），应写取代或差别", l.Law, f.Scope, f.Subject, f.Modality))
 		}
 	}
-	return nil
+	return notes, nil
 }
