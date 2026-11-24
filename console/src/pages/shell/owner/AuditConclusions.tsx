@@ -2,17 +2,19 @@ import { useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { LedgerGrid } from '@bifrost/ui/city/ledger'
 import { engineQueryKey, engineUnreachableText, readEngine } from '@/api/engine'
-import type { RegisterLaw } from '@/api/lawRegister'
+import { ENGINE_LAWS_PATH, ENGINE_LAWS_QUERY, fetchLawsAnswer } from '@/api/lawRegister'
+import { viewerRead } from '@/api/approvals'
+import { fetchSelfHealth } from '@/api/core'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
-import { auditDetail, auditTable, auditVerdict, auditWord, dailyCards, standardsOf, unmeasuredList, withEvents, type ApprovalReadings, type PlanEvent } from './auditConclusionsModel'
+import { engineAuditOn, auditDetail, auditTable, auditVerdict, auditWord, dailyCards, standardsOf, unmeasuredList, withEvents, type ApprovalReadings, type PlanEvent } from './auditConclusionsModel'
 
 const LAMP = { ok: 'ok', warn: 'degraded', unknown: 'unknown', pending: 'unknown' } as const
 const AGENTS = '/engine/v1/agents'
 
-/** Every read through the UI engine (箭10 2026-11-24: the views read only the engine); an unreached engine is said so. */
+/** Through the UI engine; an unreached engine is said so. */
 async function readAgents<T>(query: Record<string, string>, signal: AbortSignal): Promise<T> {
   const a = await readEngine<T>(AGENTS, { query, signal })
   if (!a.reached) throw new Error(engineUnreachableText(a))
@@ -23,6 +25,22 @@ async function readAgents<T>(query: Record<string, string>, signal: AbortSignal)
   return a.data
 }
 
+/** The platform directly (viewer and above): the same routes the engine passes through. */
+async function readDirect<T>(label: string, path: string, signal: AbortSignal): Promise<T> {
+  const r = await viewerRead(label, path, signal)
+  return (await r.json()) as T
+}
+
+/** A step's events, either way. */
+const stepEvents = (viaEngine: boolean, node: string, signal: AbortSignal) => (viaEngine
+  ? readAgents<{ events?: PlanEvent[] }>({ read: 'plan-step', node }, signal)
+  : readDirect<{ events?: PlanEvent[] }>('Plan step', `/api/v1/agentrt/plan/${encodeURIComponent(node)}`, signal)).then(d => d.events ?? [])
+
+/** The approvals readings (law 85 s1), either way. */
+const approvalReadings = (viaEngine: boolean, signal: AbortSignal) => viaEngine
+  ? readAgents<ApprovalReadings>({ read: 'approval-readings' }, signal)
+  : readDirect<ApprovalReadings>('Approval readings', '/api/v1/readings/approvals', signal)
+
 const auditHref = (step: string) => formatShellHash('command', new URLSearchParams({ section: 'audit', step }).toString())
 
 /**
@@ -32,29 +50,38 @@ const auditHref = (step: string) => formatShellHash('command', new URLSearchPara
  * verdict note and cause are its own events (read=plan-step). What is not read says so; nothing is guessed.
  */
 export function AuditConclusions() {
+  const health = useQuery({ queryKey: ['shell', 'self-health'], queryFn: () => fetchSelfHealth(), staleTime: 10_000 })
+  const viaEngine = engineAuditOn(health.data?.viewer_env)
+  // Until self-health answers the environment is unknown; wait rather than read one way and then the other.
+  const ready = !health.isLoading
   const q = useQuery({
-    queryKey: engineQueryKey(AGENTS, { read: 'laws' }),
-    queryFn: ({ signal }) => readAgents<{ laws?: RegisterLaw[] }>({ read: 'laws' }, signal).then(d => d.laws ?? []),
+    // The Laws page's own query (same key, same answer): one read of the register for both, and one cache shape
+    // (2026-11-24: this page once cached the laws array under that key and the two pages broke each other's data).
+    queryKey: viaEngine ? engineQueryKey(ENGINE_LAWS_PATH, { ...ENGINE_LAWS_QUERY }) : ['agentrt', 'laws', 'answer'],
+    queryFn: ({ signal }) => fetchLawsAnswer(viaEngine, signal),
+    select: a => a.laws,
     refetchInterval: 60_000,
     retry: false,
+    enabled: ready,
   })
   const laws = q.data ?? null
   const base = useMemo(() => standardsOf(laws ?? []), [laws])
   const steps = useQueries({
     queries: base.map(r => ({
-      queryKey: engineQueryKey(AGENTS, { read: 'plan-step', node: r.step }),
-      queryFn: ({ signal }: { signal: AbortSignal }) => readAgents<{ events?: PlanEvent[] }>({ read: 'plan-step', node: r.step }, signal).then(d => d.events ?? []),
+      queryKey: viaEngine ? engineQueryKey(AGENTS, { read: 'plan-step', node: r.step }) : ['agentrt', 'plan-step', r.step],
+      queryFn: ({ signal }: { signal: AbortSignal }) => stepEvents(viaEngine, r.step, signal),
       staleTime: 60_000,
       retry: false,
+      enabled: ready,
     })),
   })
   const rows = useMemo(() => base.map((r, i) => withEvents(r, steps[i]?.data)), [base, steps])
   // Law 85 s1 is read from the approvals readings (the audit line, 2026-11-24): only when the register has that standard.
   const wants85 = base.some(r => r.law === '85' && r.label === 's1')
   const readings = useQuery({
-    queryKey: engineQueryKey(AGENTS, { read: 'approval-readings' }),
-    queryFn: ({ signal }) => readAgents<ApprovalReadings>({ read: 'approval-readings' }, signal),
-    enabled: wants85, staleTime: 60_000, retry: false,
+    queryKey: viaEngine ? engineQueryKey(AGENTS, { read: 'approval-readings' }) : ['readings', 'approvals'],
+    queryFn: ({ signal }) => approvalReadings(viaEngine, signal),
+    enabled: ready && wants85, staleTime: 60_000, retry: false,
   })
   const extraFor = (r: { law: string; label: string } | undefined) => r && r.law === '85' && r.label === 's1'
     ? { label: 'Daily cards to the Owner', text: readings.isError ? `not read: ${readings.error instanceof Error ? readings.error.message : ''}` : dailyCards(readings.data, laws?.find(l => l.law === '85')?.said_on) }
@@ -64,8 +91,8 @@ export function AuditConclusions() {
   const table = useMemo(() => auditTable(rows), [rows])
   const picked = useHashParam('step') ?? ''
   const unread = q.isError
-  const word = q.isLoading ? 'pending' : auditWord(unread ? null : laws)
-  const summary = q.isLoading ? 'Reading the audit…' : auditVerdict(unread ? null : laws, rows)
+  const word = !ready || q.isLoading ? 'pending' : auditWord(unread ? null : laws)
+  const summary = !ready || q.isLoading ? 'Reading the audit…' : auditVerdict(unread ? null : laws, rows)
   return (
     <div className="flex w-full min-w-0 flex-col gap-3" data-audit-conclusions>
       <OpsVerdictStrip
@@ -83,7 +110,7 @@ export function AuditConclusions() {
           table={table}
           selected={picked}
           onSelect={key => { window.location.hash = auditHref(key) }}
-          scope="the audit’s conclusions on the laws’ standards (UI engine: agents laws and plan steps)"
+          scope={viaEngine ? 'the audit’s conclusions on the laws’ standards (through the UI engine: laws and plan steps)' : 'the audit’s conclusions on the laws’ standards (the platform directly: GET /api/v1/agentrt/laws and plan steps)'}
           detail={key => auditDetail(byStep.get(key), extraFor(byStep.get(key)))}
         />
       ) : null}

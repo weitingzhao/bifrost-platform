@@ -5148,6 +5148,7 @@
         "console/src/pages/shell/owner/OwnerWork.tsx",
         "console/src/pages/shell/owner/OwnerYou.tsx",
         "console/src/pages/shell/owner/RuntimeHealthNotice.tsx",
+        "console/src/pages/shell/owner/__tests__/AuditConclusions.test.tsx",
         "console/src/pages/shell/owner/__tests__/HarnessPreview.test.tsx",
         "console/src/pages/shell/owner/__tests__/OwnerConsolePage.test.tsx",
         "console/src/pages/shell/owner/__tests__/auditConclusionsModel.test.ts",

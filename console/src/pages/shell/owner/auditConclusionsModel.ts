@@ -16,6 +16,17 @@ import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
  * - read=approval-readings for law 85 s1.
  */
 
+/**
+ * Where this page reads through the engine, by the platform's viewer_env (the Laws page's switch, 箭10 2026-11-24):
+ * PROD has no engine yet, so it reads the platform directly there. Either way a failed read says why; never a quiet
+ * fall back from one way to the other.
+ */
+export const ENGINE_AUDIT: Readonly<Partial<Record<string, boolean>>> = { stg: true }
+export const engineAuditOn = (env: string | null | undefined): boolean => {
+  const key = (env ?? '').trim().toLowerCase()
+  return key !== '' && Object.hasOwn(ENGINE_AUDIT, key) && ENGINE_AUDIT[key] === true
+}
+
 export type Result = 'reached' | 'missed' | 'unmeasured'
 const TONE: Record<Result, 'ok' | 'warn' | 'unknown'> = { reached: 'ok', missed: 'warn', unmeasured: 'unknown' }
 /** Missed first, unmeasured last (the audit line's default). */
