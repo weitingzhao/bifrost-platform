@@ -15,7 +15,7 @@ import (
 const problemWindow = 7 * 24 * time.Hour
 
 // ProblemsRoute answers GET /api/v1/bus/problems: the letters of the rows that
-// ask for a verdict, and the verdicts given (OWNER_LAW #36), read from the
+// ask for a verdict, and the verdicts given (OWNER_LAW #93), read from the
 // messages when asked. DB is nil while the agent runtime's database is not
 // connected.
 type ProblemsRoute struct {

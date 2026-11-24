@@ -10,7 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
-// Origin: Owner 2026-11-21 (law 53, TD-578): the Mac Pro and the two Mac minis
+// Origin: Owner 2026-11-21 (law 91, TD-578): the Mac Pro and the two Mac minis
 // run execution cards the Owner approves with his code. A host card is
 // claimed only with a ticket the code earned, because a Console click alone
 // must never let a Mac run a command.

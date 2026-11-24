@@ -4,7 +4,7 @@
 // need as ports in contracts (ownercard.Ask, Withdraw, RuntimeCard;
 // seenfacts.Question); this package implements them over the question
 // service. Since 2026-11-19 it imports no plan code: it is the owner's side
-// of that contract (OWNER_LAW #28). It holds the translation of a plan's
+// of that contract (OWNER_LAW #95). It holds the translation of a plan's
 // card into a question and back, the runtime's own session, and the bounded
 // reads; the server only constructs it, mounts it and closes it.
 package questionbridge

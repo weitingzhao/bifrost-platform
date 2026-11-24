@@ -470,7 +470,7 @@ func (s *Scanner) ruleCheck(ctx context.Context, loaded func(context.Context) ([
 	return c
 }
 
-// A domain's self-description (law 77, 2026-11-22; format the map line's
+// A domain's self-description (law 95, 2026-11-22; format the map line's
 // default with Station): a YAML file beside the code it describes, named
 // by the domain row's "self" ("<repo>:<path>"), checked against that code
 // by the domain's own test. Top level: about (one line), bring (what to

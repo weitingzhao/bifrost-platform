@@ -258,7 +258,7 @@ type Decision struct {
 	// (migrations_applied): "repo:path". The release runs nothing of it.
 	AppliedDDL []string `json:",omitempty"`
 	// Reversal is how this release is undone and what that leaves behind
-	// (law 73, information only); nil for what is not a release.
+	// (law 91, information only); nil for what is not a release.
 	Reversal *Reversal `json:",omitempty"`
 }
 

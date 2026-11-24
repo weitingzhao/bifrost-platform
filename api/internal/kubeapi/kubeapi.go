@@ -3,7 +3,7 @@
 // (rollout restart, scale), a pod's logs, the error a client read returns, and
 // the node pool shapes the compute domain's evaluator reads and answers. Types
 // only; the adapter itself stays in cluster, which aliases these names, so
-// that a domain can declare the interface it needs (law 28) without importing
+// that a domain can declare the interface it needs (law 95) without importing
 // cluster, a package mixed across domains. Moved from cluster on 2026-11-19,
 // unchanged.
 package kubeapi

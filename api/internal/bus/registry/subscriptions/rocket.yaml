@@ -81,7 +81,7 @@ subscriptions:
     params: {detail: "task-result:land/tripwire,commit,change-ids,branch", require: tripwire}
     guarantee: durable
     by: dispatcher
-  # 2026-11-21 (the main line "seen and felt", law 69): an ask nobody answered
+  # 2026-11-21 (the main line "seen and felt", law 93): an ask nobody answered
   # for 4 hours, or two seats waiting on each other, wakes the coordinator,
   # whose job is chasing. Remove this row to stop it; the event is still kept.
   - id: ask-overdue-to-coordinator
@@ -152,7 +152,7 @@ subscriptions:
   # (bus/alerts/letters.go).
   - id: alert-firing-to-duty
     on: [alert.rule.fired]
-    # Law 43's pain crossings wake the compute line alone (row below); the
+    # Law 97's pain crossings wake the compute line alone (row below); the
     # duty seat sees them on the Bus page's stream (compute, 2026-11-19).
     except: ComputePain
     change: firing
@@ -163,7 +163,7 @@ subscriptions:
       ask_verdict: alert
     guarantee: durable
     by: alert-letters
-  # 2026-11-19, law 43 (compute's choice): a pain reading crossing its line
+  # 2026-11-19, law 97 (compute's choice): a pain reading crossing its line
   # (ComputePain* alerts, warning) wakes the compute seat alone, asked for a
   # verdict; going back under stays on the bus. ComputePainDbGuestLoad is an
   # info reading for the guest audit and wakes no one.

@@ -142,7 +142,7 @@ export function versionCell(input: {
       return { text, title }
     }
   }
-  // No hand-kept lane → namespace map to fall back on (OWNER_LAW #30, 2026-11-17): without a record the version is unknown.
+  // No hand-kept lane → namespace map to fall back on (OWNER_LAW #93, 2026-11-17): without a record the version is unknown.
   return { text: 'Unknown', title: `No deploying release record for ${input.lane} ${input.env} in the newest ${RELEASE_RECORD_LIMIT} records` }
 }
 

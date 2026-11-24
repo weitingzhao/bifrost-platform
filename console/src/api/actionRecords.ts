@@ -2,7 +2,7 @@ import { viewerRead } from '@/api/approvals'
 
 /**
  * GET /api/v1/records — the action record (agentrt.action_record, append-only): every direct call
- * of a catalogued action, recorded when it ends. Law 85 (the Owner, 2026-11-19; was 46): what can be undone
+ * of a catalogued action, recorded when it ends. Law 91 (the Owner, 2026-11-19; was 46): what can be undone
  * runs without a card and is recorded instead; this is where he reads what was done for him.
  * Shape measured on PROD 2026-11-19 (list_records), not taken from the plan's words.
  */

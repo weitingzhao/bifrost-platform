@@ -36,7 +36,7 @@ const stepEvents = (viaEngine: boolean, node: string, signal: AbortSignal) => (v
   ? readAgents<{ events?: PlanEvent[] }>({ read: 'plan-step', node }, signal)
   : readDirect<{ events?: PlanEvent[] }>('Plan step', `/api/v1/agentrt/plan/${encodeURIComponent(node)}`, signal)).then(d => d.events ?? [])
 
-/** The approvals readings (law 85 s1), either way. */
+/** The approvals readings (law 91 s1), either way. */
 const approvalReadings = (viaEngine: boolean, signal: AbortSignal) => viaEngine
   ? readAgents<ApprovalReadings>({ read: 'approval-readings' }, signal)
   : readDirect<ApprovalReadings>('Approval readings', '/api/v1/readings/approvals', signal)
@@ -76,7 +76,7 @@ export function AuditConclusions() {
     })),
   })
   const rows = useMemo(() => base.map((r, i) => withEvents(r, steps[i]?.data)), [base, steps])
-  // Law 85 s1 is read from the approvals readings (the audit line, 2026-11-24): only when the register has that standard.
+  // Law 91 s1 is read from the approvals readings (the audit line, 2026-11-24): only when the register has that standard.
   const wants85 = base.some(r => r.law === '85' && r.label === 's1')
   const readings = useQuery({
     queryKey: viaEngine ? engineQueryKey(AGENTS, { read: 'approval-readings' }) : ['readings', 'approvals'],

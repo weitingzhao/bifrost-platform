@@ -179,7 +179,7 @@ func TestTickRecordsOnceAndListReadsBack(t *testing.T) {
 	if st := s.Status(); st.Rules != 3 || st.LastTick == nil || st.Namespace != "cicd" {
 		t.Fatalf("status = %+v", st)
 	}
-	// 2026-11-17, OWNER_LAW #30: the Releases page kept its own copy of the
+	// 2026-11-17, OWNER_LAW #93: the Releases page kept its own copy of the
 	// release lines (ReleaseLanesSection LANES); it now builds them from the
 	// rules the status carries, so the status must carry every rule, in order,
 	// with its JSON names.

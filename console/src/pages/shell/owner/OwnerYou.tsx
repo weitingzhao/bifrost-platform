@@ -40,7 +40,7 @@ function Row({ row }: { row: OwnerRow }) {
  * For you, in kinds that are not mixed (the Owner, 2026-11-19): what he approves in the system
  * (requests, questions, agent cards), what only his own hands can do outside it (log in to TWS on the
  * Windows machine), what is only for his information, and what was done for him without a card
- * (law 85: recorded with how to undo it). The first two are his and counted.
+ * (law 91: recorded with how to undo it). The first two are his and counted.
  */
 export function OwnerYou({ data }: { data: OwnerConsoleData }) {
   const { needsYou, alerts } = data

@@ -15,7 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
 )
 
-// The problem loop (2026-11-18, OWNER_LAW #36): a problem is sent (a letter of
+// The problem loop (2026-11-18, OWNER_LAW #93): a problem is sent (a letter of
 // a row with params.ask_verdict), seen (the receiver acknowledged it), judged
 // (a verdict), then handled or fixed at the source. A verdict is a message,
 // as a seat's status is (seatstatus.go): a typed envelope of type

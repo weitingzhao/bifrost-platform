@@ -8,7 +8,7 @@
 // planresult.go, plandecide.go, cardauto.go; planstore names them by alias),
 // so the questions' side (agentrt/questionbridge, owner) implements the
 // plan's ports without importing the plan, and the plan uses the questions
-// without importing the owner (OWNER_LAW #28: domains talk through
+// without importing the owner (OWNER_LAW #95: domains talk through
 // contracts).
 package ownercard
 

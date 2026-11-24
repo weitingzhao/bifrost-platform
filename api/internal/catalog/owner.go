@@ -59,11 +59,11 @@ type Owner struct {
 	By        string   `json:"by"`
 	// Entry is the pool entry the path falls in when nothing covers it.
 	Entry *Entry `json:"entry,omitempty"`
-	// Nearest and Claim answer "I am adding this, where does it go" (law 75,
+	// Nearest and Claim answer "I am adding this, where does it go" (law 95,
 	// 2026-11-22: the map is the counter to register at): for a path no row
 	// covers, the nearest covered directory above it and the row to put in
 	// the same commit to claim it. The map writes nothing: the row in git
-	// is the registration (law 50, one source).
+	// is the registration (law 95, one source).
 	Nearest *Owner `json:"nearest,omitempty"`
 	Claim   *Claim `json:"claim,omitempty"`
 	Note    string `json:"note"`

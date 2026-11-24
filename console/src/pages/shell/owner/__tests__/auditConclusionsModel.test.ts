@@ -1,6 +1,6 @@
 // 2026-11-24 箭10: the audit-conclusions page (the Owner: 「审计基于立法的标准出结果，来监督行政」), built to the
 // audit line's brief (domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). The shapes are PROD's as read that
-// day: law 83 (R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
+// day: law 96 (R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
 import { describe, expect, it } from 'vitest'
 import type { RegisterLaw } from '@/api/lawRegister'
 import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, dailyCards, ordered, readingOf, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
@@ -76,7 +76,7 @@ describe('audit conclusions', () => {
   })
 
   it('lists what each unmeasured standard still lacks, and nothing for the measured ones', () => {
-    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: 'Law 12 s1', lacks: 'lacks reader 1' })])
+    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: 'Law 91 s1', lacks: 'lacks reader 1' })])
   })
 
   it('opens a row onto the conclusion and the cause apart, then the evidence one click away', () => {
@@ -93,7 +93,7 @@ describe('audit conclusions', () => {
     expect(refsOf('标准版本 appr_648987184f28813a，无别的')).toEqual([])
   })
 
-  it('counts law 85 s1 from the approvals readings, only the days since the law was said', () => {
+  it('counts law 91 s1 from the approvals readings, only the days since the law was said', () => {
     const readings = { days: [{ day: '2026-11-24', to_owner: { daily: [1, 2] } }, { day: '2026-11-23', to_owner: { daily: [1, 2, 3] } }] }
     expect(dailyCards(readings, '2026-11-24')).toMatch(/^2026-11-24: 2 daily cards/)
     expect(dailyCards(readings, '2026-11-24')).not.toContain('2026-11-23')

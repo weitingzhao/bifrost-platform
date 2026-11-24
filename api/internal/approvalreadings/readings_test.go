@@ -115,7 +115,7 @@ func readingsContract(t *testing.T, name string, value any) {
 // Origin: the Owner, 2026-11-24 (approvals line, administration): only a
 // change of law and the six classes should reach him (laws 31, 46); the
 // rest is the gap, and the gap must come from the system, not a hand count
-// (law 47). The 11-24 hand count was 101 cards in 5 days, about 95 daily.
+// (law 93). The 11-24 hand count was 101 cards in 5 days, about 95 daily.
 func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
 	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
 	at := now.Add(-time.Hour)

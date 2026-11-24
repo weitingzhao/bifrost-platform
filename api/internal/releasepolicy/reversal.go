@@ -1,7 +1,7 @@
 package releasepolicy
 
 // Reversal says how a release is undone and what undoing it leaves behind.
-// It is information: it changes no verdict. Origin: 2026-11-23, law 73 (the
+// It is information: it changes no verdict. Origin: 2026-11-23, law 91 (the
 // Owner, relayed by Foundation: before a release it must be known that it
 // can be taken back); the first step counts how many releases carry
 // something a rollback does not take back, before anything is refused for it.

@@ -6,7 +6,7 @@
 // /agentrt/plan/{id}/signoff, /agentrt/plan/imports).
 //
 // The handlers were agentrtapi's (plan.go, planview.go, planpace.go) and are
-// the same code (OWNER_LAW #28, 2026-11-19: a domain's routes sit in its own
+// the same code (OWNER_LAW #95, 2026-11-19: a domain's routes sit in its own
 // package, so its contract can say what it offers). agentrtapi still mounts
 // them, behind the same abilities, and lends them what every /agentrt route
 // shares (Host): who a request is recorded as, the strict body readers, the

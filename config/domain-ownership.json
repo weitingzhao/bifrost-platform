@@ -737,42 +737,42 @@
         "lineage"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's HTTP for registered work, moved out of agentrtapi unchanged (externalwork.go): POST /agentrt/external-work, /agentrt/external-work/{id}/events and GET /agentrt/external-work/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the canonical body reader, the answers and the error mapping through the Host interface the package declares. Imports lineage (externalwork) and foundation (actor, eventlog, actuation) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the lineage's HTTP for registered work, moved out of agentrtapi unchanged (externalwork.go): POST /agentrt/external-work, /agentrt/external-work/{id}/events and GET /agentrt/external-work/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the canonical body reader, the answers and the error mapping through the Host interface the package declares. Imports lineage (externalwork) and foundation (actor, eventlog, actuation) only."
     },
     "api/internal/agentrt/rulesapi": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the signed rules' HTTP, moved out of agentrtapi unchanged (rules.go): GET /agentrt/rules/{rule_id} and POST /agentrt/rules/{rule_id}/check, /proposals, /sign, /tighten, with the same paths, bodies, answers and error texts. Verification's because it is the rule store's (agentrt/store) interface. agentrtapi still mounts them behind the same abilities (read, propose, stop) and lends them identity, the strict body reader, the answers, the error mapping and the Owner key's anchor through the Host interface the package declares; the signature check is the release gate's (releasepolicy.VerifyAnchored, delivery), which agentrtapi binds as Routes.Verify, so the package imports verification (store) and foundation (actor, eventlog) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the signed rules' HTTP, moved out of agentrtapi unchanged (rules.go): GET /agentrt/rules/{rule_id} and POST /agentrt/rules/{rule_id}/check, /proposals, /sign, /tighten, with the same paths, bodies, answers and error texts. Verification's because it is the rule store's (agentrt/store) interface. agentrtapi still mounts them behind the same abilities (read, propose, stop) and lends them identity, the strict body reader, the answers, the error mapping and the Owner key's anchor through the Host interface the package declares; the signature check is the release gate's (releasepolicy.VerifyAnchored, delivery), which agentrtapi binds as Routes.Verify, so the package imports verification (store) and foundation (actor, eventlog) only."
     },
     "api/internal/agentrt/deliveryapi": {
       "domains": [
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): GET /agentrt/delivery (a handed-in commit's delivery stages, view=boundaries, view=configuration), moved out of agentrtapi unchanged (getDelivery of timeline.go), with the same queries, answers, status codes and log line. agentrtapi still mounts it behind the read ability and lends it the database, the configuration and PROD readers, the disk floor, the answers and the error mapping through the Host interface the package declares; the boundaries view's source reads the rule store, the rule registry and the landing waits (verification), so agentrtapi keeps that binding (boundarysource.go) and passes it as Routes.Boundaries. Imports delivery (deliveryview, deliveryreadings) and foundation (eventlog) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): GET /agentrt/delivery (a handed-in commit's delivery stages, view=boundaries, view=configuration), moved out of agentrtapi unchanged (getDelivery of timeline.go), with the same queries, answers, status codes and log line. agentrtapi still mounts it behind the read ability and lends it the database, the configuration and PROD readers, the disk floor, the answers and the error mapping through the Host interface the package declares; the boundaries view's source reads the rule store, the rule registry and the landing waits (verification), so agentrtapi keeps that binding (boundarysource.go) and passes it as Routes.Boundaries. Imports delivery (deliveryview, deliveryreadings) and foundation (eventlog) only."
     },
     "api/internal/agentrt/recordsapi": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the agent runtime's record routes, moved out of agentrtapi unchanged (putArtifact of api.go, reads.go, artifacts.go, events.go): PUT /agentrt/artifacts/{id}, GET /agentrt/artifacts, /artifacts/{id} and GET /agentrt/events, with the same SQL, answers, status codes, refusal records and log line. Foundation's because what they serve is the artifact store (agentrt/artifact) and the event ledger (agentrt/eventlog), both foundation, with the shared visibility rules (an Agent host reads no exam artifact or record, no role reads issue: or intake: streams here). Not lineage's: of lineage they use only two checks, a reporter's external work description and a collector's record ownership error, which agentrtapi binds through the Host interface the package declares (ExternalDescription, NotOwnRecord) with identity, the answers and the error mapping. Imports foundation (actuation, actor, artifact, eventlog) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the agent runtime's record routes, moved out of agentrtapi unchanged (putArtifact of api.go, reads.go, artifacts.go, events.go): PUT /agentrt/artifacts/{id}, GET /agentrt/artifacts, /artifacts/{id} and GET /agentrt/events, with the same SQL, answers, status codes, refusal records and log line. Foundation's because what they serve is the artifact store (agentrt/artifact) and the event ledger (agentrt/eventlog), both foundation, with the shared visibility rules (an Agent host reads no exam artifact or record, no role reads issue: or intake: streams here). Not lineage's: of lineage they use only two checks, a reporter's external work description and a collector's record ownership error, which agentrtapi binds through the Host interface the package declares (ExternalDescription, NotOwnRecord) with identity, the answers and the error mapping. Imports foundation (actuation, actor, artifact, eventlog) only."
     },
     "api/internal/agentrt/planapi": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the plan's HTTP handlers, moved out of agentrtapi unchanged (plan.go, planview.go, planpace.go): GET /agentrt/plan, /plan/{id}, /plan-view, /plan-pace, /progress and POST /agentrt/plan/proposals, /plan/{id}/notes, /plan/{id}/signoff, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the strict body readers, the answers and the error mapping through the Host interface the package declares. Imports plan (planstore, planreadings) and foundation (actor, eventlog) only; the plan import route stayed in agentrtapi because it reads a recorder log (lineage). 2026-11-19 later: POST /agentrt/plan/imports came too, unchanged (planimport.go of agentrtapi, behind propose); the plan import (planimport) is the plan's, and the recorder log it may read is the lineage's, reached through the RecorderLogs port the package declares (Format, Request, Prepare) that agentrtapi binds to recorderimport and externalwork.PrepareRecorderImport, so the package still imports plan and foundation only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the plan's HTTP handlers, moved out of agentrtapi unchanged (plan.go, planview.go, planpace.go): GET /agentrt/plan, /plan/{id}, /plan-view, /plan-pace, /progress and POST /agentrt/plan/proposals, /plan/{id}/notes, /plan/{id}/signoff, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities and lends them identity, the strict body readers, the answers and the error mapping through the Host interface the package declares. Imports plan (planstore, planreadings) and foundation (actor, eventlog) only; the plan import route stayed in agentrtapi because it reads a recorder log (lineage). 2026-11-19 later: POST /agentrt/plan/imports came too, unchanged (planimport.go of agentrtapi, behind propose); the plan import (planimport) is the plan's, and the recorder log it may read is the lineage's, reached through the RecorderLogs port the package declares (Format, Request, Prepare) that agentrtapi binds to recorderimport and externalwork.PrepareRecorderImport, so the package still imports plan and foundation only."
     },
     "api/internal/lineage/assembly": {
       "domains": [
         "lineage"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the lineage's assembly, moved out of server unchanged: building the lineage handler around the thread titles and mounting the lineage's /api/v1 routes (was mount_lineage.go) with the same paths, gates, handlers and order. server lends it Gitea access and the release records (delivery's; the binding stays in server's lineage_wire.go) and the gates. Imports lineage (lineage, threadtitles) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the lineage's assembly, moved out of server unchanged: building the lineage handler around the thread titles and mounting the lineage's /api/v1 routes (was mount_lineage.go) with the same paths, gates, handlers and order. server lends it Gitea access and the release records (delivery's; the binding stays in server's lineage_wire.go) and the gates. Imports lineage (lineage, threadtitles) only."
     },
     "api/internal/lineage": {
       "domains": [
@@ -884,7 +884,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). 2026-11-23 (E5): also the verification's wiring moved out of server unchanged, built from what server lends (func values and structs declared here): the controller (NewController: pipeline records' intervals, the daily full CI and its runner), the landing CI's client (CILent: full-CI check sources, the run view's cache), the unit scope shadow, the unit configuration read and the verification's /metrics series."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the verification's assembly, moved out of server unchanged: mounting the verification's /api/v1 routes (was mount_verification.go: evidence, units, CI scorecard and domains, unit evidence requests) with the same paths, gates, handlers and order. The handlers stay in server (ci_read_wire.go, units_*.go), bound to other domains' reads, and are lent with the gates (verification_wire.go). 2026-11-23 (E5): also the verification's wiring moved out of server unchanged, built from what server lends (func values and structs declared here): the controller (NewController: pipeline records' intervals, the daily full CI and its runner), the landing CI's client (CILent: full-CI check sources, the run view's cache), the unit scope shadow, the unit configuration read and the verification's /metrics series."
     },
     "api/internal/verification/ports": {
       "domains": [
@@ -1003,7 +1003,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the owner's assembly, moved out of server unchanged: mounting the owner's /api/v1 routes (was mount_owner.go), building the question runtime and mounting the questions (was questions_wire.go), and wiring the action catalog and the generic write actions (was wireWorkActions), with the same paths, gates, handlers, order and log lines. server lends it the gates, the handlers it still answers with (actions_wire.go, trust-anchored, among them), the action record's database, the cluster's clients, and delivery's copy of the policy and mirror sync (that glue stays in server's owner_wire.go). Imports owner (actions, actuationpolicy, workactions, agentgovernance, questions, questionbridge) and foundation (actuation, actionrecord, eventlog) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the owner's assembly, moved out of server unchanged: mounting the owner's /api/v1 routes (was mount_owner.go), building the question runtime and mounting the questions (was questions_wire.go), and wiring the action catalog and the generic write actions (was wireWorkActions), with the same paths, gates, handlers, order and log lines. server lends it the gates, the handlers it still answers with (actions_wire.go, trust-anchored, among them), the action record's database, the cluster's clients, and delivery's copy of the policy and mirror sync (that glue stays in server's owner_wire.go). Imports owner (actions, actuationpolicy, workactions, agentgovernance, questions, questionbridge) and foundation (actuation, actionrecord, eventlog) only."
     },
     "api/internal/questions": {
       "domains": [
@@ -1031,7 +1031,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "Owner-domain charter and read-model extraction 2026-11-22 law 79: moved from api/internal/approvalhome unchanged."
+      "basis": "Owner-domain charter and read-model extraction 2026-11-22 law 96: moved from api/internal/approvalhome unchanged."
     },
     "api/internal/approvalreadings": {
       "domains": [
@@ -1059,7 +1059,7 @@
         "coordination"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the coordination's HTTP handlers under /agentrt, moved out of agentrtapi unchanged (messages.go, seats.go and the controls of controls.go): POST and GET /agentrt/messages, GET /messages/thread, POST /messages/ack, GET /seats, GET and POST /controls, DELETE /controls/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities (stop, lift, propose, read) and lends them identity, the strict body reader, the answers and the error mapping through the Host interface the package declares; the stop-control calls (coord.RequestControl, coord.LiftControl) are as they were. A package apart from coord: in coord, six names coord exports (SendMessage, Unread, Thread, AckMessages, Message, RequestControl) would be used by no other package's production code, only by other packages' tests (codeguard exportedForOtherTests). Imports coordination (coord) and foundation (actor, eventlog, bus/readerseen) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the coordination's HTTP handlers under /agentrt, moved out of agentrtapi unchanged (messages.go, seats.go and the controls of controls.go): POST and GET /agentrt/messages, GET /messages/thread, POST /messages/ack, GET /seats, GET and POST /controls, DELETE /controls/{id}, with the same paths, bodies, answers and error texts. agentrtapi still mounts them behind the same abilities (stop, lift, propose, read) and lends them identity, the strict body reader, the answers and the error mapping through the Host interface the package declares; the stop-control calls (coord.RequestControl, coord.LiftControl) are as they were. A package apart from coord: in coord, six names coord exports (SendMessage, Unread, Thread, AckMessages, Message, RequestControl) would be used by no other package's production code, only by other packages' tests (codeguard exportedForOtherTests). Imports coordination (coord) and foundation (actor, eventlog, bus/readerseen) only."
     },
     "api/internal/threadinbox": {
       "domains": [
@@ -1115,7 +1115,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, law 71: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
+      "basis": "2026-11-21 the Owner in the Foundation thread, law 95: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
     },
     "api/internal/agentrt/controller": {
       "domains": [
@@ -1136,7 +1136,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the delivery's assembly, moved out of server unchanged: mounting the delivery's /api/v1 routes (was mount_delivery.go: release policy, Argo CD, pipelines and runs, release window, release records, supply chain, agentrt migrations) with the same paths, gates, handlers and order. It names what it uses of the pipelines' handler (package delivery, shared with coordination) as an interface; the release policy's handlers (release_policy_wire.go, trust-anchored) and the other answers server holds are lent with the gates (delivery_wire.go). Imports delivery (gitops, releases, migraterun) only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the delivery's assembly, moved out of server unchanged: mounting the delivery's /api/v1 routes (was mount_delivery.go: release policy, Argo CD, pipelines and runs, release window, release records, supply chain, agentrt migrations) with the same paths, gates, handlers and order. It names what it uses of the pipelines' handler (package delivery, shared with coordination) as an interface; the release policy's handlers (release_policy_wire.go, trust-anchored) and the other answers server holds are lent with the gates (delivery_wire.go). Imports delivery (gitops, releases, migraterun) only."
     },
     "api/internal/delivery": {
       "domains": [
@@ -1164,7 +1164,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, law 71: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 (decoupling item 5): tests only, no production code. The agent runtime's cross-domain tests, moved here from agentrt/store unchanged; they import plan (planstore, planview, plan, planwiring), lineage (externalwork, recorderimport, workregistration), verification (landing, controller), delivery (deliveryreadings, deliveryview), coordination (coord), owner (questions) and foundation packages."
+      "basis": "2026-11-21 the Owner in the Foundation thread, law 95: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 (decoupling item 5): tests only, no production code. The agent runtime's cross-domain tests, moved here from agentrt/store unchanged; they import plan (planstore, planview, plan, planwiring), lineage (externalwork, recorderimport, workregistration), verification (landing, controller), delivery (deliveryreadings, deliveryview), coordination (coord), owner (questions) and foundation packages."
     },
     "api/internal/agentrt/storekit": {
       "domains": [
@@ -1227,7 +1227,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes. 2026-11-22 law 79: moved from api/internal/assessmentreadings unchanged."
+      "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes. 2026-11-22 law 96: moved from api/internal/assessmentreadings unchanged."
     },
     "api/internal/assessmentview": {
       "domains": [
@@ -1524,7 +1524,7 @@
         "compute"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 moved out of foundation's telemetry (compute line's letter of 11-22: its readings were written in foundation): the compute domain's Prometheus readings of whether the compute is fully used (law 43). telemetry serves them as the group it registers (telemetry.Handler.SetGroup), bound in assembly; it imports telemetry only for QuerySpec."
+      "basis": "2026-11-22 moved out of foundation's telemetry (compute line's letter of 11-22: its readings were written in foundation): the compute domain's Prometheus readings of whether the compute is fully used (law 97). telemetry serves them as the group it registers (telemetry.Handler.SetGroup), bound in assembly; it imports telemetry only for QuerySpec."
     },
     "api/internal/telemetry": {
       "domains": [
@@ -1601,7 +1601,7 @@
         "payload"
       ],
       "status": "assigned",
-      "basis": "2026-11-19 (OWNER_LAW #28, business-alignment lane): the tenant's assembly, moved out of server unchanged: building the tenant's handlers (plugins, research, data clone, data husbandry, satellite, trade agent catalog) and mounting the tenant's /api/v1 routes (was mount_tenant.go) with the same paths, gates, handlers and order. server lends it the cluster's adapters (Kube), the gates and the topology answer. Imports tenant and foundation only."
+      "basis": "2026-11-19 (OWNER_LAW #95, business-alignment lane): the tenant's assembly, moved out of server unchanged: building the tenant's handlers (plugins, research, data clone, data husbandry, satellite, trade agent catalog) and mounting the tenant's /api/v1 routes (was mount_tenant.go) with the same paths, gates, handlers and order. server lends it the cluster's adapters (Kube), the gates and the topology answer. Imports tenant and foundation only."
     },
     "api/internal/tenant/husbandry": {
       "domains": [
@@ -1699,7 +1699,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 (OWNER_LAW #36, the communication line): the words of the problem loop (the letter's ask for a verdict, the verdict's kinds and fields); it imports nothing, the runtime reads verdicts back in agentrt/coord."
+      "basis": "2026-11-18 (OWNER_LAW #93, the communication line): the words of the problem loop (the letter's ask for a verdict, the verdict's kinds and fields); it imports nothing, the runtime reads verdicts back in agentrt/coord."
     },
     "api/internal/bus/alerts": {
       "domains": [
@@ -1790,7 +1790,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 map line (0.2): reads the ownership table as one document from config/domain-ownership.json and the per-domain files config/domains/*.json (law 75 proposal section 3: the table collides; it is split per domain while every reader reads through one merge). Imports nothing of the platform."
+      "basis": "2026-11-22 map line (0.2): reads the ownership table as one document from config/domain-ownership.json and the per-domain files config/domains/*.json (law 95 proposal section 3: the table collides; it is split per domain while every reader reads through one merge). Imports nothing of the platform."
     },
     "api/internal/bus/catalogusers": {
       "domains": [
@@ -1902,7 +1902,7 @@
         "coordination"
       ],
       "status": "assigned",
-      "basis": "2026-11-20: the evaluation readout (law 47), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType, Prometheus through a query lent by server, and a failed CI run's failed tasks through a lookup lent by server (evidence.EvidenceByCommit, verification); writes nothing."
+      "basis": "2026-11-20: the evaluation readout (law 93), GET /api/v1/readings/evaluation; the coordinator gave it to the metrics line (coordination). Reads the event ledger only through eventlog.LatestByKey and OfType, Prometheus through a query lent by server, and a failed CI run's failed tasks through a lookup lent by server (evidence.EvidenceByCommit, verification); writes nothing."
     },
     "api/internal/elasticreadings": {
       "domains": [
@@ -1937,7 +1937,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, law 71: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
+      "basis": "2026-11-21 the Owner in the Foundation thread, law 95: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
     },
     "api/internal/agentrt/ownercard": {
       "domains": [
@@ -1951,7 +1951,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a runtime card (ownercard.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus. Mixed (owner and plan) until 2026-11-19, when the plan's card types moved into the contract ownercard: it now imports the questions service, questioncards and foundation only, and implements the plan's ports without naming the plan; the server only constructs it, mounts the routes and closes it 2026-11-22 law 79 (Approvals at most 16 buildings): agentrt/answerack and agentrt/questioncards merged in unchanged, same owner domain."
+      "basis": "2026-11-18 moved out of server (decoupling item 5, A5; the server's questions_wire.go, about 330 lines, unchanged in effect): how the agent runtime asks, reads, answers, withdraws and acknowledges the Owner's questions: the translation of a runtime card (ownercard.Card) into a question with its idempotency and recommendation rules, the runtime's own session, the bounded reads, the card-auto-answer reads, and the announcement of the questions' transitions to the bus. Mixed (owner and plan) until 2026-11-19, when the plan's card types moved into the contract ownercard: it now imports the questions service, questioncards and foundation only, and implements the plan's ports without naming the plan; the server only constructs it, mounts the routes and closes it 2026-11-22 law 96 (Approvals at most 16 buildings): agentrt/answerack and agentrt/questioncards merged in unchanged, same owner domain."
     },
     "api/internal/bus/alertletters": {
       "domains": [
@@ -1986,7 +1986,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-18, moved out of api/internal/server unchanged (approval_record.go, covered_request.go; decoupling item 5): the read-back of the approval an execution claims, the one-open-request key, and running a request the signed release policy covers. Imports owner (actions, approvals, approvalhome, ruleapprove) only; the server hands it the approval service and the body reader. 2026-11-22 law 79 (Approvals at most 16 buildings): ruleapprove merged in (ruleapprove.go), its names prefixed RuleApprove; same owner domain."
+      "basis": "2026-11-18, moved out of api/internal/server unchanged (approval_record.go, covered_request.go; decoupling item 5): the read-back of the approval an execution claims, the one-open-request key, and running a request the signed release policy covers. Imports owner (actions, approvals, approvalhome, ruleapprove) only; the server hands it the approval service and the body reader. 2026-11-22 law 96 (Approvals at most 16 buildings): ruleapprove merged in (ruleapprove.go), its names prefixed RuleApprove; same owner domain."
     },
     "api/internal/agentrt/windownotice": {
       "domains": [
@@ -2105,112 +2105,112 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 1, assembly 1, coordination 1, foundation 1); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 1, assembly 1, coordination 1, foundation 1); the domain's line confirms or moves it."
     },
     "agentrt/actor": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 4, assembly 5, coordination 13, delivery 4, foundation 38, lineage 5, payload 1, plan 23, verification 7); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 4, assembly 5, coordination 13, delivery 4, foundation 38, lineage 5, payload 1, plan 23, verification 7); the domain's line confirms or moves it."
     },
     "agentrt/artifact": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 2, assembly 1, coordination 6, delivery 1, foundation 14, lineage 4, plan 20, verification 3); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 2, assembly 1, coordination 6, delivery 1, foundation 14, lineage 4, plan 20, verification 3); the domain's line confirms or moves it."
     },
     "agentrt/artifact_blob": {
       "domains": [
         "coordination"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 1, coordination 5, foundation 3, lineage 2, plan 3, verification 1); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 1, coordination 5, foundation 3, lineage 2, plan 3, verification 1); the domain's line confirms or moves it."
     },
     "agentrt/control": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 5, assembly 2, compute 3, coordination 2, delivery 2, foundation 8, payload 3, plan 3, verification 1); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 5, assembly 2, compute 3, coordination 2, delivery 2, foundation 8, payload 3, plan 3, verification 1); the domain's line confirms or moves it."
     },
     "agentrt/event": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 17, assembly 7, compute 3, coordination 12, delivery 16, foundation 87, lineage 18, plan 41, verification 12); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 17, assembly 7, compute 3, coordination 12, delivery 16, foundation 87, lineage 18, plan 41, verification 12); the domain's line confirms or moves it."
     },
     "agentrt/event_stream": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (foundation 1, lineage 1, plan 2); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (foundation 1, lineage 1, plan 2); the domain's line confirms or moves it."
     },
     "agentrt/evidence": {
       "domains": [
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 6, assembly 8, compute 4, coordination 1, delivery 12, foundation 15, payload 1, plan 25, verification 33); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 6, assembly 8, compute 4, coordination 1, delivery 12, foundation 15, payload 1, plan 25, verification 33); the domain's line confirms or moves it."
     },
     "agentrt/host": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 12, assembly 9, compute 14, coordination 5, delivery 5, foundation 42, lineage 12, payload 7, plan 6, verification 4); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 12, assembly 9, compute 14, coordination 5, delivery 5, foundation 42, lineage 12, payload 7, plan 6, verification 4); the domain's line confirms or moves it."
     },
     "agentrt/idempotency_key": {
       "domains": [
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 3, coordination 2, foundation 1, lineage 2, plan 2, verification 1); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 3, coordination 2, foundation 1, lineage 2, plan 2, verification 1); the domain's line confirms or moves it."
     },
     "agentrt/message": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 9, assembly 6, compute 2, coordination 17, delivery 11, foundation 31, lineage 7, payload 8, plan 3, verification 11); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 9, assembly 6, compute 2, coordination 17, delivery 11, foundation 31, lineage 7, payload 8, plan 3, verification 11); the domain's line confirms or moves it."
     },
     "agentrt/mission": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 4, assembly 2, compute 2, coordination 2, delivery 1, foundation 11, lineage 2, plan 19, verification 1); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 4, assembly 2, compute 2, coordination 2, delivery 1, foundation 11, lineage 2, plan 19, verification 1); the domain's line confirms or moves it."
     },
     "agentrt/plan_node": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (lineage 1, plan 18); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (lineage 1, plan 18); the domain's line confirms or moves it."
     },
     "agentrt/plan_node_binding": {
       "domains": [
         "plan"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (plan 4); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (plan 4); the domain's line confirms or moves it."
     },
     "agentrt/release_record": {
       "domains": [
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (delivery 3); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (delivery 3); the domain's line confirms or moves it."
     },
     "agentrt/rule": {
       "domains": [
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (approvals 21, assembly 8, compute 1, coordination 8, delivery 18, foundation 45, lineage 2, payload 1, plan 28, verification 20); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (approvals 21, assembly 8, compute 1, coordination 8, delivery 18, foundation 45, lineage 2, payload 1, plan 28, verification 20); the domain's line confirms or moves it."
     },
     "agentrt/schema_migration": {
       "domains": [
@@ -2224,7 +2224,7 @@
         "verification"
       ],
       "status": "assigned",
-      "basis": "2026-11-22 registered by Foundation (register-first, law 75): proposed domain read from which packages name the table in production code (verification 2); the domain's line confirms or moves it."
+      "basis": "2026-11-22 registered by Foundation (register-first, law 95): proposed domain read from which packages name the table in production code (verification 2); the domain's line confirms or moves it."
     }
   },
   "workloads": {

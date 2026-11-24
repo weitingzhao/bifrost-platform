@@ -70,7 +70,7 @@ func across(o ownership, imports map[string][]string) []string {
 // it imports every domain, so its own imports are not checked here, and an
 // import of it by a domain is (only api/cmd imports it; foundation's wall
 // holds the base). Origin: 2026-11-21, the Owner in the Foundation thread,
-// law 71 — the three packages were "mixed", which the wall skipped both ways,
+// law 95 — the three packages were "mixed", which the wall skipped both ways,
 // and the milestone "each package one domain" could never reach 9/9.
 const assembly = "assembly"
 
@@ -132,7 +132,7 @@ func TestADomainImportsOnlyItselfAndTheBase(t *testing.T) {
 // the import of another domain and the import of a shared package, and
 // nothing else (the base's own imports, an import of the base, an import
 // inside the domain, an assembly root, a shared package's imports).
-// Origin of api/internal/wire: 2026-11-21, law 71 — the assembly domain's
+// Origin of api/internal/wire: 2026-11-21, law 95 — the assembly domain's
 // imports of every domain are not named, a domain's import of it is.
 // Origin of api/cmd/plancmd: 2026-11-21, C2 — a command a domain owns is no
 // longer skipped; this is the control that the wall now sees its import.

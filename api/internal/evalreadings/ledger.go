@@ -257,7 +257,7 @@ var notifiedSince = time.Date(2026, 11, 20, 16, 20, 43, 0, time.UTC)
 // interruptionReading: owner_interruptions, the pushes about a card that
 // reached the Owner's phone in the window (approval.card.notified, any kind
 // but failed). Origin: the metrics line, 2026-11-20 ("relax cards into
-// records", law 85): how often he is interrupted had no system record across
+// records", law 91): how often he is interrupted had no system record across
 // the change; the comm line put the pushes on the ledger.
 func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 	const name = "owner_interruptions"
@@ -310,7 +310,7 @@ var privilegeSince = time.Date(2026, 11, 21, 21, 6, 32, 0, time.UTC)
 
 // privilegeReading: owner_privilege_uses, the times in the window the Owner
 // stepped in to move something that was stuck (lines waiting on each other, or
-// nothing saying whose it is). Origin: law 68 (the Owner, 2026-11-21, relayed):
+// nothing saying whose it is). Origin: law 91 (the Owner, 2026-11-21, relayed):
 // the privilege must exist, its uses should fall, and the count is the fixed
 // reference for every before-and-after. The facts are the coordinator's, the
 // definition Audit's; this only counts what the ledger holds.
@@ -320,7 +320,7 @@ func (s ledgerSource) privilegeReading(w Window) (Reading, error) {
 		"events in the window")
 	if privilegeSince.IsZero() {
 		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,
-			Note: "no producer of owner.privilege.used yet; the uses are only in a hand-kept note, which is not a system record (law 47)"}, false), nil
+			Note: "no producer of owner.privilege.used yet; the uses are only in a hand-kept note, which is not a system record (law 93)"}, false), nil
 	}
 	if w.From.Before(privilegeSince) {
 		return finish(Reading{Name: name, Unit: "count", Window: w, Definition: d,

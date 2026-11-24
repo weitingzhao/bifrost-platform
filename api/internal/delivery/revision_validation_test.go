@@ -61,7 +61,7 @@ func TestReposForPipeline(t *testing.T) {
 	}
 }
 
-// 2026-11-17, OWNER_LAW #30: the supply chain's tracked repos and the
+// 2026-11-17, OWNER_LAW #93: the supply chain's tracked repos and the
 // Releases page's line repositories were hand-kept lists that still named the
 // retired bifrost-trade-socket; they are now read from each Pipeline's clone
 // tasks. The fixture is cut from infra k8s/cicd/tekton: deliver-platform's

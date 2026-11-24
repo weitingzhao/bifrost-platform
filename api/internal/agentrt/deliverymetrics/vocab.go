@@ -1,7 +1,7 @@
 // Package deliverymetrics declares the delivery measurement event types. Nothing
 // writes them any more: the computation stopped with the dispatch lane on
 // 2026-11-13 and the sealed baseline import, which never ran, was deleted on
-// 2026-11-18 (OWNER_LAW #30). The rows already written stay, so the types and
+// 2026-11-18 (OWNER_LAW #93). The rows already written stay, so the types and
 // the checks of their bodies stay. The delivery domain owns them (#28).
 package deliverymetrics
 

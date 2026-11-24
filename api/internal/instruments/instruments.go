@@ -1,7 +1,7 @@
 // Package instruments reads, from the source at main, the laws, the Skills and
 // the MCP tools the system actually has, so the Owner can audit them on Ops
 // (GET /api/v1/governance/instruments). Nothing here is a kept list
-// (OWNER_LAW #30): every name comes from the files of the two repositories.
+// (OWNER_LAW #93): every name comes from the files of the two repositories.
 //
 // A source that cannot be read is empty and named in Unread, never an older
 // value, and does not stop the others. A single malformed item is named there

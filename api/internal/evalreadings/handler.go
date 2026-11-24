@@ -60,7 +60,7 @@ func Handler(db func() eventlog.DB, prom func() Prom, tasks FailedTasks, now fun
 			"window":             win,
 			"definition_version": DefinitionVersion,
 			"readings":           list,
-			"note":               "Law 47: numbers come only from the system. unmeasured = no records; too_few = fewer samples than min_samples, no percentile given.",
+			"note":               "Law 93: numbers come only from the system. unmeasured = no records; too_few = fewer samples than min_samples, no percentile given.",
 		})
 	}
 }

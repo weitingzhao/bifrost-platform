@@ -7,7 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/problemloop"
 )
 
-// 2026-11-19, OWNER_LAW #36: the coordinator judged two real problems fixed at
+// 2026-11-19, OWNER_LAW #93: the coordinator judged two real problems fixed at
 // their source and the loop still counted them open. A real problem closes when
 // handled or fixed at the source; a false one only when its source is fixed.
 func TestARealProblemFixedAtItsSourceIsClosed(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Origin: map line, 2026-11-20, charter against law 50: "what does domain Y
+// Origin: map line, 2026-11-20, charter against law 95: "what does domain Y
 // own, what does it open, is it healthy" had no read; it took the owner read
 // path by path plus the table by hand.
 
@@ -82,7 +82,7 @@ func TestBuildingsGroupPackagesByTheirFirstDirectory(t *testing.T) {
 	}
 }
 
-// 2026-11-22, law 79: more than 16 in one layer is split too fine; City
+// 2026-11-22, law 96: more than 16 in one layer is split too fine; City
 // draws 16. The largest 15 keep their own building and the rest is one
 // "other", counted. The control: 16 buildings are not folded.
 func TestBuildingsPastSixteenFoldIntoOther(t *testing.T) {
@@ -99,7 +99,7 @@ func TestBuildingsPastSixteenFoldIntoOther(t *testing.T) {
 	}
 }
 
-// 2026-11-22, law 77: each domain explains itself in content, read on demand
+// 2026-11-22, law 95: each domain explains itself in content, read on demand
 // through the domain route; someone who wants a thing done asks by the task.
 // The control: a word no task holds finds nothing, and a domain that wrote
 // no tasks is named as silent rather than skipped.
@@ -140,7 +140,7 @@ func TestACommandJoinsTheBuildingOfItsPackage(t *testing.T) {
 	}
 }
 
-// 2026-11-22, law 77, CI first: CI wrote its self-description beside the
+// 2026-11-22, law 95, CI first: CI wrote its self-description beside the
 // landing script (bring, refusals, must_answer) and the map reads the file
 // the domain row names each round; its lines are found by task. The
 // control: a row naming a file that is not there keeps a note, not a
@@ -173,7 +173,7 @@ func TestSelfDescriptionIsReadFromTheFileTheRowNames(t *testing.T) {
 	}
 }
 
-// 2026-11-22, law 79, Approvals: a domain merges buildings its own way
+// 2026-11-22, law 96, Approvals: a domain merges buildings its own way
 // without moving code, by naming path prefixes in its row. The control: a
 // package no declared building names is grouped by directory as before.
 func TestADomainCanDeclareItsBuildings(t *testing.T) {

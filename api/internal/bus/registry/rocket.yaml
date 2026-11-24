@@ -672,11 +672,11 @@ channels:
       reconcile: "the ledger is the truth; the evaluation readout counts the day's events (owner_privilege_uses)"
       on_unread: stale
       retention: 400d
-      # 2026-11-21 (the Owner, as the coordinator relayed it; law 68 in the
+      # 2026-11-21 (the Owner, as the coordinator relayed it; law 91 in the
       # coordinator's notes, not yet in OWNER_LAW): each time the Owner steps in
       # to push work that lines wait on, or that no contract gives to anyone, is
       # one use of privilege; the fewer the better, counted every day as a
-      # fixed reference (system archive, law 47). The coordinator records the
+      # fixed reference (system archive, law 93). The coordinator records the
       # fact (POST /api/v1/bus/privilege, MCP record_privilege_use); Triage
       # may add the cause later in a second event of its own.
       consumers: [console]
@@ -795,7 +795,7 @@ channels:
       reconcile: "the messages table is the truth; the workers read the open asks every 10 minutes and say each once"
       on_unread: stale
       retention: 30d
-      # 2026-11-21 (the main line "seen and felt", law 69): an ask nobody
+      # 2026-11-21 (the main line "seen and felt", law 93): an ask nobody
       # answered for 4 hours (coord.AskOverdueAfter), or two seats waiting on
       # each other (at once), was only on the Bus page's panel. Said once per
       # ask by coord.FlagOverdueAsks; the subscription table wakes the

@@ -6,7 +6,7 @@ const c = (event: string, letter_at: string, closed: boolean): ProblemCase => ({
   closed, state: closed ? 'closed' : 'sent',
 })
 
-// 2026-11-18, OWNER_LAW #36: the Bus page's problem loop shows only what the
+// 2026-11-18, OWNER_LAW #93: the Bus page's problem loop shows only what the
 // platform computed. Guards: closed cases are not in the open table, the
 // longest-waiting open case is first, a median that is not measured reads
 // "unknown" and not 0, and the counts line carries every count.

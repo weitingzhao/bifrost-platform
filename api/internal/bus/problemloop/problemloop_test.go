@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 2026-11-18, OWNER_LAW #36: the text a letter ends with must be what the
+// 2026-11-18, OWNER_LAW #93: the text a letter ends with must be what the
 // runtime reads back. Its tail is the envelope's JSON; with the two
 // placeholders filled it has the fields the verdict reader requires, no more.
 func TestAskIsTheEnvelopeTheReaderWants(t *testing.T) {

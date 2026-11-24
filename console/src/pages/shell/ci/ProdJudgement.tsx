@@ -3,7 +3,7 @@ import { fetchProdJudgements } from '@/api/prodJudgements'
 
 /**
  * Why the platform released PROD or is holding it: the newest judgement of the PROD head-release loop
- * (2026-11-22, law 69: the reasons were in the ledger and nothing showed them). Not read is not none.
+ * (2026-11-22, law 93: the reasons were in the ledger and nothing showed them). Not read is not none.
  */
 export function ProdJudgement() {
   const read = useQuery({ queryKey: ['ci', 'prod-judgements'], queryFn: ({ signal }) => fetchProdJudgements(signal), refetchInterval: 60_000 })

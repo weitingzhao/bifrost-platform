@@ -49,7 +49,7 @@ type HistoryCommit struct {
 }
 
 // HistoryRules is what the reader needs of the rules that judge a landing
-// (OWNER_LAW #28: lineage reads git, verification judges it; the assembly
+// (OWNER_LAW #95: lineage reads git, verification judges it; the assembly
 // binds verification's landinggit here, lineage does not import it).
 //
 //   - Evaluate: the state of the accepted result (task, result, its message)

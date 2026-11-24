@@ -13,7 +13,7 @@ import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
  * Everything is read through the UI engine:
  * - /engine/v1/agents?read=laws for the register;
  * - read=plan-step for a step's events;
- * - read=approval-readings for law 85 s1.
+ * - read=approval-readings for law 91 s1.
  */
 
 /**
@@ -274,7 +274,7 @@ export function auditDetail(r: StandardRow | undefined, extra?: { label: string;
 }
 
 /**
- * Law 85 s1 (the audit line): the daily cards pushed to the Owner, per day, newest first; only the days since the law
+ * Law 91 s1 (the audit line): the daily cards pushed to the Owner, per day, newest first; only the days since the law
  * was said count (its said_on from GET /laws; the cards before it declared no class).
  */
 export type ApprovalReadings = { days?: { day: string; to_owner?: { daily?: unknown[] } }[] }

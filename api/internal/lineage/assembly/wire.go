@@ -13,7 +13,7 @@ import (
 )
 
 // What assembly hands lineage and gets back goes through this package, the
-// lineage domain's public face (law 71, 2026-11-23): server used to build
+// lineage domain's public face (law 95, 2026-11-23): server used to build
 // lineage.Access, lineage.Release and lineage.PlanHistoryReader itself and
 // held the lineage core package and recorderimport directly. These names are
 // the contract; the core packages behind them can change without assembly
@@ -31,7 +31,7 @@ type (
 	// Release is one recorded delivery run as lineage reads it.
 	Release = lineage.Release
 	// HistoryRules are verification's landing rules, bound by assembly: lineage
-	// reads main's history and does not import verification (OWNER_LAW #28).
+	// reads main's history and does not import verification (OWNER_LAW #95).
 	HistoryRules = lineage.HistoryRules
 	// HistoryCommit is one commit of that history, as the rules get it.
 	HistoryCommit = lineage.HistoryCommit

@@ -5,7 +5,7 @@ import type { Block, Cell } from '@bifrost/ui/city/cards'
  * What a domain owns, read when the city goes into its district (the map line's GET /api/v1/catalog/domain?id=,
  * 2026-11-21: the perceive-first brief, item 4): what runs of it in the cluster, its tables, its Go packages,
  * Console groups and other paths, and its contract as written, counted by kind. A row the table gives to more
- * than one domain says with whom it is shared (law 50 wants one).
+ * than one domain says with whom it is shared (law 95 wants one).
  *
  * Handed to the engine as a read card (data only): the engine reads it for the district entered, never for
  * all nine at once, and says "not known" with why when it fails.

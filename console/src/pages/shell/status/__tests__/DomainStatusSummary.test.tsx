@@ -74,7 +74,7 @@ describe('DomainStatusSummary', () => {
     await waitFor(() => expect(container.querySelector('[data-owns="plan"]')!.textContent).toBe('Owns: 2 Go packages · 0 console groups · 1 paths · 0 workloads · 3 tables'))
   })
 
-  // Origin: 2026-11-21, the main line "看得见、感知得到" (law 69): the map's off-map entries, the cluster workloads on the
+  // Origin: 2026-11-21, the main line "看得见、感知得到" (law 93): the map's off-map entries, the cluster workloads on the
   // map only by a namespace row, the cross-domain uses and who uses each package were kept but shown on no page. The
   // control: a place with no entries and not the cluster or the database does not open.
   it('opens a place to its entries, and shows cross-domain uses and package users from what was kept', async () => {

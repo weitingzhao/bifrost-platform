@@ -15,7 +15,7 @@ const planTree = `WITH RECURSIVE tree AS (SELECT plan_node_id FROM agentrt.plan_
 // WorkSpans reads, within tx, each piece of registered work's span that
 // overlaps [from, to]. The plan does not read registered work itself: lineage
 // owns it (workregistration.WorkSpans) and the caller passes its reader in
-// (law 28), so this package does not import lineage's.
+// (law 95), so this package does not import lineage's.
 type WorkSpans func(ctx context.Context, tx pgx.Tx, from, to time.Time) ([][2]time.Time, error)
 
 // Pace reads the selected plan's remaining steps, completion events and registered

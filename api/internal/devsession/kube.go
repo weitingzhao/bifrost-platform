@@ -11,7 +11,7 @@ import (
 // Kube is what the cluster provider needs from foundation's Kubernetes
 // adapter. The server passes *cluster.Service; this package declares the
 // interface so that it does not import cluster, a package mixed across
-// domains (law 28). nil means no cluster, as before.
+// domains (law 95). nil means no cluster, as before.
 type Kube interface {
 	KubernetesClient() (kubernetes.Interface, string, error)
 	PodLogs(ctx context.Context, namespace, name string, tailLines int64, container string) (kubeapi.LogsResponse, error)

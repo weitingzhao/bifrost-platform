@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Origin: 2026-11-20 (law 43 readings), moved with the queries 2026-11-22.
+// Origin: 2026-11-20 (law 97 readings), moved with the queries 2026-11-22.
 // Every compute reading is named once, says what it answers, and looks back
 // the window, except the "now" ones. (The check against the overview presets
 // went: a group runs alone, so its ids only need to be unique within it.)

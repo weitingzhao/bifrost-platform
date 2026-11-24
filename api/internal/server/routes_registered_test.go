@@ -18,7 +18,7 @@ import (
 //
 // Origin: 2026-11-22, the Owner in the Foundation thread: "like Kubernetes,
 // you must register with me before you do the next thing, or many people
-// lose track"; law 75 (a change says which domain it belongs to). That day
+// lose track"; law 95 (a change says which domain it belongs to). That day
 // 87 of 235 routes had no contract row, and three real losses were counted
 // (a package nobody placed defaulting to foundation, four compute interfaces
 // unregistered, payload's charter path left behind after a rename). The 87

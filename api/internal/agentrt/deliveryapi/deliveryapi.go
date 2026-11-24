@@ -4,7 +4,7 @@
 // snapshot (view=configuration).
 //
 // The handler was agentrtapi's (getDelivery of timeline.go) and is the same
-// code (OWNER_LAW #28, 2026-11-19: a domain's routes sit in its own package,
+// code (OWNER_LAW #95, 2026-11-19: a domain's routes sit in its own package,
 // so its contract can say what it offers). agentrtapi still mounts it, behind
 // the same ability, and lends it what every /agentrt route shares (Host). The
 // boundaries view reads the rule store, the rule registry and the landing

@@ -13,7 +13,7 @@ import (
 )
 
 // The asks nobody answers, said on the bus (2026-11-21, the main line "seen
-// and felt", law 69: who waits on whom was on the Bus page's panel, seen only
+// and felt", law 93: who waits on whom was on the Bus page's panel, seen only
 // by whoever looked, and chasing it is the coordinator's job). An ask is open
 // until any letter comes back from its recipient to its sender after it, as
 // the Bus page counts it. An open ask older than AskOverdueAfter, or one

@@ -6,7 +6,7 @@
 // collector reads only the artifacts it stored first).
 //
 // The handlers were agentrtapi's (putArtifact of api.go, reads.go,
-// artifacts.go, events.go) and are the same code (OWNER_LAW #28, 2026-11-19:
+// artifacts.go, events.go) and are the same code (OWNER_LAW #95, 2026-11-19:
 // a domain's routes sit in its own package, so its contract can say what it
 // offers). The artifact store and the ledger are foundation's (artifact,
 // eventlog); agentrtapi still mounts the routes, behind the same abilities,

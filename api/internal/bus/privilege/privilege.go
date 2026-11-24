@@ -2,7 +2,7 @@
 // (owner.privilege.used, 2026-11-21): each time the Owner steps in to push
 // work that lines wait on, or that no contract gives to anyone. The Owner
 // wants the count as low as possible and kept every day as a fixed
-// reference; a count in a note is not a system archive (law 47), so the
+// reference; a count in a note is not a system archive (law 93), so the
 // fact goes to the ledger and the evaluation readout counts it
 // (owner_privilege_uses, the metrics line). The coordinator records the
 // fact; the body's shape is declared in the register (rocket.yaml).

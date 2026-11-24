@@ -1,6 +1,6 @@
 /**
  * Links to the repository documents that hold the rules. No summaries, review dates or
- * status words live here: the documents on main are the source (OWNER_LAW #30).
+ * status words live here: the documents on main are the source (OWNER_LAW #93).
  * The ids keep the retired page addresses resolvable.
  */
 const doc = (repo: string, path: string) => ({

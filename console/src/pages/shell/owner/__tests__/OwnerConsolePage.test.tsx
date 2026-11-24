@@ -80,7 +80,7 @@ function fake(): OwnerConsoleData {
     inFlight: [], records: [{ run: 'r1', pipeline: 'bifrost-deliver-platform-prod', lane: 'platform', env: 'prod', deploys: true, started_at: '', completed_at: '2026-10-16T05:29:00Z', repos: {}, recorded_at: '' }],
     runsLoading: false,
     tiles: [{ name: 'Test copies', tone: 'warn', state: 'Stale', figure: '13 days', detail: 'dev and stg copies of PROD, oldest', href: '#infrastructure' }],
-    // Done for you (law 85): two rows as PROD's action record had them on 2026-11-19 (ids 818, 823).
+    // Done for you (law 91): two rows as PROD's action record had them on 2026-11-19 (ids 818, 823).
     done: doneForYou([
       { id: 823, at: new Date(NOW - 30 * 60_000).toISOString(), seat: 'local_7de640c4-4b19-4a71-a0ac-ced2ce5fc7ff', action: 'apply_manifest', target: 'k8s/cicd/tekton/task-ci-cache-trim.yaml · 1 objects',
         reason: '(the caller gave no reason)', regret: '', regret_state: 'undeclared', law: 'signed release policy', outcome: 'done', check_result: '', not_verified: '', params_hash: 'a' },
@@ -367,7 +367,7 @@ describe('Owner Console entries', () => {
     expect(worth).toHaveTextContent('The coordinator checks them')
   })
 
-  // 2026-11-19, law 85: what was done for him without a card is its own kind, read from the action record,
+  // 2026-11-19, law 91: what was done for him without a card is its own kind, read from the action record,
   // each row with how to undo it and what was checked after; not counted as his.
   it('lists what was done for him, with its undo and its check', () => {
     show('#you')

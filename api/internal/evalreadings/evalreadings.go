@@ -1,6 +1,6 @@
 // Package evalreadings is the evaluation readout: GET /api/v1/readings/evaluation.
 //
-// Law 47 (Owner 2026-11-19): the numbers an evaluation uses come only from the
+// Law 93 (Owner 2026-11-19): the numbers an evaluation uses come only from the
 // system. Each number here is computed from records that are kept (the event
 // ledger, read only through its declared read shape: eventlog.ReadShape) or
 // from Prometheus recording rules, over a window that has already closed, so

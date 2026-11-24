@@ -19,7 +19,7 @@ const run = (name: string, pipeline: string, reason: string, start: string, end?
   name, namespace: 'cicd', pipeline, revision, status: reason === 'Running' ? 'Unknown' : reason === 'Succeeded' ? 'True' : 'False', reason, start_time: start, completion_time: end,
 })
 // Shapes of releases.Rule (status.rule_list) and delivery.PipelineView, cut from config/release-rules.yaml and the infra
-// Pipelines: the lines and their repositories come from these (2026-11-17, OWNER_LAW #30), not from a list in the page.
+// Pipelines: the lines and their repositories come from these (2026-11-17, OWNER_LAW #93), not from a list in the page.
 const rule = (lane: string, env: string, deploys: boolean, pipeline?: string, name_prefix?: string) => ({ match: { pipeline, name_prefix }, lane, env, deploys })
 const RULES = [rule('trade', 'prod', true, undefined, 'bifrost-deliver-prod-pinned-'), rule('trade', 'prod', true, 'bifrost-deliver-prod'),
   rule('trade', 'stg', true, 'bifrost-deliver-stg'), rule('trade', 'stg-frontend-build', false, 'bifrost-build-frontend-stg'),
@@ -132,7 +132,7 @@ describe('ReleaseLanesSection', () => {
     expect(show('platform', {})).not.toContain('runs named')
   })
 
-  // 2026-11-17, OWNER_LAW #30: the lines were a hand-kept LANES list in this file; they now come from release-rules.yaml.
+  // 2026-11-17, OWNER_LAW #93: the lines were a hand-kept LANES list in this file; they now come from release-rules.yaml.
   it('builds the lines from the release rules, and says Unknown when the rules are not read', () => {
     expect(show('platform', { rules: { data: [rule('platform', 'stg', true, 'bifrost-deliver-platform')], error: null } }))
       .toContain('PROD · last successful deliveryNo PRODrelease-rules.yaml has no deploying prod rule for platform')

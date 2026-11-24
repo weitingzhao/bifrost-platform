@@ -116,7 +116,7 @@ func TestBuildListeningCountsHeardAndFollowed(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-21, the main line "seen and felt" (law 69): which line
+// Origin: 2026-11-21, the main line "seen and felt" (law 93): which line
 // waits on whose answer was not discoverable. An ask read but not answered
 // left Unacked at 0. An ask is open until any letter comes back from its
 // recipient to its sender after it; a note is never waited on.

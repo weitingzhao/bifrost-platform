@@ -26,7 +26,7 @@ func (s planHistoryTransport) RoundTrip(r *http.Request) (*http.Response, error)
 // rules are verification's (landinggit); the full PV2 table and the
 // borrowed-Change-Id case run through the real rules bound by server, in
 // server's TestPlanHistoryReadsThroughLandingRules (moved there 2026-11-20
-// when lineage stopped importing landinggit, OWNER_LAW #28).
+// when lineage stopped importing landinggit, OWNER_LAW #95).
 func TestPV2FallbackRequiresBoundIdentity(t *testing.T) {
 	t.Parallel()
 	a, b, base := sha40("a"), sha40("b"), sha40("0")
@@ -61,7 +61,7 @@ func TestPV2FallbackRequiresBoundIdentity(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-20, domain wall (OWNER_LAW #28): the reader judged history
+// Origin: 2026-11-20, domain wall (OWNER_LAW #95): the reader judged history
 // with verification's landinggit imported directly; now it takes the rules
 // through a port server binds. A reader nobody bound must answer Unknown with
 // an error, never a state, and must not go to Gitea.

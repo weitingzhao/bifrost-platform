@@ -5,7 +5,7 @@
 // Origin: 2026-11-19. The pass was the controller's own (ackanswers.go),
 // which put the owner domain's question cards inside a package of other
 // domains; it moved here unchanged so that each package belongs to one
-// domain (OWNER_LAW #28).
+// domain (OWNER_LAW #95).
 package questionbridge
 
 import (

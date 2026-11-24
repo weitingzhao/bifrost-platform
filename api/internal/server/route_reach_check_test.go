@@ -42,13 +42,13 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
 	"POST /api/v1/harness-preview/grants": {"admin"},
-	// 2026-11-22 (law 69, seen and felt; the CI line): why the PROD head-release
+	// 2026-11-22 (law 93, seen and felt; the CI line): why the PROD head-release
 	// loop released or held PROD, from the ledger, read-only, like the delivery reads.
 	"GET /api/v1/delivery/prod-judgements": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-20 (the Owner: every module's state on the bus): each subject's
 	// latest state for a registered state type, read-only, like the other bus reads.
 	"GET /api/v1/bus/states": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// 2026-11-20 (law 47; the coordinator gave the evaluation readout to the
+	// 2026-11-20 (law 93; the coordinator gave the evaluation readout to the
 	// metrics line): the evaluation numbers, read-only, for the console's readers.
 	"GET /api/v1/readings/evaluation": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-18 (the coordinator chose it from the cockpit line's proposal):
@@ -65,7 +65,7 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-17 (the Owner cannot see what the bus's work does): the
 	// effect readings, read-only, for the Bus page's readers.
 	"GET /api/v1/bus/effect": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// 2026-11-18 (OWNER_LAW #36): the problem loop's cases and counts, read-only, for the Bus page's readers.
+	// 2026-11-18 (OWNER_LAW #93): the problem loop's cases and counts, read-only, for the Bus page's readers.
 	"GET /api/v1/bus/problems": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// The change of generation, read-only, for the same readers.
 	"GET /api/v1/bus/nextgen":  {"viewer", "reporter", "operator", "admin", "trade-satellite"},

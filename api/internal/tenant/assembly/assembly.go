@@ -3,7 +3,7 @@
 // satellite and the trade agent catalog) and mounts the tenant's routes
 // under /api/v1. Moved out of server (server.go's construction lines and
 // mount_tenant.go) on 2026-11-19, unchanged: the same paths, gates, handlers
-// and order (OWNER_LAW #28: a domain's routes sit in its own package, so the
+// and order (OWNER_LAW #95: a domain's routes sit in its own package, so the
 // platform's assembly root wires domains instead of holding them).
 //
 // What the tenant reaches outside itself is lent to it: the cluster's

@@ -7,7 +7,7 @@
 // Origin: 2026-11-19. These passes were the controller's own methods, which
 // made the controller a package of three domains (foundation, verification,
 // coordination) that also reached into the plan's packages; they moved here
-// unchanged so that each package belongs to one domain (OWNER_LAW #28).
+// unchanged so that each package belongs to one domain (OWNER_LAW #95).
 package planloop
 
 import (

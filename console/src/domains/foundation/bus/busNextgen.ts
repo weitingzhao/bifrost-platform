@@ -125,7 +125,7 @@ export type EvalReading = { name: string; labels?: Record<string, string>; value
 export type WeekCounts = { counts: Map<string, number>; window?: { from: string; to: string } }
 
 /**
- * The metrics line's bus_events readings (law 47: the number comes from the
+ * The metrics line's bus_events readings (law 93: the number comes from the
  * system's readout, not from this page): events the relay published per
  * type in the last closed 7 days. A missing reading is not a zero.
  */

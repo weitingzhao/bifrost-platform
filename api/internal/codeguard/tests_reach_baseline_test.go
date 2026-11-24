@@ -25,7 +25,7 @@ func heldAcross(entries map[string][]string) bool {
 	return true
 }
 
-// 2026-11-21, law 71: all 115 were in server and integration, which became
+// 2026-11-21, law 95: all 115 were in server and integration, which became
 // the assembly domain; its tests reach every domain as its code does. The
 // list stays, empty: a package several domains share gets no test file.
 var testFilesInShared = []string{}

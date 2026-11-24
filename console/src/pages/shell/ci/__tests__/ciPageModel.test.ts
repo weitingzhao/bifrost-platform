@@ -180,7 +180,7 @@ describe('not measured', () => {
 
   // Guards "ONE list of everything the page could not measure": what it computed as missing (commits not read, scopes
   // not read), the sketch's facts no read answers, the reads that failed, and what the API itself reports unmeasured.
-  // 2026-11-17, OWNER_LAW #30 (nothing on Ops is kept by hand): the five facts "no read answers" were a
+  // 2026-11-17, OWNER_LAW #93 (nothing on Ops is kept by hand): the five facts "no read answers" were a
   // list written into the page; they are gone, and every line here is computed or reported by the API.
   it('lists what the page computed as missing, failed reads and the API\'s own unmeasured items, and nothing written by hand', () => {
     const lines = notMeasured({ repo: 'r', runs, changes: changeMap([change(3, { plan: 1 }), change(2, null)]), graph: graph(), scorecard, stages: true, unread: ['The release window: could not be read (HTTP 502)'] })

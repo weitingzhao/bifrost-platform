@@ -454,7 +454,7 @@ func TestFilesOnlyTheRootGroupCoversAreCounted(t *testing.T) {
 	}
 }
 
-// 2026-11-22, law 75 (the map is the counter: "I am adding this, the map adds
+// 2026-11-22, law 95 (the map is the counter: "I am adding this, the map adds
 // it"): a path no row covers gets the nearest owned directory above it and
 // the row to put in the same commit, its domain the nearest's by default or
 // the one asked for. The control: a covered path gets no claim.

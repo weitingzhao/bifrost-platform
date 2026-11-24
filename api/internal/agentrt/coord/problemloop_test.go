@@ -23,7 +23,7 @@ func verdictBody(t *testing.T, summary string, text any) []byte {
 	return b
 }
 
-// 2026-11-18, OWNER_LAW #36: a verdict is read strictly. Unknown fields, a
+// 2026-11-18, OWNER_LAW #93: a verdict is read strictly. Unknown fields, a
 // word outside the lists, a malformed event id and an over-long ref are
 // invalid (listed with their sender, never counted); a message that is not a
 // verdict at all (a status, plain text) is left alone. Positive control: the
@@ -56,7 +56,7 @@ func TestParseProblemVerdict(t *testing.T) {
 	}
 }
 
-// 2026-11-18, OWNER_LAW #36: the loop is read from the letters (messages the
+// 2026-11-18, OWNER_LAW #93: the loop is read from the letters (messages the
 // controller sent for the rows that ask) and the verdicts (notes to the
 // board). Guards: a letter matches its verdict by the event id in its body;
 // the latest valid verdict wins and keeps who and when; an invalid one is
