@@ -41,7 +41,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; servic
   const hasToken = operatorToken() !== ''
   // Reads the bus refreshes when it says they changed (step 4): slow polling while the stream is up, the old pace when it is down.
   const live15 = useLiveInterval(15_000), live30 = useLiveInterval(30_000), live60 = useLiveInterval(60_000)
-  // Done for you (law 46): the action record's last day, read with For you. The window's start is rounded to the
+  // Done for you (law 85): the action record's last day, read with For you. The window's start is rounded to the
   // minute so the query key holds still between reads.
   const doneSince = new Date(Math.floor((now - DONE_WINDOW_HOURS * 3_600_000) / 60_000) * 60_000).toISOString()
   const doneQ = useQuery({ queryKey: ['records', 'done-for-you'], queryFn: () => fetchActionRecords({ since: doneSince, limit: 500 }), refetchInterval: live60, retry: false })

@@ -8,7 +8,7 @@ import { districtTechTree, domainTechTree } from '../techTree'
 // nodes are the districts with their map lights, its edges the imports GET /api/v1/ci/domains serves
 // (a wrong-way edge kept as a loop), that it says what it does not see, and that an unread graph leaves
 // the nodes alone with why rather than a guessed edge.
-// The approvals domain was owner until law 66 (2026-11-21): the ids follow the map.
+// The approvals domain was owner until the Owner's naming of 2026-11-21: the ids follow the map.
 const light = (value: string) => ({ value, why: '' })
 const row = (id: string, overall = 'good') => ({ id, overall, alive: light('good'), interfaces: light('problem'), boundary: light('good'), fresh: light('unknown') })
 const status = { version: 1, domains: [row('foundation'), row('approvals', 'problem'), row('coordination')] } as MapStatus

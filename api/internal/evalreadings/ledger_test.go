@@ -107,7 +107,7 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 }
 
 // 2026-11-20, the metrics line: how often the Owner's phone was pushed about a
-// card had no system record across "relax cards into records" (law 46); the
+// card had no system record across "relax cards into records" (law 85); the
 // comm line put each push on the ledger as approval.card.notified from the
 // PROD release of 16:20:43Z. Shape from PROD: kind created, one kind failed
 // (#662, 17:22:42Z). 2026-11-23: "failed" was read as an undelivered push, so

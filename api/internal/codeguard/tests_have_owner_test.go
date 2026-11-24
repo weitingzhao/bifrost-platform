@@ -85,7 +85,7 @@ func ownerRefusal(o ownership, f testFile) string {
 	switch {
 	case o.domainOf(f.Pkg) != "mixed" && name == o.domainOf(f.Pkg):
 		// The line repeats what the table says. Allowed since 2026-11-21 (the
-		// Owner, law 52, option 1): when delivery became one domain, three of
+		// Owner's ruling of 2026-11-21, option 1): when delivery became one domain, three of
 		// its test files with this line were trust-anchored and may not be
 		// edited; the line says nothing false, so it is not refused.
 		return ""
@@ -483,7 +483,7 @@ func TestATestInASharedPackageMayNameItsDomain(t *testing.T) {
 		file("mine_test.go", "api/internal/both", "//bifrost:owner plan"),
 		file("other_test.go", "api/internal/both", "//bifrost:owner tenant"),
 		file("empty_test.go", "api/internal/both", "//bifrost:owner"),
-		// Origin: 2026-11-21, law 52 option 1: in a package of one domain, a
+		// Origin: 2026-11-21, the Owner's ruling (option 1): in a package of one domain, a
 		// line naming that domain holds (same_test.go); one naming another
 		// domain is still refused (single_test.go, the control).
 		file("same_test.go", "api/internal/plan", "//bifrost:owner plan"),

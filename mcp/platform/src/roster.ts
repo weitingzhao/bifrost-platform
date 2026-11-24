@@ -3,7 +3,7 @@
  * workshop list: "a change of session must not mean a change of address;
  * mail by seat name"). Crew keeps the roster, bifrost-trade-infra
  * agent-config/charters/seats.yaml: one seat a line, its id (the charter's
- * file name), its name (law 66) and the session that sits it now (or, for a
+ * file name), its name (the Owner's naming of 2026-11-21) and the session that sits it now (or, for a
  * Codex seat, its Claude-side liaison). send_message resolves
  * roster:<id or name> to thread:<session> from the workspace's checkout
  * before it sends; the platform only ever sees thread: addresses. seat:<x>

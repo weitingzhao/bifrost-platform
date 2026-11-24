@@ -253,7 +253,7 @@ var notifiedSince = time.Date(2026, 11, 20, 16, 20, 43, 0, time.UTC)
 // interruptionReading: owner_interruptions, the pushes about a card that
 // reached the Owner's phone in the window (approval.card.notified, any kind
 // but failed). Origin: the metrics line, 2026-11-20 ("relax cards into
-// records", law 46): how often he is interrupted had no system record across
+// records", law 85): how often he is interrupted had no system record across
 // the change; the comm line put the pushes on the ledger.
 func (s ledgerSource) interruptionReading(w Window) (Reading, error) {
 	const name = "owner_interruptions"
