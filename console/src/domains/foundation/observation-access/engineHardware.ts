@@ -8,7 +8,8 @@ import type { CapturedReads } from '../runtime-observation/read'
  * in nothing; turning it off again is this table, nothing else.
  */
 /** Keyed by the platform's own `viewer_env` (self-health): dev, stg, prod, dev-local. */
-export const ENGINE_HARDWARE: Readonly<Partial<Record<string, boolean>>> = {}
+// stg on 2026-11-24 (箭10: engine ab72963 on STG) for the comparison; dev and prod off, PROD has no engine yet.
+export const ENGINE_HARDWARE: Readonly<Partial<Record<string, boolean>>> = { stg: true }
 
 export const ENGINE_HARDWARE_PATH = '/engine/v1/hardware'
 

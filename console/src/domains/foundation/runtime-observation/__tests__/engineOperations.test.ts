@@ -53,7 +53,9 @@ it('says a report not in the pipeline report shape is an error, not an empty lis
   expect(() => runsFromReport({ ...report, panels: [] }, 'bifrost-ci-platform')).toThrow('pipeline report shape')
 })
 
-it('reads straight from the platform in every environment until one is switched on', () => {
-  expect(ENGINE_REPORT).toEqual({})
-  for (const env of ['dev', 'stg', 'prod', 'dev-local', undefined]) expect(engineReportOn(env)).toBe(false)
+it('reads through the engine only where switched on: STG, for the comparison; dev and prod read straight', () => {
+  expect(ENGINE_REPORT).toEqual({ stg: true })
+  expect(engineReportOn('stg')).toBe(true)
+  expect(engineReportOn(' STG ')).toBe(true)
+  for (const env of ['dev', 'prod', 'dev-local', '', undefined, 'constructor']) expect(engineReportOn(env)).toBe(false)
 })

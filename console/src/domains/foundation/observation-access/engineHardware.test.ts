@@ -57,7 +57,9 @@ it("keeps the engine's reason for a failed read and says a read the engine did n
   expect(down).toEqual({ [TOPOLOGY]: { error: 'platform unreachable: ECONNREFUSED', receivedAt: AT } })
 })
 
-it('reads straight from the platform in every environment until one is switched on', () => {
-  expect(ENGINE_HARDWARE).toEqual({})
-  for (const env of ['dev', 'stg', 'prod', 'dev-local', undefined] as const) expect(engineHardwareOn(env)).toBe(false)
+it('reads through the engine only where switched on: STG, for the comparison; dev and prod read straight', () => {
+  expect(ENGINE_HARDWARE).toEqual({ stg: true })
+  expect(engineHardwareOn('stg')).toBe(true)
+  expect(engineHardwareOn(' STG ')).toBe(true)
+  for (const env of ['dev', 'prod', 'dev-local', '', undefined, 'constructor']) expect(engineHardwareOn(env)).toBe(false)
 })
