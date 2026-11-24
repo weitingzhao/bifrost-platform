@@ -2348,6 +2348,7 @@
         "console/src/domains/foundation/runtime-observation/RuntimeObservation.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/communication-contract.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/controlled.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/engineOperations.test.ts",
         "console/src/domains/foundation/runtime-observation/__tests__/lifecycle.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/operations.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
@@ -2355,6 +2356,7 @@
         "console/src/domains/foundation/runtime-observation/__tests__/states.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
+        "console/src/domains/foundation/runtime-observation/engineOperations.ts",
         "console/src/domains/foundation/runtime-observation/operations.ts",
         "console/src/domains/foundation/runtime-observation/plain.ts",
         "console/src/domains/foundation/runtime-observation/read.ts",
@@ -2366,6 +2368,7 @@
       "imports": [
         "console/src",
         "console/src/api/client.ts",
+        "console/src/api/core.ts",
         "console/src/components/shell",
         "console/src/domains/coordination/communication",
         "console/src/domains/delivery/api",
