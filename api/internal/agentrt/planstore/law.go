@@ -177,3 +177,27 @@ func lawByApproval(ctx context.Context, db eventlog.DB, approvalID string) (stri
 	}
 	return "", false, nil
 }
+
+// refuseLawStandardEdits refuses a plan change that retitles, drops or
+// re-marks a standard of an approved law (closed loop, standard 3: the line
+// that does the work cannot change an approved standard). A law's item is
+// the one the laws pass made, titled with its version (「标准版本 appr_…」);
+// its steps are its standards, and they change only by a new law_amend card
+// (a new version, a new item). A done rule may still be set on such a step:
+// that names the reading the standard is measured by, not the standard.
+func refuseLawStandardEdits(ctx context.Context, tx pgx.Tx, changes []PlanChange) error {
+	for _, c := range changes {
+		if c.Op != "retitle" && c.Op != "drop_step" && c.Op != "set_marks" && c.Op != "rebind_step" {
+			continue
+		}
+		var lawItem bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
+		  WHERE s.plan_node_id = $1 AND i.node_kind = 'item' AND strpos(i.title, '（标准版本 appr_') > 0)`, c.Node).Scan(&lawItem); err != nil {
+			return err
+		}
+		if lawItem {
+			return eventlog.Invalid("%s is a standard of an approved law: it changes only by a law_amend card (%s refused)", c.Node, c.Op)
+		}
+	}
+	return nil
+}

@@ -305,6 +305,11 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 // applyChangesNoted is applyChanges with a note on its plan_changed event
 // (law.go marks the events that record a law card).
 func applyChangesNoted(ctx context.Context, tx pgx.Tx, actor, root string, decided int64, note string, changes []PlanChange) ([]string, error) {
+	if note == "" {
+		if err := refuseLawStandardEdits(ctx, tx, changes); err != nil {
+			return nil, err
+		}
+	}
 	if len(changes) == 1 && changes[0].Op == "adopt_plan_view" {
 		return nil, adoptPlanView(ctx, tx, actor, root, decided, changes[0])
 	}

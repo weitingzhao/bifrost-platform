@@ -1,6 +1,7 @@
 package planstore_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -53,4 +54,43 @@ func TestRecordLawsOncePerCard(t *testing.T) {
 		t.Fatal("a card the ledger has not announced was recorded")
 	}
 	w.chainHolds(t, planstore.PlanStream(root))
+}
+
+// 2026-11-24, closed loop standard 3 (the line that does the work cannot
+// change an approved standard): retitling or dropping a law's standard step
+// is refused, within the standing authorization or not; the law's item is
+// recorded by the laws pass and its steps change only by a new card. The
+// positive control: the same retitle on an ordinary step not started is
+// applied at once.
+func TestLawStandardStepsAreLocked(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	card := planstore.LawCard{ApprovalID: "appr_00000000000000d1", Number: 301, Op: "add", After: "a law",
+		Standards: []planstore.LawStandard{{ID: "s1", Standard: "zero by hand", Measure: "Audit counts"}}}
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "card:" + card.ApprovalID, Type: "approval.card.executed", Actor: "controller",
+			Body: map[string]any{"id": card.ApprovalID, "card": "#301", "subject": "#301", "key": "#301", "number": 301, "action": "law_amend",
+				"status": "executed", "ref": "/api/v1/approvals/" + card.ApprovalID, "change": "executed"}})
+		return err
+	}))
+	_, err := planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{card})
+	ok(t, err)
+	var step string
+	ok(t, w.rt.QueryRow(ctx, `SELECT s.plan_node_id FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
+	  WHERE i.title = $1`, planstore.LawTitle(card)).Scan(&step))
+	a := &asker{}
+	for _, c := range []planstore.PlanChange{{Op: "retitle", Node: step, Title: "s1: one by hand is fine"}, {Op: "drop_step", Node: step}} {
+		_, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:doer"), "k-"+c.Op, root, "loosen the standard", []planstore.PlanChange{c}, a.ask)
+		if !errors.Is(err, eventlog.ErrInvalid) {
+			t.Fatalf("%s of a law's standard: err = %v; want refused", c.Op, err)
+		}
+	}
+	if len(a.cards) != 0 {
+		t.Fatalf("a refused edit of a standard asked the Owner %d times", len(a.cards))
+	}
+	out, err := planstore.ProposePlanChange(ctx, w.rt, wr("thread:doer"), "k-control", root, "rename", []planstore.PlanChange{{Op: "retitle", Node: s2, Title: "s2, renamed"}}, a.ask)
+	ok(t, err)
+	if out["decision"] != "applied" {
+		t.Fatalf("the control retitle = %v", out)
+	}
 }
