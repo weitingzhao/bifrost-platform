@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { consoleContent } from '../console'
 import { CardView } from '@bifrost/ui/city/CardView'
 import type { CardBody } from '@bifrost/ui/city/cards'
-import { domainsPanel, toneOf } from '../domainsPanel'
+import { domainsPanel, lightBlocks, toneOf } from '../domainsPanel'
 
 const light = (value: string, why = `${value} because`) => ({ value, why })
 const status = {
@@ -87,5 +87,17 @@ describe('domains panel', () => {
 describe('the map lights in the Ops seven words', () => {
   it('reads good as ok, problem as warn, bad as fail, anything else as not judged', () => {
     expect(['good', 'problem', 'bad', 'unknown', ''].map(toneOf)).toEqual(['ok', 'warn', 'fail', 'unknown', 'unknown'])
+  })
+})
+
+// 2026-11-24, 箭10 on PROD (Delivery district): the "Lights · from the map" card still wrote the map's own words
+// ("OVERALL good", "ALIVE good"); the colour was the Ops word, the text was not.
+describe('the district lights card writes the Ops words', () => {
+  it('shows ok/warn/fail/unknown, the map\'s own word and why on hover', () => {
+    const b = lightBlocks({ data: status as never }, 'ops')[0]
+    const rows = b.kind === 'facts' ? b.rows : []
+    expect(rows[0].value).toMatchObject({ text: 'fail', tone: 'fail', title: 'the map says bad' })
+    expect(rows[1].value).toMatchObject({ text: 'ok', title: 'the map says good: good because' })
+    expect(rows[2].value).toMatchObject({ text: 'warn' })
   })
 })

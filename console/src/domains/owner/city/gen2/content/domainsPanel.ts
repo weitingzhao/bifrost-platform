@@ -100,11 +100,13 @@ export function lightBlocks(read: DomainsRead, id: string): Block[] {
   const d = read.data
   const row = d?.domains.find(r => r.id === id)
   if (!d || !row) return [{ kind: 'note', text: "This domain's lights are not known." }]
-  const light = (l: DomainLight | undefined) => ({ text: l?.value || 'unknown', tone: toneOf(l?.value || 'unknown'), title: l?.why || undefined })
+  // The card says the Ops word (ok, warn, fail, unknown); the map's own word and why stay on hover.
+  const word = (v: string | undefined, why?: string) => ({ text: toneOf(v || 'unknown'), tone: toneOf(v || 'unknown'), title: [`the map says ${v || 'nothing'}`, why].filter(Boolean).join(': ') })
+  const light = (l: DomainLight | undefined) => word(l?.value, l?.why)
   return [{
     kind: 'facts',
     rows: [
-      { label: 'Overall', value: { text: row.overall || 'unknown', tone: toneOf(row.overall || 'unknown') }, note: '' },
+      { label: 'Overall', value: word(row.overall), note: '' },
       ...LIGHTS.map(([k, label]) => ({ label, value: light(row[k]), note: row[k]?.why ?? '' })),
       { label: 'Off map', value: offMapOf(d, id), note: '' },
       { label: 'Tier', value: row.tier ? `L${row.tier}` : { text: 'not written', tone: 'unknown' as Tone }, note: 'as the ownership table declares it' },
