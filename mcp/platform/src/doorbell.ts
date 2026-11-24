@@ -116,7 +116,9 @@ export async function ring(opts: { minutes: number; register: boolean }, io: Doo
       got = (await waitForMessages({ timeout_seconds: known === undefined ? 0 : Math.min(600, left) }, deps)) as typeof got
     } catch (err) {
       if (!transient(err)) throw err
-      out(`doorbell: platform unreachable (${err instanceof Error ? err.message.slice(0, 120) : String(err)}); retrying`)
+      // The time says when and for how long the platform was away (2026-11-24:
+      // two 4-hour runs logged 17 and 21 of these with no way to tell when).
+      out(`doorbell: platform unreachable at ${new Date(now()).toISOString()} (${err instanceof Error ? err.message.slice(0, 120) : String(err)}); retrying`)
       await sleep(Math.min(RETRY_MS, Math.max(0, end - now())))
       continue
     }

@@ -100,7 +100,8 @@ test('a platform restart is waited out; a refusal is not', async () => {
   f.io.sleep = async (ms) => { slept.push(ms); f.advance(ms) }
   assert.equal(await ring({ minutes: 1, register: false }, f.io), 0)
   assert.equal(slept.length, 2)
-  assert.ok(f.lines.some((l) => /platform unreachable/.test(l)))
+  // 2026-11-24: the line carries its time, so an outage's start and length can be read from the log.
+  assert.ok(f.lines.some((l) => /platform unreachable at \d{4}-\d\d-\d\dT/.test(l)))
   const g = fake([])
   g.io.deps.get = async () => { throw new Error('GET /api/v1/agentrt/messages: HTTP 401 unauthorized') }
   g.io.sleep = async () => {}
