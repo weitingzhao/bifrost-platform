@@ -253,6 +253,9 @@ func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body [
 	if matter != "" {
 		posted["matter"] = matter
 	}
+	if summary := letterSummary(body); summary != "" {
+		posted["summary"] = summary
+	}
 	ev, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "mbox:" + to, Type: "message_posted", Actor: from, MissionID: mission, TaskID: task,
 		Body: posted, Cause: cause})
 	if err != nil {

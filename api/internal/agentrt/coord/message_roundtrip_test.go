@@ -40,13 +40,23 @@ func TestLetterRoundTripEvidencePG(t *testing.T) {
 		if arrivals != 1 || acks != 1 {
 			t.Errorf("arrival=%d ACK=%d", arrivals, acks)
 		}
-		var ref string
+		// The text stays the receiver's; since 2026-11-24 the sender's declared
+		// summary goes on message_posted (cockpit's timeline cards), and a
+		// plain letter publishes none.
+		var ref, summary string
 		var disclosed bool
-		if err := tx.QueryRow(ctx, `SELECT body_json->>'reply_to', body_json ? 'text' OR body_json ? 'summary' FROM agentrt.event WHERE event_type='message_posted' AND body_json->>'message_id'=$1`, reply).Scan(&ref, &disclosed); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT body_json->>'reply_to', coalesce(body_json->>'summary',''), body_json ? 'text' FROM agentrt.event WHERE event_type='message_posted' AND body_json->>'message_id'=$1`, reply).Scan(&ref, &summary, &disclosed); err != nil {
 			return err
 		}
-		if ref != original || disclosed {
-			t.Errorf("reply=%q disclosed=%v", ref, disclosed)
+		if ref != original || summary != "test reply" || disclosed {
+			t.Errorf("reply=%q summary=%q disclosed=%v", ref, summary, disclosed)
+		}
+		var plain bool
+		if err := tx.QueryRow(ctx, `SELECT body_json ? 'summary' FROM agentrt.event WHERE event_type='message_posted' AND body_json->>'message_id'=$1`, original).Scan(&plain); err != nil {
+			return err
+		}
+		if plain {
+			t.Errorf("a plain letter published a summary")
 		}
 		return nil
 	}))

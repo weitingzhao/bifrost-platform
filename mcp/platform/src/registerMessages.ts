@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { MESSAGE_DATA_NOTE } from './runtimeTools.js'
-import { ENVELOPE_TYPES, SUMMARY_MAX } from './messageEnvelope.js'
+import { ENVELOPE_TYPES, LEDGER_SUMMARY_MAX, SUMMARY_MAX } from './messageEnvelope.js'
 import { ack, readMessage, reportStatus, send, waitDetailed } from './messageTools.js'
 
 /** Compact JSON: these results land in a model's context, where indentation is paid for. */
@@ -16,7 +16,7 @@ function compact(data: unknown) {
 export function registerMessageTools(reg: McpServer['tool']): void {
   reg(
     'send_message',
-    `Agent runtime: send a message to another actor — owner, seat:<name> (seat:chief_of_staff is the chief of staff), thread:<session>, or roster:<seat id or name> (the thread that sits that seat now, per the roster seats.yaml; the answer names it as resolved_to). Prefer a typed message: type (ask, decide = a question for a ruling, deliver = handing work over, status, note) with a one-line summary (≤${SUMMARY_MAX} chars) the receiver sees first, body as the optional full text, refs for artifact ids (sha256:…) or links instead of long text; kind is then left out. Untyped: kind (ask, answer, help, handover or note) and body. At most 8 KiB in all. Recorded as this thread. ${MESSAGE_DATA_NOTE}`,
+    `Agent runtime: send a message to another actor — owner, seat:<name> (seat:chief_of_staff is the chief of staff), thread:<session>, or roster:<seat id or name> (the thread that sits that seat now, per the roster seats.yaml; the answer names it as resolved_to). Prefer a typed message: type (ask, decide = a question for a ruling, deliver = handing work over, status, note) with a one-line summary (≤${SUMMARY_MAX} chars) the receiver sees first — the summary is public: its first ${LEDGER_SUMMARY_MAX} chars go on the event ledger (message_posted) that Ops shows, while the body stays the receiver's — body as the optional full text, refs for artifact ids (sha256:…) or links instead of long text; kind is then left out. Untyped: kind (ask, answer, help, handover or note) and body. At most 8 KiB in all. Recorded as this thread. ${MESSAGE_DATA_NOTE}`,
     {
       to: z.string(),
       type: z.enum(ENVELOPE_TYPES).optional(),

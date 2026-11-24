@@ -47,6 +47,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"message_posted", "message_id", "m_" + ulid, "m_" + ulid + "0"},
 		{"message_posted", "kind", "wake", "ping"},
 		{"message_posted", "matter", "coordination", "Coordination!"},
+		{"message_posted", "summary", "window fixed", "two\nlines"},
 		// 2026-11-22: public reply reference uses the existing message ID shape.
 		{"message_posted", "reply_to", "m_" + ulid, "not-a-message"},
 		{"message_acked", "message_id", "m_" + ulid, "message"},

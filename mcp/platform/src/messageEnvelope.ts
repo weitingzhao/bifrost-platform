@@ -28,6 +28,8 @@ export const KIND_OF: Record<EnvelopeType, 'ask' | 'handover' | 'note'> = {
 }
 
 export const SUMMARY_MAX = 200
+/** How much of the summary the platform puts on message_posted (coord.MaxLetterSummary). */
+export const LEDGER_SUMMARY_MAX = 140
 export const BODY_MAX = 8192
 
 export interface Envelope {
