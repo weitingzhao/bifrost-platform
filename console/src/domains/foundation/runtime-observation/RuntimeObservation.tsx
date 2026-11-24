@@ -1,4 +1,5 @@
 import { RuntimeWorld, type RuntimeWorldControl, type RuntimeWorldFrame } from '@bifrost/ui/city/observation'
+import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
 import { useRuntimeObservationSnapshot } from './useRuntimeObservationSnapshot'
@@ -29,7 +30,9 @@ function useWorldFrame(): RuntimeWorldFrame {
   const back = useJourneyBack()
   // Console is the Console page this journey came from (箭10 2026-11-23, item 8), else its overview.
   const console = consolePageOf(trail) ?? WORLD_HREFS.console
-  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv) }
+  // Signals' frame says "New version · Reload" too (lib/shell/newVersion; the engine forwards it, bifrost-ui 0.62.1).
+  const notice = useNewVersionNotice()
+  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv), notice }
 }
 /** The last Console address in the journey's trail, or undefined when the journey did not pass through the Console. */
 export function consolePageOf(trail: readonly string[]): string | undefined {
