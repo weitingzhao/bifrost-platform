@@ -1,4 +1,5 @@
 import { WorldJourney } from '@/components/shell/world-journey/WorldJourney'
+import { usePublishFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useIdleReloadWhenStale } from '@/lib/shell/newVersion'
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
@@ -151,6 +152,8 @@ function ConsolePageInner() {
 
   // A newer build live: the frame says so, an idle page reloads itself (lib/shell/newVersion, 箭10 2026-11-23).
   useIdleReloadWhenStale()
+  // Laws and actions waiting, worked out once here and read by every view's frame (lib/shell/frameWaiting).
+  usePublishFrameWaiting()
 
   useEffect(() => {
     applyHash()

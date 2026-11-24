@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentProps } from 'react'
+import { useFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { useQuery } from '@tanstack/react-query'
 import { AgentWorld, type CommunicationProjection } from '@bifrost/ui/communication'
@@ -22,11 +23,12 @@ const hhmm = (iso: string) => Number.isFinite(Date.parse(iso)) ? new Date(iso).t
  * The frame, subscribed on its own to the shared observation context, so only the frame follows that context's clock
  * (not the scene). Row 2 says when Signals holds a pinned snapshot, the Console's words (phone: "Pinned · 15:02").
  */
-function AgentFrame(props: Omit<ComponentProps<typeof WorldFrame>, 'context' | 'notice'>) {
+function AgentFrame(props: Omit<ComponentProps<typeof WorldFrame>, 'context' | 'notice' | 'waiting'>) {
   const pin = signalsPin(useSharedObservation())
   const context = pin ? <a href="#observation" data-signals-pin title={`Signals snapshot captured ${pin}, pinned`}><span className="wf-long">Signals snapshot retained · </span><span className="wf-short">Pinned · </span>{hhmm(pin)}</a> : undefined
   const notice = useNewVersionNotice()
-  return <WorldFrame {...props} context={context} notice={notice} />
+  const waiting = useFrameWaiting()
+  return <WorldFrame {...props} context={context} notice={notice} waiting={waiting} />
 }
 
 export default function AgentScreen() {

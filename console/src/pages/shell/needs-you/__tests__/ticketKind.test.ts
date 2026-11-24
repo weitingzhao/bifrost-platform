@@ -2,7 +2,7 @@
 // executive work no longer share one queue on Command. The kind comes from the data (a request's action, a
 // question's owner_duty), never from a title; a question without a duty is an action marked "kind not declared".
 import { describe, expect, it } from 'vitest'
-import { approvalKind, kindSummary, questionKind, splitApprovals, splitQuestions } from '@/pages/shell/needs-you/ticketKind'
+import { approvalKind, kindSummary, questionKind, splitApprovals, splitQuestions, waitingKinds } from '@/pages/shell/needs-you/ticketKind'
 
 describe('ticket kind', () => {
   it('files law_amend under laws and every other action under actions', () => {
@@ -23,5 +23,18 @@ describe('ticket kind', () => {
     expect(kindSummary(2, 5)).toBe('2 laws · 5 actions waiting')
     expect(kindSummary(1, 1)).toBe('1 law · 1 action waiting')
     expect(kindSummary(null, 3)).toBe('? laws · 3 actions waiting')
+  })
+})
+
+// 2026-11-24 箭10: every view's frame says "N laws · M actions" from the same numbers as the page; a list that could
+// not be read makes its side "?" (null), never 0.
+describe('waitingKinds', () => {
+  const base = { approvalsKnown: true, questionsKnown: true, runtimeCount: 1, decide: [{ action: 'law_amend' }], terminal: [], check: [{ action: 'apply_manifest' }], openQuestions: [{ owner_duty: 'goal' }, {}] }
+  it('counts laws and actions from the lists, the runtime cards among the actions', () => {
+    expect(waitingKinds(base)).toEqual({ laws: 2, actions: 3 })
+  })
+  it('says not read when a list it needs was not read', () => {
+    expect(waitingKinds({ ...base, approvalsKnown: false })).toEqual({ laws: null, actions: null })
+    expect(waitingKinds({ ...base, runtimeCount: null })).toEqual({ laws: 2, actions: null })
   })
 })

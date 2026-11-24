@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { useQuery } from '@tanstack/react-query'
 import CityGen2 from '@bifrost/ui/city/CityGen2'
@@ -52,11 +53,13 @@ export default function CityScreen() {
   const place = useMemo(() => placeAt(content.tree, q.path), [content.tree, q.path])
   const at = hardware.data?.at
   const notice = useNewVersionNotice()
+  const waiting = useFrameWaiting()
   return (
     <div className="city-screen">
       <WorldFrame
         here="city"
         notice={notice}
+        waiting={waiting}
         back={back}
         crumbs={crumbsOf(content.tree, q.path)}
         hrefs={{ city: cityHref(q.path, q.sel), signals: '#observation', agents: '#collaboration', console: consoleHrefOf(place, q.path, null) }}

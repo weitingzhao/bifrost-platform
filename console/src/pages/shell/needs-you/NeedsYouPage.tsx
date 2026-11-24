@@ -18,7 +18,7 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
-import { kindSummary, splitApprovals, splitQuestions } from '@/pages/shell/needs-you/ticketKind'
+import { kindSummary, splitApprovals, splitQuestions, waitingKinds } from '@/pages/shell/needs-you/ticketKind'
 import { SIGNOFF_SECTION_HREF, approvalPart } from '@/pages/shell/progress/progressPart'
 import { SignoffWaitingLink } from '@/pages/shell/agents/SignoffWaiting'
 import { useSignoffWaits } from '@/pages/shell/agents/useRuntimePlan'
@@ -218,13 +218,12 @@ export function NeedsYouPage() {
   const dr = useMemo(() => splitApprovals(drills), [drills])
   const q = useMemo(() => splitQuestions(openQuestions), [openQuestions])
   const qAll = useMemo(() => splitQuestions(questions), [questions])
-  const approvalsKnown = openCount.state === 'known'
-  const questionsKnown = !questionsLoading && !questionsUnreadable && !questionsStale
-  const lawCount = approvalsKnown && questionsKnown ? d.laws.length + t.laws.length + c.laws.length + q.laws.length : null
-  const runtimeKnown = runtimeCount.state === 'known' ? runtimeItems.length : null
-  const actionCount = approvalsKnown && questionsKnown && runtimeKnown != null
-    ? d.actions.length + t.actions.length + c.actions.length + q.actions.length + runtimeKnown
-    : null
+  const { laws: lawCount, actions: actionCount } = waitingKinds({
+    approvalsKnown: openCount.state === 'known',
+    questionsKnown: !questionsLoading && !questionsUnreadable && !questionsStale,
+    runtimeCount: runtimeCount.state === 'known' ? runtimeItems.length : null,
+    decide, terminal, check, openQuestions,
+  })
   const runtimeUnreadable = runtimeQuery.isError || runtimeQuery.isPaused
   const runtimeReadAt = runtimeQuery.dataUpdatedAt > 0 ? runtimeQuery.dataUpdatedAt : null
 

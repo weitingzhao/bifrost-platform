@@ -1,4 +1,5 @@
 import { RuntimeWorld, type RuntimeWorldControl, type RuntimeWorldFrame } from '@bifrost/ui/city/observation'
+import { useFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLine'
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
@@ -32,7 +33,8 @@ function useWorldFrame(): RuntimeWorldFrame {
   const console = consolePageOf(trail) ?? WORLD_HREFS.console
   // Signals' frame says "New version · Reload" too (lib/shell/newVersion; the engine forwards it, bifrost-ui 0.62.1).
   const notice = useNewVersionNotice()
-  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv), notice }
+  const waiting = useFrameWaiting()
+  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv), notice, waiting }
 }
 /** The last Console address in the journey's trail, or undefined when the journey did not pass through the Console. */
 export function consolePageOf(trail: readonly string[]): string | undefined {

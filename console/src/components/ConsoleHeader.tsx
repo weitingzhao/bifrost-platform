@@ -1,4 +1,5 @@
 import { communicationHref } from '@/domains/coordination/communication/looks'
+import { useFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
@@ -78,11 +79,13 @@ export function ConsoleHeader({
     window.location.hash,
   )
   const notice = useNewVersionNotice()
+  const waiting = useFrameWaiting()
   return (
     <div className="ops-console-header ops-console-frame">
       <WorldFrame
         here="console"
         notice={notice}
+        waiting={waiting}
         crumbs={crumbs ?? consoleCrumbs(back ?? null, pageTitle)}
         hrefs={places.hrefs}
         env={viewerEnvLoading ? undefined : viewerEnvBadgeLabel(viewerEnv)}

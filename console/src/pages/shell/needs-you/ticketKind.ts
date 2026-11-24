@@ -51,3 +51,27 @@ export function kindSummary(laws: number | null, actions: number | null): string
   const part = (n: number | null, one: string) => (n == null ? `? ${one}s` : plural(n, one))
   return `${part(laws, 'law')} · ${part(actions, 'action')} waiting`
 }
+
+/**
+ * Laws and actions waiting, from Needs you's lists (the page and the frame read the same numbers). null when a list it
+ * needs could not be read: approvals and questions for laws; those and the agent runtime for actions. Drills are never
+ * counted.
+ */
+export function waitingKinds(input: {
+  approvalsKnown: boolean
+  questionsKnown: boolean
+  runtimeCount: number | null
+  decide: readonly Pick<ApprovalItem, 'action'>[]
+  terminal: readonly Pick<ApprovalItem, 'action'>[]
+  check: readonly Pick<ApprovalItem, 'action'>[]
+  openQuestions: readonly Pick<Question, 'owner_duty'>[]
+}): { laws: number | null; actions: number | null } {
+  if (!input.approvalsKnown || !input.questionsKnown) return { laws: null, actions: null }
+  const approvals = [...input.decide, ...input.terminal, ...input.check]
+  const a = splitApprovals(approvals)
+  const q = splitQuestions(input.openQuestions)
+  return {
+    laws: a.laws.length + q.laws.length,
+    actions: input.runtimeCount == null ? null : a.actions.length + q.actions.length + input.runtimeCount,
+  }
+}
