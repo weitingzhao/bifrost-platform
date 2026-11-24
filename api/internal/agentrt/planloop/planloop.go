@@ -277,11 +277,10 @@ func (l *Loop) Laws(ctx context.Context) (int, error) {
 		}
 	}
 	// A law repealed seven days ago is deleted (planstore.PurgeRepealedLaws).
-	if _, err := planstore.PurgeRepealedLaws(ctx, l.DB, time.Now()); err != nil {
-		return transcribed, err
-	}
+	// Its failure does not hold up the cards below; it is returned with them.
+	_, purgeErr := planstore.PurgeRepealedLaws(ctx, l.DB, time.Now())
 	if l.Sources.Laws == nil {
-		return transcribed, nil
+		return transcribed, purgeErr
 	}
 	type read struct {
 		cards []planstore.LawCard
@@ -293,8 +292,8 @@ func (l *Loop) Laws(ctx context.Context) (int, error) {
 	})
 	cards, ok := r.cards, r.ok
 	if !ok || len(cards) == 0 {
-		return transcribed, nil
+		return transcribed, purgeErr
 	}
 	n, err := planstore.RecordLaws(ctx, l.DB, cards)
-	return transcribed + n, err
+	return transcribed + n, errors.Join(purgeErr, err)
 }
