@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rulesBroken } from '@bifrost/ui/city/rules'
 import type { Place } from '@bifrost/ui/city/places'
-import { hardwareDistrict, hardwareRulesBroken, type HardwareReads } from '../hardware'
+import { hardwareDistrict, hardwareRulesBroken, OTHER_DEVICES, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 
 // 2026-11-19, the Owner: the hardware district is the first domain to come in through the entry rules
@@ -123,5 +123,30 @@ describe('the units’ rooms in use', () => {
   it('a unit that read nothing keeps the plain room', () => {
     expect(nas.children.find(r => r.id === 'cpu')!.picture).toBeUndefined()
     expect(dev('UGREEN-NAS').children.every(r => !r.picture)).toBe(true)
+  })
+})
+
+// 2026-11-24, PROD: a new machine (win11-secondary) took the devices to 272 cells on a ground of 256 and the engine
+// refused the whole City ("This content breaks the frame's rules"). The district's size is the land the Owner gives
+// it, so what does not fit stands in one Other site, named, and the City still draws.
+describe('more devices than one ground holds', () => {
+  const extra = (id: string) => ({ ...reads.topology![0], id, label: id, grid: undefined })
+  const more = { ...reads, topology: [...reads.topology!, extra('extra-host-1'), extra('extra-host-2'), extra('extra-host-3')] } as unknown as HardwareReads
+  const big = hardwareDistrict(more)
+  it('keeps what fits, puts the rest in one Other site that names them, and breaks no rule', () => {
+    const cells = big.children.reduce((a, b) => a + (b.shape === '4x8' ? 32 : b.shape === '8x8' ? 64 : 16), 0)
+    expect(cells).toBeLessThanOrEqual(256)
+    const other = big.children.find(b => b.id === OTHER_DEVICES)!
+    expect(other.landmark).toBe('site')
+    const shownIds = new Set(big.children.map(b => b.id))
+    const missing = more.topology!.map(n => n.id).filter(id => !shownIds.has(id))
+    expect(missing.length).toBeGreaterThan(0)
+    for (const id of missing) expect(other.question).toContain(more.topology!.find(n => n.id === id)!.label ?? id)
+    const town: Place = { id: 'town', kind: 'town', shape: '8x8', label: 'City', question: '', dashboard: null, children: [big] }
+    expect(rulesBroken({ tree: town })).toEqual([])
+    expect(hardwareRulesBroken(big)).toEqual([])
+  })
+  it('changes nothing while the devices fit', () => {
+    expect(d.children.some(b => b.id === OTHER_DEVICES)).toBe(false)
   })
 })

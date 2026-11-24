@@ -1,7 +1,7 @@
 import QUERIES from './hardwareQueries.json'
 import { facilityFor, HARDWARE_TOWN } from './binding'
 import { cityRulers, unitRoomsOf, type UnitReads } from './unitRooms'
-import { DISTRICT, encodePlan, fitsIn, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
+import { DISTRICT, encodePlan, fitsIn, GRID, plotsOf, shapeArea, splitPlot, type Plan, type Shape } from '@bifrost/ui/city/grid'
 import type { Look, Meter, Place, State } from '@bifrost/ui/city/places'
 
 /**
@@ -201,9 +201,40 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
   // Its sheets, when the district grows past one (RULES.md: a district's sheets): by zone, computing first.
   const ZONE_SHEET: Record<Zone, number> = { compute: 0, trading: 1, storage: 2, office: 3 }
   for (const b of devices) { const z = zones.get(b.id); if (z) b.sheet = ZONE_SHEET[z] }
-  const arrangement = zonedArrangement(devices.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
+  const placed = fitDevices(devices, zones)
+  if (placed.other) zones.set(OTHER_DEVICES, 'office')
+  const shown = placed.other ? [...placed.kept, placed.other] : placed.kept
+  // The zoned plan, when it finds every device a plot; else none, and the engine lays them out itself.
+  const zoned = zonedArrangement(shown.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! })))
+  const arrangement = shown.every(b => zoned.at[b.id]) ? zoned : undefined
   // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
-  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: HARDWARE_TOWN, function: fn, arrangement, label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: devices }
+  return { id: 'utilities', kind: 'district', shape: DISTRICT, style: HARDWARE_TOWN, function: fn, ...(arrangement ? { arrangement } : {}), label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: shown }
+}
+
+export const OTHER_DEVICES = 'other'
+
+/**
+ * The devices as they fit the district's ground (2026-11-24, PROD: a new machine, win11-secondary, took the devices
+ * to 272 cells on a ground of 256, and the engine refused the whole City). The district's size is the land the
+ * Owner gives it on the city level, not ours to grow; so, as a district's buildings do (districtBuildings.ts), the
+ * devices that fit stand, computing first, then trading, storage, the office; one 4×4 is kept for Other, and the
+ * rest stand in one Other site that names them. Nothing is dropped.
+ */
+export function fitDevices(devices: Place[], zones: Map<string, Zone>): { kept: Place[]; other?: Place } {
+  const cells = (xs: Place[]) => xs.reduce((a, b) => a + shapeArea(b.shape as Shape), 0)
+  const ground = GRID * GRID
+  if (cells(devices) <= ground) return { kept: devices }
+  const rank: Record<Zone, number> = { compute: 0, trading: 1, storage: 2, office: 3 }
+  const order = [...devices].sort((a, b) => rank[zones.get(a.id) ?? 'office'] - rank[zones.get(b.id) ?? 'office'] || a.id.localeCompare(b.id))
+  const room = ground - shapeArea('4x4')
+  const kept: Place[] = []
+  for (const d of order) if (cells([...kept, d]) <= room) kept.push(d)
+  const rest = devices.filter(d => !kept.includes(d))
+  const other: Place = {
+    id: OTHER_DEVICES, kind: 'building', shape: '4x4', landmark: 'site', label: `Other · ${rest.length}`, dashboard: null, children: [],
+    question: `${rest.length} more device${rest.length === 1 ? '' : 's'} do not fit this district's ground: ${rest.map(d => d.label).join(', ')}. Give the district more land on the city level to see them.`,
+  }
+  return { kept: devices.filter(d => kept.includes(d)), other }
 }
 
 /**
@@ -214,6 +245,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
 export function hardwareRulesBroken(d: Place): string[] {
   const out: string[] = []
   for (const b of d.children) {
+    if (b.id === OTHER_DEVICES) continue // the site for what did not fit: not a device
     const w = `utilities/${b.id}`
     if (!b.look) out.push(`${w}: a device has a look`)
     if (!b.state) out.push(`${w}: a device has a state`)
