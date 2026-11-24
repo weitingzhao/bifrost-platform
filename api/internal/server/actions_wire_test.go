@@ -26,7 +26,7 @@ func TestDirectCDStaysForbiddenWithoutExecutorMarker(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}
 	s := &Server{}
-	guarded := s.guard("cordon_node", next)
+	guarded := s.guard("drain_node", next)
 
 	direct := cordonRequest(t)
 	direct.Header.Set("X-Approval-Executor", "1")
@@ -38,7 +38,7 @@ func TestDirectCDStaysForbiddenWithoutExecutorMarker(t *testing.T) {
 	}
 
 	out, err := invokeAction(context.Background(), guarded, http.MethodPost,
-		"/api/v1/cluster/nodes/node-a/cordon", map[string]string{"name": "node-a"}, nil)
+		"/api/v1/cluster/nodes/node-a/drain", map[string]string{"name": "node-a"}, nil)
 	if err != nil || hits != 1 {
 		t.Fatalf("internal = %#v err=%v hits=%d", out, err, hits)
 	}
@@ -72,7 +72,7 @@ func TestDaemonScaleUpStillReachesHandler(t *testing.T) {
 
 func cordonRequest(t *testing.T) *http.Request {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster/nodes/node-a/cordon", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster/nodes/node-a/drain", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("name", "node-a")
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))

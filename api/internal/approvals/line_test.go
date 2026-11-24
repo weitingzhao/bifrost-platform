@@ -75,10 +75,10 @@ func TestCanonicalLineEscapesControlsAndBindsTheHash(t *testing.T) {
 
 func TestMismatchedApprovalLineOrHashIsRefused(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		return map[string]any{"ok": true}, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "n1"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "n1"})
 	line := CanonicalApprovalLine(c.Approval)
 	r := chi.NewRouter()
 	r.Post("/approvals/{id}/approve", svc.HandleApprove)

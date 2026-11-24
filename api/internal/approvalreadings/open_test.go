@@ -22,8 +22,8 @@ func TestOpenCardsSayWhoseMoveAndSinceWhen(t *testing.T) {
 		{Number: 4, Action: "start_pipeline_run", Status: approvals.StatusRunning, CreatedAt: ago(9), DecidedAt: ago(8),
 			Execution: &approvals.Execution{ExecutorID: "platform:x", StartedAt: ago(5)}},
 		{Number: 5, Action: "owner_run_command", Status: approvals.StatusFailed, CreatedAt: ago(90), Error: "等空档超时：批准后等了 30 分钟"},
-		{Number: 6, Action: "cordon_node", Status: approvals.StatusExecuted, CreatedAt: ago(60)},
-		{Number: 7, Action: "cordon_node", Status: approvals.StatusPending, CreatedAt: ago(1), Drill: true},
+		{Number: 6, Action: "ib_mode", Status: approvals.StatusExecuted, CreatedAt: ago(60)},
+		{Number: 7, Action: "ib_mode", Status: approvals.StatusPending, CreatedAt: ago(1), Drill: true},
 	}
 	r := Compute(items, time.UTC, now)
 	want := map[int]struct {

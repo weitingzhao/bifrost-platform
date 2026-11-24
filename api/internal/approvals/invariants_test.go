@@ -88,15 +88,15 @@ func TestInvariantSupersedeOnlyReplacesTheRequestersOwnUnrunCard(t *testing.T) {
 	newSvc := func() *Service {
 		svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 		svc.SetOpenKey(func(action string, params map[string]any) string {
-			if action == "cordon_node" {
-				return "node:" + params["name"].(string)
+			if action == "ib_mode" {
+				return "node:" + params["mode"].(string)
 			}
 			return ""
 		})
 		return svc
 	}
 	mk := func(svc *Service, who string) createResult {
-		return svc.create(context.Background(), who, "cordon_node", "r", "", map[string]any{"name": "n1"})
+		return svc.create(context.Background(), who, "ib_mode", "r", "", map[string]any{"mode": "n1"})
 	}
 	svc := newSvc()
 	first := mk(svc, "s1")

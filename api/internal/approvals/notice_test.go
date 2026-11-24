@@ -153,10 +153,10 @@ func TestNotExecutedBeforeTheDeadlinePushes(t *testing.T) {
 func TestSuccessIsNotPushed(t *testing.T) {
 	f := relay(t)
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		return map[string]any{"ok": true}, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if out := svc.approve(context.Background(), c.Approval.ID, "chat"); out.Body["status"] != StatusExecuted {
 		t.Fatalf("approve = %v", out.Body)
 	}
@@ -171,7 +171,7 @@ func TestRemindersOnceEach(t *testing.T) {
 	base := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
 	at := base
 	svc.SetClock(func() time.Time { return at })
-	c := svc.create(context.Background(), "cursor-w49", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "cursor-w49", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -210,7 +210,7 @@ func TestNoticeAuditLines(t *testing.T) {
 	dir := t.TempDir()
 	audit := actuation.NewAuditLog(filepath.Join(dir, "audit.json"))
 	svc := New(filepath.Join(dir, "approvals"), audit)
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	svc.deliver(context.Background(), "created", c.Approval)
 	rec := httptest.NewRecorder()
 	audit.HandleList(rec, httptest.NewRequest(http.MethodGet, "/audit", nil))

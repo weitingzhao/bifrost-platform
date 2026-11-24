@@ -44,7 +44,7 @@ tokens:
 	}
 	svc := New(filepath.Join(dir, "approvals"), actuation.NewAuditLog(filepath.Join(dir, "audit.json")))
 	calls := 0
-	actions.RegisterExecutor("uncordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		calls++
 		return map[string]any{"ok": true}, nil
 	})
@@ -60,7 +60,7 @@ tokens:
 		r.ServeHTTP(rec, req)
 		return rec
 	}
-	const create = `{"action":"uncordon_node","params":{"name":"n1"},"reason":"T24 scenario 9: what a drill looks like","rollback":"nothing runs"`
+	const create = `{"action":"ib_mode","params":{"mode":"n1"},"reason":"T24 scenario 9: what a drill looks like","rollback":"nothing runs"`
 
 	// The positive control: the same request, not a drill, is one the policy approves at once.
 	if rec := send("operator-test-token", "/approvals", create+`}`); rec.Code != http.StatusBadRequest ||

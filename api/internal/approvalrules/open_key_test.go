@@ -27,7 +27,7 @@ func TestApprovalOpenKeyNamesTheSubjectOfAnExecutionOrReleaseCard(t *testing.T) 
 			t.Fatalf("%s with no subject has key %q", act, k)
 		}
 	}
-	if k := OpenKey("cordon_node", map[string]any{"name": "n1"}); k != "" {
+	if k := OpenKey("ib_mode", map[string]any{"mode": "n1"}); k != "" {
 		t.Fatalf("another action has key %q", k)
 	}
 }

@@ -61,12 +61,12 @@ func TestExecutedApprovalUsesStoredParamsOnce(t *testing.T) {
 	h := newPlatform(t)
 	var calls int
 	var got map[string]any
-	actions.RegisterExecutor("cordon_node", func(_ context.Context, params map[string]any) (any, error) {
+	actions.RegisterExecutor("drain_node", func(_ context.Context, params map[string]any) (any, error) {
 		calls++
 		got = params
 		return map[string]any{"ok": true}, nil
 	})
-	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
+	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"drain_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", rec.Code, rec.Body.String())
 	}
@@ -106,11 +106,11 @@ func TestExecutedApprovalUsesStoredParamsOnce(t *testing.T) {
 	}
 	// The executor above is the internal path. The same params stay 403 on the
 	// direct endpoint; one execution does not unlock later calls.
-	same := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-a/cordon", "", "operator-test-token")
+	same := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-a/drain", "", "admin-test-token")
 	if same.Code != http.StatusForbidden || !strings.Contains(same.Body.String(), "approval required") || calls != 1 {
 		t.Fatalf("direct call after execution = %d calls=%d %s", same.Code, calls, same.Body.String())
 	}
-	other := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-b/cordon", "", "operator-test-token")
+	other := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-b/drain", "", "admin-test-token")
 	if other.Code != http.StatusForbidden || !strings.Contains(other.Body.String(), "approval required") {
 		t.Fatalf("other node = %d %s", other.Code, other.Body.String())
 	}
@@ -129,7 +129,7 @@ func TestCreateDoesNotPushItself(t *testing.T) {
 	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
 	t.Setenv("APPROVAL_NOTIFY_TOKEN", "notify-test-token")
 
-	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
+	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"drain_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
 	if rec.Code != http.StatusCreated || hits != 0 {
 		t.Fatalf("create = %d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}

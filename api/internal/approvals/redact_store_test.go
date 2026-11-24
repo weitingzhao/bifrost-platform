@@ -99,7 +99,7 @@ func TestSecretsAreRedactedBeforeTheyAreStored(t *testing.T) {
 		t.Fatalf("refusal = %q", got.Execution.LastRefusal)
 	}
 
-	pending := svc.create(context.Background(), "s", "cordon_node", "c", "", map[string]any{"name": "n"})
+	pending := svc.create(context.Background(), "s", "ib_mode", "c", "", map[string]any{"mode": "n"})
 	if pending.Status != http.StatusCreated {
 		t.Fatalf("create = %d", pending.Status)
 	}

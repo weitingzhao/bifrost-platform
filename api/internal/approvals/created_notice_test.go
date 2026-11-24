@@ -58,7 +58,7 @@ func TestACardsFirstNoticeGoesOutOnce(t *testing.T) {
 	at := base
 	a.SetClock(func() time.Time { return at })
 	b.SetClock(func() time.Time { return at })
-	c := a.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -92,7 +92,7 @@ func TestTheLoopSendsAFirstNoticeTheBusMissed(t *testing.T) {
 	base := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
 	at := base
 	a.SetClock(func() time.Time { return at })
-	c := a.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -108,7 +108,7 @@ func TestTheLoopSendsAFirstNoticeTheBusMissed(t *testing.T) {
 func TestAFirstNoticeSaysTheCardAndKeepsItsFailure(t *testing.T) {
 	f := relay(t)
 	a, _, _ := twoPods(t)
-	c := a.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	a.NotifyCreated(context.Background())
 	got := f.got()
 	if len(got) != 1 || !strings.HasPrefix(got[0].Title, "Decide · #") || !strings.Contains(got[0].Title, "patch") {
@@ -117,7 +117,7 @@ func TestAFirstNoticeSaysTheCardAndKeepsItsFailure(t *testing.T) {
 	f.mu.Lock()
 	f.fail = true
 	f.mu.Unlock()
-	d := a.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-b"})
+	d := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-b"})
 	a.NotifyCreated(context.Background())
 	a.NotifyCreated(context.Background())
 	ds := deliveriesOf(t, a, d.Approval.ID)

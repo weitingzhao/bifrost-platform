@@ -24,10 +24,10 @@ func TestCreateTiersAndStoredExecution(t *testing.T) {
 
 	var calls int
 	var got map[string]any
-	actions.RegisterExecutor("cordon_node", func(_ context.Context, params map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(_ context.Context, params map[string]any) (any, error) {
 		calls++
 		got = params
-		return map[string]any{"ok": true, "name": params["name"]}, nil
+		return map[string]any{"ok": true, "name": params["mode"]}, nil
 	})
 	actions.RegisterExecutor("wake_compute_node", func(context.Context, map[string]any) (any, error) {
 		t.Fatal("B-tier must not execute through approvals")
@@ -45,7 +45,7 @@ func TestCreateTiersAndStoredExecution(t *testing.T) {
 		t.Fatalf("X-tier create = %d %#v", x.Status, x.Body)
 	}
 
-	c := svc.create(context.Background(), "sess-b1", "cordon_node", "patch node", "uncordon", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "sess-b1", "ib_mode", "patch node", "uncordon", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("C create = %d %#v", c.Status, c.Body)
 	}
@@ -61,7 +61,7 @@ func TestCreateTiersAndStoredExecution(t *testing.T) {
 	if out.Status != http.StatusOK || out.Body["status"] != StatusExecuted {
 		t.Fatalf("approve = %d %#v", out.Status, out.Body)
 	}
-	if calls != 1 || got["name"] != "node-a" {
+	if calls != 1 || got["mode"] != "node-a" {
 		t.Fatalf("executor calls=%d params=%#v", calls, got)
 	}
 	again := svc.approve(context.Background(), c.Approval.ID, "phone")
@@ -74,11 +74,11 @@ func TestTamperedParamsDoNotRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "approvals")
 	svc := New(path, nil)
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		t.Fatal("tampered approval must not execute")
 		return nil, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "because", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "because", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatal(c.Body)
 	}
@@ -144,14 +144,14 @@ tokens:
 	}
 	audit := actuation.NewAuditLog(filepath.Join(dir, "audit.json"))
 	svc := New(filepath.Join(dir, "approvals"), audit)
-	actions.RegisterExecutor("uncordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		return map[string]any{"ok": true}, nil
 	})
 	r := chi.NewRouter()
 	Mount(r, auth, svc)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/approvals", bytes.NewReader([]byte(`{"action":"uncordon_node","params":{"name":"n1"},"reason":"restore","rollback":"cordon"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/approvals", bytes.NewReader([]byte(`{"action":"ib_mode","params":{"mode":"n1"},"reason":"restore","rollback":"cordon"}`)))
 	req.Header.Set("Authorization", "Bearer operator-test-token")
 	req.Header.Set("X-Bifrost-Session", "session-42")
 	r.ServeHTTP(rec, req)
@@ -187,7 +187,7 @@ tokens:
 		t.Fatalf("admin approve = %d %s", rec.Code, rec.Body.String())
 	}
 	stored, _ = svc.get(created.ID)
-	if stored.Params["name"] != "n1" || stored.Channel != "phone" {
+	if stored.Params["mode"] != "n1" || stored.Channel != "phone" {
 		t.Fatalf("stored = %#v", stored)
 	}
 

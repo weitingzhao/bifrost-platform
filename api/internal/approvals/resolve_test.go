@@ -115,7 +115,7 @@ func TestResolveRejectsWrongStatusAndBadNotes(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	base := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	rec, _ := unknownApproval(t, svc, base)
-	pending := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "n"})
+	pending := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "n"})
 	if pending.Status != http.StatusCreated {
 		t.Fatalf("create = %d", pending.Status)
 	}

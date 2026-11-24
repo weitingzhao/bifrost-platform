@@ -16,9 +16,9 @@ func TestHumanApprovalHome(t *testing.T) {
 			t.Setenv("OPS_VIEWER_ENV", env)
 			svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 			for _, in := range []createInput{
-				{Action: "cordon_node", Params: map[string]any{"name": "n1"}},
+				{Action: "ib_mode", Params: map[string]any{"mode": "n1"}},
 				{Action: "owner_run_command", Params: map[string]any{"command": "true", "reason": "test", "rollback": "none"}},
-				{Action: "cordon_node", Params: map[string]any{"name": "n1"}, Drill: true},
+				{Action: "ib_mode", Params: map[string]any{"mode": "n1"}, Drill: true},
 			} {
 				in.Requester, in.Reason = "test", "test home\n改了什么：测试\n批了以后谁因此能做什么新事：无"
 				got := svc.createWith(context.Background(), in)
@@ -39,7 +39,7 @@ func TestHumanApprovalHome(t *testing.T) {
 				t.Fatalf("B: %+v", b)
 			}
 			svc.SetAutoApprover(func(context.Context, string, actions.Tier, map[string]any) string { return "signed-policy" })
-			c := svc.create(context.Background(), "test", "cordon_node", "test", "", map[string]any{"name": "n1"})
+			c := svc.create(context.Background(), "test", "ib_mode", "test", "", map[string]any{"mode": "n1"})
 			if c.Status != 400 || c.Body["auto_approved_by"] != "signed-policy" {
 				t.Fatalf("policy: %+v", c)
 			}

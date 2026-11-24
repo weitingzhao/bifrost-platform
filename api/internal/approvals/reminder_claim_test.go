@@ -18,7 +18,7 @@ func TestTwoWorkersSendOneReminder(t *testing.T) {
 	at := base
 	a.SetClock(func() time.Time { return at })
 	b.SetClock(func() time.Time { return at })
-	c := a.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := a.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -54,7 +54,7 @@ func TestFailedReminderIsRetried(t *testing.T) {
 	base := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
 	at := base
 	svc.SetClock(func() time.Time { return at })
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -83,7 +83,7 @@ func TestExpiredReminderClaimCanBeTakenAgain(t *testing.T) {
 	base := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
 	at := base
 	svc.SetClock(func() time.Time { return at })
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -118,7 +118,7 @@ func TestReminderFinishAndReleaseCheckClaimID(t *testing.T) {
 	base := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
 	at := base
 	svc.SetClock(func() time.Time { return at })
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	at = base.Add(4 * time.Hour)
 	if err := svc.store.update(func(doc *file) error {
 		a, _ := doc.find(c.Approval.ID)
@@ -157,7 +157,7 @@ func TestReminderFinishAndReleaseCheckClaimID(t *testing.T) {
 
 func TestDeliveryCapKeepsTheFinalResult(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}

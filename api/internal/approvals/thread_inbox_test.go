@@ -122,7 +122,7 @@ func inboxFixture(t *testing.T, now time.Time, state, thread string) *Service {
 	t.Helper()
 	s := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	s.SetClock(func() time.Time { return now })
-	a := Approval{ID: "appr_" + state, Number: 7, Action: "cordon_node", Env: "stg", Status: StatusPending,
+	a := Approval{ID: "appr_" + state, Number: 7, Action: "ib_mode", Env: "stg", Status: StatusPending,
 		RequesterThread: thread, CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)}
 	if state == StatusExecuted || state == StatusFailed || state == StatusUnknown {
 		a.Status = StatusRunning

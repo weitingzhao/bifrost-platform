@@ -240,7 +240,7 @@ var cases = []mustRefuse{
 	{"an executor cannot create, approve or reject", "execution card 4: the executor only claims, heartbeats and reports", func(w *world) string {
 		id, _ := w.card("s1", goodReason)
 		for _, c := range []struct{ path, body string }{
-			{"/approvals", `{"action":"cordon_node","params":{"name":"n"},"reason":"r"}`},
+			{"/approvals", `{"action":"ib_mode","params":{"mode":"n"},"reason":"r"}`},
 			{"/approvals/" + id + "/approve", `{}`},
 			{"/approvals/" + id + "/reject", `{"reason":"r"}`},
 		} {
@@ -285,13 +285,13 @@ var cases = []mustRefuse{
 	}},
 	{"a new card does not replace another requester's card", "#562: a replacement is the requester's own; anyone else's card still blocks", func(w *world) string {
 		w.svc.SetOpenKey(func(action string, params map[string]any) string {
-			if action == "cordon_node" {
+			if action == "ib_mode" {
 				return "node:n1"
 			}
 			return ""
 		})
 		make := func(session string) *httptest.ResponseRecorder {
-			return w.call(http.MethodPost, "/approvals", `{"action":"cordon_node","params":{"name":"n1"},"reason":"r"}`, "operator-tok", session)
+			return w.call(http.MethodPost, "/approvals", `{"action":"ib_mode","params":{"mode":"n1"},"reason":"r"}`, "operator-tok", session)
 		}
 		if rec := make("s1"); rec.Code != http.StatusCreated {
 			return "first = " + rec.Result().Status

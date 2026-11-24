@@ -125,7 +125,7 @@ func TestConcurrentCreatesGetDistinctNumbers(t *testing.T) {
 			wg.Add(1)
 			go func(svc *Service, i int) {
 				defer wg.Done()
-				res := svc.create(context.Background(), "s", "cordon_node", "because", "", map[string]any{"name": fmt.Sprintf("n-%d", i)})
+				res := svc.create(context.Background(), "s", "ib_mode", "because", "", map[string]any{"mode": fmt.Sprintf("n-%d", i)})
 				if res.Status != http.StatusCreated {
 					errs <- fmt.Sprintf("create = %d %v", res.Status, res.Body)
 					return
@@ -524,7 +524,7 @@ func TestTierDChatApprovalIsRefused(t *testing.T) {
 
 func TestListOpenAndNumberLookup(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	pending := svc.create(context.Background(), "s", "cordon_node", "c", "", map[string]any{"name": "n9"})
+	pending := svc.create(context.Background(), "s", "ib_mode", "c", "", map[string]any{"mode": "n9"})
 	rec := approveOwnerRun(t, svc)
 	open, _, _ := svc.list("open")
 	if len(open) != 2 {
@@ -557,7 +557,7 @@ func TestRunnerParamAndWorkLabels(t *testing.T) {
 	if res.Approval.WorkID != "W-48" || res.Approval.RequesterThread != "W-48 S0-0a" {
 		t.Fatalf("labels = %#v", res.Approval)
 	}
-	bad := svc.createWith(context.Background(), createInput{Requester: "s", Action: "cordon_node", Reason: "r", Params: map[string]any{"name": "n"}, WorkID: "anything"})
+	bad := svc.createWith(context.Background(), createInput{Requester: "s", Action: "ib_mode", Reason: "r", Params: map[string]any{"mode": "n"}, WorkID: "anything"})
 	if bad.Status != http.StatusBadRequest {
 		t.Fatalf("bad work_id = %d", bad.Status)
 	}
@@ -595,7 +595,7 @@ func TestConcurrentCreatesOnTheFileBackend(t *testing.T) {
 		wg.Add(1)
 		go func(svc *Service, i int) {
 			defer wg.Done()
-			res := svc.create(context.Background(), "s", "cordon_node", "c", "", map[string]any{"name": fmt.Sprintf("f-%d", i)})
+			res := svc.create(context.Background(), "s", "ib_mode", "c", "", map[string]any{"mode": fmt.Sprintf("f-%d", i)})
 			mu.Lock()
 			defer mu.Unlock()
 			if res.Status != http.StatusCreated || seen[res.Approval.Number] {
@@ -649,7 +649,7 @@ tokens:
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodGet, "/approvals", ""},
 		{http.MethodGet, "/approvals/1", ""},
-		{http.MethodPost, "/approvals", `{"action":"cordon_node","params":{"name":"n"},"reason":"r"}`},
+		{http.MethodPost, "/approvals", `{"action":"ib_mode","params":{"mode":"n"},"reason":"r"}`},
 		{http.MethodPost, "/approvals/1/approve", `{"channel":"chat"}`},
 		{http.MethodPost, "/approvals/1/reject", `{"reason":"r"}`},
 	} {

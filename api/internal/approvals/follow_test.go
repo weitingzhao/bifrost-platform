@@ -64,7 +64,7 @@ func TestFollowApplyRunEdges(t *testing.T) {
 		return false, false, "", nil
 	}
 	// Another action, or no run named: the answer passes through unread.
-	if got, err := FollowApplyRun(context.Background(), Approval{Action: "cordon_node"}, started, never, time.Millisecond); err != nil || got == nil {
+	if got, err := FollowApplyRun(context.Background(), Approval{Action: "ib_mode"}, started, never, time.Millisecond); err != nil || got == nil {
 		t.Fatalf("another action: %v %v", got, err)
 	}
 	if got, err := FollowApplyRun(context.Background(), apply, map[string]any{"plan_id": "p"}, never, time.Millisecond); err != nil || got == nil {

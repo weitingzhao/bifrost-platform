@@ -328,14 +328,14 @@ var catalog = []Action{
 		},
 	},
 	{
-		ID: "cordon_node", Tier: TierC,
-		Description: "Cordon a node so nothing new is scheduled on it. Tier C.",
+		ID: "cordon_node", Tier: TierB,
+		Description: "Cordon a node so nothing new is scheduled on it. Tier B (law 85, #729: undone by uncordon_node in one call, nothing lost; running Pods stay).",
 		Method:      "POST", Pattern: "/api/v1/cluster/nodes/{name}/cordon",
 		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
 	},
 	{
-		ID: "uncordon_node", Tier: TierC,
-		Description: "Uncordon a node. Tier C.",
+		ID: "uncordon_node", Tier: TierB,
+		Description: "Uncordon a node. Tier B (law 85, #729: undone by cordon_node in one call).",
 		Method:      "POST", Pattern: "/api/v1/cluster/nodes/{name}/uncordon",
 		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
 	},
@@ -481,8 +481,8 @@ var catalog = []Action{
 		},
 	},
 	{
-		ID: "update_data_clone_schedule", Tier: TierC,
-		Description: "Update the data-clone schedule. Tier C.",
+		ID: "update_data_clone_schedule", Tier: TierB,
+		Description: "Update the data-clone schedule. Tier B (law 85, #729: undone by setting the previous schedule back; the schedule runs no clone itself).",
 		Method:      "PUT", Pattern: "/api/v1/cluster/data-clone/schedule",
 		Passthrough: true,
 		Params: []Param{

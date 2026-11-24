@@ -22,11 +22,11 @@ func TestActionSucceededFinalWriteFailed(t *testing.T) {
 	auditPath := filepath.Join(root, "audit.json")
 	svc := New(filepath.Join(root, "approvals"), actuation.NewAuditLog(auditPath))
 	var calls atomic.Int32
-	actions.RegisterExecutor("cordon_node", func(_ context.Context, params map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(_ context.Context, params map[string]any) (any, error) {
 		calls.Add(1)
-		return map[string]any{"node": params["name"]}, nil
+		return map[string]any{"node": params["mode"]}, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != 201 {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -72,11 +72,11 @@ func TestHeldFinishSurvivesAReadError(t *testing.T) {
 	t.Cleanup(func() { statefile.Use(nil, "") })
 	svc := New(filepath.Join(root, "approvals"), nil)
 	var calls atomic.Int32
-	actions.RegisterExecutor("cordon_node", func(_ context.Context, params map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(_ context.Context, params map[string]any) (any, error) {
 		calls.Add(1)
-		return map[string]any{"node": params["name"]}, nil
+		return map[string]any{"node": params["mode"]}, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-a"})
 	if c.Status != 201 {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
@@ -126,11 +126,11 @@ func TestUnstoredFinishBecomesUnknownWhenTheLeaseLapses(t *testing.T) {
 	base := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	svc.SetClock(func() time.Time { return base })
 	var calls atomic.Int32
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) {
 		calls.Add(1)
 		return map[string]any{"ok": true}, nil
 	})
-	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-b"})
+	c := svc.create(context.Background(), "s", "ib_mode", "patch", "", map[string]any{"mode": "node-b"})
 	if c.Status != 201 {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}

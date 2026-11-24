@@ -57,7 +57,7 @@ func snapshotLines(t *testing.T) []string {
 	add("create: drill with no lines", verdict(svc.createWith(ctx, createInput{Requester: "s", Action: "owner_run_command", Reason: "d",
 		Params: map[string]any{"command": "true", "reason": "r"}, Drill: true})))
 	add("create: unknown action", verdict(svc.create(ctx, "s", "no_such_action", "r", "", map[string]any{})))
-	add("create: no reason", verdict(svc.create(ctx, "s", "cordon_node", "", "", map[string]any{"name": "n"})))
+	add("create: no reason", verdict(svc.create(ctx, "s", "ib_mode", "", "", map[string]any{"mode": "n"})))
 
 	// Withdraw.
 	svc = fresh()
@@ -75,13 +75,13 @@ func snapshotLines(t *testing.T) []string {
 
 	// Supersede, on a subject with a one-open-card rule.
 	key := func(action string, params map[string]any) string {
-		if action == "cordon_node" {
-			return "node:" + fmt.Sprint(params["name"])
+		if action == "ib_mode" {
+			return "node:" + fmt.Sprint(params["mode"])
 		}
 		return ""
 	}
 	node := func(svc *Service, who string) createResult {
-		return svc.create(ctx, who, "cordon_node", "r", "", map[string]any{"name": "n1"})
+		return svc.create(ctx, who, "ib_mode", "r", "", map[string]any{"mode": "n1"})
 	}
 	svc = fresh()
 	svc.SetOpenKey(key)

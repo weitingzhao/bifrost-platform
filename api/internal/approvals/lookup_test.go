@@ -40,8 +40,8 @@ func dirSum(t *testing.T, dir string) [32]byte {
 func TestLookupReadsWithoutSweeping(t *testing.T) {
 	dir := t.TempDir()
 	svc := New(filepath.Join(dir, "approvals"), actuation.NewAuditLog(filepath.Join(dir, "audit.json")))
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) { return nil, nil })
-	c := svc.create(context.Background(), "sess-lookup", "cordon_node", "patch node", "uncordon", map[string]any{"name": "node-l"})
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) { return nil, nil })
+	c := svc.create(context.Background(), "sess-lookup", "ib_mode", "patch node", "uncordon", map[string]any{"mode": "node-l"})
 	if c.Status != http.StatusCreated || c.Approval.Number == 0 {
 		t.Fatalf("create = %d %#v", c.Status, c.Body)
 	}
@@ -70,9 +70,9 @@ func TestLookupReadsWithoutSweeping(t *testing.T) {
 func TestWaitingReadsWithoutSweeping(t *testing.T) {
 	dir := t.TempDir()
 	svc := New(filepath.Join(dir, "approvals"), actuation.NewAuditLog(filepath.Join(dir, "audit.json")))
-	actions.RegisterExecutor("cordon_node", func(context.Context, map[string]any) (any, error) { return nil, nil })
-	first := svc.create(context.Background(), "sess-wait", "cordon_node", "patch node", "uncordon", map[string]any{"name": "node-w1"})
-	second := svc.create(context.Background(), "sess-wait", "cordon_node", "patch node", "uncordon", map[string]any{"name": "node-w2"})
+	actions.RegisterExecutor("ib_mode", func(context.Context, map[string]any) (any, error) { return nil, nil })
+	first := svc.create(context.Background(), "sess-wait", "ib_mode", "patch node", "uncordon", map[string]any{"mode": "node-w1"})
+	second := svc.create(context.Background(), "sess-wait", "ib_mode", "patch node", "uncordon", map[string]any{"mode": "node-w2"})
 	if first.Status != http.StatusCreated || second.Status != http.StatusCreated {
 		t.Fatalf("create = %d %d", first.Status, second.Status)
 	}

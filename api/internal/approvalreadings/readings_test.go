@@ -124,7 +124,7 @@ func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
 		{Number: 2, Action: "owner_run_command", OwnerClass: "H5", Status: approvals.StatusExecuted, CreatedAt: at},
 		{Number: 3, Action: "apply_manifest", Status: approvals.StatusExecuted, CreatedAt: at},
 		{Number: 4, Action: "owner_run_command", Status: approvals.StatusPending, CreatedAt: at},
-		{Number: 5, Action: "cordon_node", Status: approvals.StatusPending, CreatedAt: at, Drill: true},
+		{Number: 5, Action: "ib_mode", Status: approvals.StatusPending, CreatedAt: at, Drill: true},
 	}
 	r := Compute(items, time.UTC, now)
 	if len(r.Days) != 1 {

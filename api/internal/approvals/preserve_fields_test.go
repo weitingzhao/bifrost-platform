@@ -14,8 +14,8 @@ func TestStoreKeepsUnknownFieldsByteForValue(t *testing.T) {
 	const keepExtra = `{"keep":true,"n":"byte-for-value"}`
 	const otherExtra = `{"q":1}`
 	raw := []byte(`{"schema_epoch":` + docExtra + `,"last_number":2,"approvals":[` +
-		`{"id":"appr_keep","action":"cordon_node","tier":"C","params":{"name":"a"},"params_hash":"abc","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z","legacy_flag":` + keepExtra + `},` +
-		`{"id":"appr_other","action":"cordon_node","tier":"C","params":{"name":"b"},"params_hash":"def","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z","other_flag":` + otherExtra + `}` +
+		`{"id":"appr_keep","action":"ib_mode","tier":"C","params":{"mode":"a"},"params_hash":"abc","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z","legacy_flag":` + keepExtra + `},` +
+		`{"id":"appr_other","action":"ib_mode","tier":"C","params":{"mode":"b"},"params_hash":"def","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z","other_flag":` + otherExtra + `}` +
 		`]}`)
 	path := filepath.Join(t.TempDir(), "approvals")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
@@ -88,10 +88,10 @@ func TestStoreKeepsNestedUnknownFields(t *testing.T) {
 	const execFlag = `{"z":1, "a":2}`
 	const delFlag = `{"q":9, "s":"keep"}`
 	raw := []byte(`{"last_number":2,"approvals":[` +
-		`{"id":"appr_keep","action":"cordon_node","tier":"C","params":{"name":"a"},"params_hash":"abc","status":"running","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z",` +
+		`{"id":"appr_keep","action":"ib_mode","tier":"C","params":{"mode":"a"},"params_hash":"abc","status":"running","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z",` +
 		`"execution":{"attempts":1,"lease_id":"lease-1","new_flag":` + execFlag + `},` +
 		`"deliveries":[{"channel":"ntfy","at":"2026-10-10T12:05:00Z","result":"accepted","new_flag":` + delFlag + `}]},` +
-		`{"id":"appr_other","action":"cordon_node","tier":"C","params":{"name":"b"},"params_hash":"def","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z"}` +
+		`{"id":"appr_other","action":"ib_mode","tier":"C","params":{"mode":"b"},"params_hash":"def","status":"pending","reason":"r","requester":"s","created_at":"2026-10-10T12:00:00Z","expires_at":"2026-10-11T12:00:00Z"}` +
 		`]}`)
 	path := filepath.Join(t.TempDir(), "approvals")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {

@@ -76,7 +76,7 @@ func TestThreadInboxBacklogDoesNotPruneDecision(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/backlog=%t", state, backlog), func(t *testing.T) {
 				t.Parallel()
 				now := time.Now().UTC()
-				a := Approval{ID: "appr_review", Number: 1, Action: "cordon_node", Env: "stg", Status: StatusPending,
+				a := Approval{ID: "appr_review", Number: 1, Action: "ib_mode", Env: "stg", Status: StatusPending,
 					RequesterThread: "local_review", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
 				doc := legacyInboxDocument{file: file{Approvals: []Approval{a}}, Inbox: map[string]legacyInboxEntry{}}
 				if backlog {

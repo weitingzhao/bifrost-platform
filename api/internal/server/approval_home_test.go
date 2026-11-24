@@ -33,7 +33,7 @@ func TestHumanApprovalHomeOnRouter(t *testing.T) {
 			srv := newTestServer(t, cfg)
 			h := srv.Router()
 			for _, drill := range []bool{false, true} {
-				raw, _ := json.Marshal(map[string]any{"action": "cordon_node", "params": map[string]any{"name": "node-a"}, "reason": "home test", "drill": drill})
+				raw, _ := json.Marshal(map[string]any{"action": "ib_mode", "params": map[string]any{"mode": "node-a"}, "reason": "home test", "drill": drill})
 				req := httptest.NewRequest(http.MethodPost, "http://ops.bifrost.lan/api/v1/approvals", strings.NewReader(string(raw)))
 				req.Header.Set("Authorization", "Bearer test-operator")
 				rec := httptest.NewRecorder()
