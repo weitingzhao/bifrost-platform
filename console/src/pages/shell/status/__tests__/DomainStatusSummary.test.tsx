@@ -143,8 +143,9 @@ describe('domain consumer contract', () => {
     expect(container.querySelector('[aria-label="Overall: ok"]')).toBeTruthy()
     expect(container.querySelector('[aria-label="Alive: fail"]')).toBeTruthy()
     expect(screen.getByText('The domain graph was not measured: unknown.')).toBeTruthy()
+    // 2026-11-24 engine switch 1b+1d: the reader asks self-health which environment it is in (no viewer_env here: direct).
     expect(fetchMock.mock.calls.map(([url]) => new URL(String(url), 'http://local').pathname).sort()).toEqual([
-      '/api/v1/catalog/index', '/api/v1/catalog/status',
+      '/api/v1/catalog/index', '/api/v1/catalog/status', '/api/v1/self-health',
     ])
   })
 

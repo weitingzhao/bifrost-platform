@@ -2125,6 +2125,7 @@
       ],
       "imports": [
         "console/src",
+        "console/src/api",
         "console/src/api/client.ts",
         "console/src/api/core.ts",
         "console/src/domains/foundation/runtime-observation"
