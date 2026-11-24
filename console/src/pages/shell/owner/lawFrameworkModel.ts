@@ -46,3 +46,14 @@ export const behindSwitch = (laws: readonly RegisterLaw[]): RegisterLaw[] => law
 
 /** The page's word: the framework read is ok; not sent or not read is unknown. */
 export const frameworkWord = (fw: LawFramework | null | undefined): 'ok' | 'unknown' => (fw && fw.levels ? 'ok' : 'unknown')
+
+/**
+ * The register's entries counted by state (立法线 2026-11-24, after the Owner read "85 laws" as 85 laws in the
+ * framework): only 现行 is a law; 素材 is material, 废止 repealed. A row without a state is counted as unknown.
+ */
+export function stateTally(laws: readonly RegisterLaw[]): string {
+  const n = (s: string) => laws.filter(l => l.state === s).length
+  const unknown = laws.filter(l => !l.state || !(STATE_ORDER as readonly string[]).includes(l.state)).length
+  return [...STATE_ORDER.map(s => `${s} ${n(s)}`), ...(unknown > 0 ? [`state unknown ${unknown}`] : [])].join(' · ')
+}
+export const inForceCount = (laws: readonly RegisterLaw[]): number => laws.filter(l => l.state === IN_FORCE).length

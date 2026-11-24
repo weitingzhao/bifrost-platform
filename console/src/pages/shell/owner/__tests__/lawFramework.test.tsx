@@ -15,7 +15,7 @@ vi.mock('@/api/core', () => ({ fetchSelfHealth: async () => ({ viewer_env: wire.
 import { engineLawsOn } from '@/api/lawRegister'
 import { LawRegister } from '@/pages/shell/owner/LawRegister'
 import { LawFrameworkView } from '@/pages/shell/owner/LawFramework'
-import { behindSwitch, frameworkLine, inForceAt, requiredLabels, stateCounts } from '@/pages/shell/owner/lawFrameworkModel'
+import { behindSwitch, frameworkLine, inForceAt, inForceCount, requiredLabels, stateCounts, stateTally } from '@/pages/shell/owner/lawFrameworkModel'
 
 const framework: LawFramework = {
   version: 'v1', source: '法的框架 v1, approved by the Owner',
@@ -51,6 +51,11 @@ describe('the framework model', () => {
   it('names the required fields by their labels', () => {
     expect(requiredLabels(framework.levels![1], framework.fields)).toEqual(['原文', '出处', '适用范围'])
     expect(requiredLabels(framework.levels![3], framework.fields)).toEqual(['原文', 'parent'])
+  })
+  it('counts the register by state: only 现行 is a law', () => {
+    const laws = [law('1', '素材'), law('2', '现行', 2), law('3', '废止'), law('4')]
+    expect(stateTally(laws)).toBe('现行 1 · 素材 1 · 废止 1 · state unknown 1')
+    expect(inForceCount(laws)).toBe(1)
   })
   it('hangs only laws in force under their level; everything else is behind the switch', () => {
     const laws = [law('1', '素材'), law('2', '现行', 2), law('3', '废止'), law('4')]
@@ -95,7 +100,9 @@ describe('Command → Laws reads', () => {
     expect(wire.read.mock.calls.map(c => c[0])).toEqual(['/engine/v1/agents?read=laws'])
     expect(screen.getByText('framework v1 · 5 levels · 现行 0 · 素材 2 · 废止 0')).toBeTruthy()
     expect(screen.queryByText('law 83')).toBeNull()
-    fireEvent.click(screen.getByLabelText('Show material and repealed laws (2)'))
+    // 2026-11-24 立法线: the Owner read "85 laws" as 85 laws in the framework. The head counts by state; no "N laws".
+    expect(document.body.textContent).not.toMatch(/\d+ laws/)
+    fireEvent.click(screen.getByLabelText('Show material (素材) and repealed (废止): 2, not laws'))
     await waitFor(() => expect(screen.getByText('law 83')).toBeTruthy())
   })
   it('says engine unreachable on STG and does not read the platform instead', async () => {

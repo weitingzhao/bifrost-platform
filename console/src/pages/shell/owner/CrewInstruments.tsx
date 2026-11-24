@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchInstruments, type InstrumentLaw, type Instruments } from '@/api/governanceInstruments'
 import { fetchLawRegister } from '@/api/lawRegister'
-import { LAWS_HREF, lawRegisterVerdict } from './lawRegisterModel'
+import { LAWS_HREF } from './lawRegisterModel'
+import { inForceCount, stateTally } from './lawFrameworkModel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { Stat } from './OwnerParts'
 
@@ -37,10 +38,11 @@ function RegisterLaws({ governance }: { governance: InstrumentLaw[] }) {
   const inRegister = new Set((laws ?? []).map(l => l.law.trim()))
   const missing = laws == null ? [] : governance.filter(g => g.number.trim() !== '' && !inRegister.has(g.number.trim())).map(g => g.number.trim())
   return <section aria-label="Laws" data-crew-laws className="flex min-w-0 flex-col gap-2">
-    <OpsSubsectionTitle>Laws · {laws == null ? (q.isLoading ? '…' : '?') : laws.length}</OpsSubsectionTitle>
-    <p className="m-0 text-sm">{q.isLoading ? 'Reading the register…' : lawRegisterVerdict(laws)}</p>
+    {/* 立法线 2026-11-24: only 现行 is a law; the register's other rows are material (素材) or repealed (废止). */}
+    <OpsSubsectionTitle>Laws in force · {laws == null ? (q.isLoading ? '…' : '?') : inForceCount(laws)}</OpsSubsectionTitle>
+    <p className="m-0 text-sm">{q.isLoading ? 'Reading the register…' : laws == null ? 'The register could not be read: unknown.' : stateTally(laws)}</p>
     {missing.length > 0 ? <p className="m-0 text-sm text-muted-foreground" data-laws-not-in-register title={missing.join(', ')}>{`${missing.length} in governance files not in the register`}</p> : null}
-    <a href={LAWS_HREF} className="min-h-11 self-start text-sm underline">Open the register (Command → Laws)</a>
+    <a href={LAWS_HREF} className="min-h-11 self-start text-sm underline">Open the framework of laws (Command → Laws)</a>
   </section>
 }
 

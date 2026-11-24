@@ -9,7 +9,7 @@ import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { LawFrameworkView } from './LawFramework'
 import { behindSwitch, frameworkLine, frameworkWord } from './lawFrameworkModel'
-import { lawDetail, lawHref, lawRegisterTable, lawStandardsLine } from './lawRegisterModel'
+import { lawDetail, lawHref, lawRegisterTable } from './lawRegisterModel'
 
 const LAMP = { ok: 'ok', unknown: 'unknown', pending: 'unknown' } as const
 
@@ -51,7 +51,7 @@ export function LawRegister() {
         tagLabel={word === 'pending' ? '…' : word}
         tagVariant={TAG_VARIANT[word]}
         summary={loading ? 'Reading the framework of laws…' : unread ? 'framework not read: unknown' : frameworkLine(answer?.framework)}
-        tagTitle={loading ? undefined : `${lawStandardsLine(unread ? null : laws)}${via ? ` · read ${via}` : ''}`}
+        tagTitle={loading || !via ? undefined : `read ${via}`}
       />
       {unread ? <p className="m-0 text-sm text-muted-foreground">{`The framework of laws could not be read${q.error instanceof Error ? `: ${q.error.message}` : ''}. It is unknown.`}</p> : null}
       {answer && !answer.framework ? <p className="m-0 text-sm text-muted-foreground">This platform does not send the framework yet: unknown.</p> : null}
@@ -60,14 +60,14 @@ export function LawRegister() {
         <section className="flex min-w-0 flex-col gap-2" data-laws-hidden>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} />
-            {`Show material and repealed laws (${hidden.length})`}
+            {`Show material (素材) and repealed (废止): ${hidden.length}, not laws`}
           </label>
           {showHidden && hidden.length > 0 ? (
             <LedgerGrid
               table={table}
               selected={picked}
               onSelect={key => { window.location.hash = lawHref(key) }}
-              scope="the register of laws: material and repealed (GET /api/v1/agentrt/laws)"
+              scope="material (素材) and repealed (废止): not laws (GET /api/v1/agentrt/laws)"
               detail={key => lawDetail(byLaw.get(key))}
             />
           ) : null}

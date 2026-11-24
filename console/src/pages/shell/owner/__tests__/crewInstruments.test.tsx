@@ -52,10 +52,11 @@ describe('Crew: laws, skills and tools', () => {
   it('reads laws from the register, leads to it, and shows what the governance files name that it does not', async () => {
     show(answer)
     const block = await screen.findByRole('region', { name: 'Laws' })
-    expect(await within(block).findByText('Laws · 2')).toBeInTheDocument()
-    expect(within(block).getByText('2 laws · 1 reached · 0 missed · 0 unmeasured · 1 without a plan item')).toBeInTheDocument()
+    // 2026-11-24 立法线: only 现行 is a law; the fixture's rows carry no state, so none is in force and their state is unknown.
+    expect(await within(block).findByText('Laws in force · 0')).toBeInTheDocument()
+    expect(within(block).getByText('现行 0 · 素材 0 · 废止 0 · state unknown 2')).toBeInTheDocument()
     expect(within(block).getByText('2 in governance files not in the register')).toHaveAttribute('title', '3, H1')
-    expect(within(block).getByRole('link', { name: /Open the register/ })).toHaveAttribute('href', '#command?section=laws')
+    expect(within(block).getByRole('link', { name: /Open the framework of laws/ })).toHaveAttribute('href', '#command?section=laws')
     expect(screen.queryByRole('table', { name: 'Laws' })).not.toBeInTheDocument()
   })
 
