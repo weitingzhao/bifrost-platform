@@ -152,6 +152,7 @@ func mountAgentrt(r chi.Router, auth *actuation.AuthService, a *agentrtAPI) {
 		r.With(read, cfg).Get("/plan-view", plan.HandleGetPlanView)
 		r.With(read, cfg).Get("/delivery", delivery.HandleGetDelivery)
 		r.With(read, cfg).Get("/plan-pace", plan.HandleGetPlanPace)
+		r.With(read, cfg).Get("/laws", plan.HandleGetLaws)
 		r.With(read, cfg).Get("/external-work/{id}", lineage.HandleGetExternalWork)
 		r.With(external, cfg).Post("/external-work", lineage.HandleRegisterExternalWork)
 		r.With(external, cfg).Post("/external-work/{id}/events", lineage.HandlePostExternalEvent)

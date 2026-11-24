@@ -27,6 +27,8 @@ var planTypes = []string{
 	"plan_step_marked_done", "plan_view_adopted",
 	// The register of laws (lawregister.go, 2026-11-23; migration 0044).
 	"law_recorded",
+	// A conclusion on a standard's step, read by step (lawsview.go; migration 0045).
+	"plan_step_judged",
 	// note: a free note on a plan node (plannote) or an architecture row's
 	// note (planimport). The plan's since 2026-11-17 (TD-583); every other
 	// record that was a note has its own type now, and their old rows stay.
@@ -60,6 +62,8 @@ var planBodies = map[string][]eventlog.Field{
 	"plan_observation_pass":      {field("text", eventlog.Str, false), field("plan_observation_pass", eventlog.Any, false)},
 	"plan_view_adopted":          {field("text", eventlog.Str, false), field("plan_view", eventlog.Any, false)},
 	"note":                       {field("text", eventlog.Str, false), field("evidence", eventlog.IDs, true)},
+	"plan_step_judged": {field("step", eventlog.Str, false), field("standard", eventlog.Str, false), field("grade", eventlog.Str, false),
+		field("note_event_id", eventlog.Int, false), field("version", eventlog.Str, true)},
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),
 		field("text", eventlog.Str, false), field("status", eventlog.Str, false), field("source", eventlog.Str, false),
 		field("said_on", eventlog.Str, true), field("where", eventlog.Str, true), field("enforced_by", eventlog.Str, true),
@@ -82,6 +86,7 @@ var planValues = map[string]map[string]eventlog.Value{
 	"plan_change_decided":     {"decision": eventlog.OneOf("applied", "refused", "failed", "withdrawn", "expired")},
 	"plan_node_created":       {"node_kind": eventlog.OneOf("round", "item", "step", "arch_root", "arch_row")},
 	"law_recorded":            {"op": eventlog.OneOf("transcribed", "add", "amend", "repeal")},
+	"plan_step_judged":        {"grade": eventlog.OneOf("达到", "部分", "没达到", "没核")},
 	"plan_node_state_changed": {"from": eventlog.OneOf(statesOf(StepMoves)...), "to": eventlog.OneOf(statesOf(StepMoves)...)},
 }
 

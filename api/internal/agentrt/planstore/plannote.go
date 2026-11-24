@@ -90,6 +90,13 @@ func PostPlanNote(ctx context.Context, db eventlog.DB, w actor.Writer, key, node
 		if err = alertClaim(ctx, tx, eventlog.Event{Stream: PlanStream(root), PlanNode: nodeID}, ev.EventID, "plan_note", "", []byte(text)); err != nil {
 			return nil, err
 		}
+		// A conclusion on a standard's step is also recorded as a judgement
+		// the register reads by step (lawsview.go).
+		if kind == "step" {
+			if err = recordJudgement(ctx, tx, root, nodeID, ev.EventID, text); err != nil {
+				return nil, err
+			}
+		}
 		return map[string]any{"event_id": ev.EventID, "plan_node_id": nodeID, "by": w.Actor,
 			"at": ev.At.UTC().Format(time.RFC3339Nano)}, nil
 	})

@@ -173,6 +173,7 @@
         "measured_at": "d8dc802c",
         "request_response": [
           {"method": "GET", "path": "/api/v1/agentrt/plan", "handler": "api/internal/agentrt/planapi.HandleGetPlan", "consumers": ["console", "mcp"]},
+          {"method": "GET", "path": "/api/v1/agentrt/laws", "handler": "api/internal/agentrt/planapi.HandleGetLaws", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/agentrt/plan-pace", "handler": "api/internal/agentrt/planapi.HandleGetPlanPace", "consumers": ["console"]},
           {"method": "GET", "path": "/api/v1/agentrt/plan-view", "handler": "api/internal/agentrt/planapi.HandleGetPlanView", "consumers": ["console", "mcp"]},
           {"method": "POST", "path": "/api/v1/agentrt/plan/proposals", "handler": "api/internal/agentrt/planapi.HandleProposePlanChange", "consumers": ["console", "mcp"]},
@@ -186,6 +187,7 @@
         "commands": [
           {"kind": "mcp_tool", "name": "get_plan", "routes": ["/api/v1/agentrt/plan", "/api/v1/agentrt/plan/{id}"]},
           {"kind": "mcp_tool", "name": "get_plan_view", "routes": ["/api/v1/agentrt/plan-view"]},
+          {"kind": "mcp_tool", "name": "get_laws", "routes": ["/api/v1/agentrt/laws"]},
           {"kind": "mcp_tool", "name": "post_plan_note", "routes": ["/api/v1/agentrt/plan/{id}/notes"]},
           {"kind": "mcp_tool", "name": "propose_plan_change", "routes": ["/api/v1/agentrt/plan/proposals"]}
         ],

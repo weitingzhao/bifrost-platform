@@ -419,6 +419,9 @@ export async function ackMessages(input: { message_ids: string[] }, d: RuntimeDe
 export async function getPlanView(input: { root: string; recent_cursor?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return note(await d.get(`${BASE}/plan-view?root=${id(input.root)}${input.recent_cursor ? `&recent_cursor=${id(input.recent_cursor)}` : ''}`))
 }
+export async function getLaws(d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  return note(await d.get(`${BASE}/laws`))
+}
 export interface ExternalRegistration {
   idempotency_key: string; root: string; plan_node_id: string; source_run_key: string; artifact_id: string
   mission_id?: string; task_id?: string; observed_at?: string

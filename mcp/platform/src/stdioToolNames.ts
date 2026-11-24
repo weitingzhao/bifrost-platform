@@ -95,6 +95,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'whoami',
   'get_plan',
   'get_plan_view',
+  'get_laws',
   'register_external_work',
   'record_external_work_event',
   'propose_plan_change',

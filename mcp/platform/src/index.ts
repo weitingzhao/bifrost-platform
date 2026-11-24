@@ -31,7 +31,7 @@ import {
   getArtifact,
   searchArtifacts,
   getPlan,
-  getPlanView, registerExternalWork, recordExternalWorkEvent,
+  getPlanView, getLaws, registerExternalWork, recordExternalWorkEvent,
   COMMIT_SHA,
   defaultRuntimeDeps,
   isRFC3339,
@@ -942,6 +942,8 @@ reg(
 
 reg('get_plan_view', `One read-only plan snapshot, including external work freshness. ${RUNTIME_DATA_NOTE}`,
   { root: z.string(), recent_cursor: z.string().optional() }, async (input) => jsonResult(await getPlanView(input)))
+reg('get_laws', `The register of laws (read-only): every law by number as it stands (version, text, status, the law_amend card that last changed it), and for a law an approved card changed, its plan item and how many of its standards are reached, missed and unmeasured (达到 reached; 部分 and 没达到 missed; 没核 or no conclusion unmeasured). An amend or repeal card must quote a law's text as it stands here. ${RUNTIME_DATA_NOTE}`,
+  {}, async () => jsonResult(await getLaws()))
 // registerTool accepts an intact Zod object; legacy tool(rawShape) would
 // recreate a stripping object and silently discard misspelled bindings.
 if (!allow || allow.has('register_external_work')) {
