@@ -3,7 +3,7 @@
 // plan item and says so rather than counting as reached; the page leads with one verdict line.
 import { describe, expect, it } from 'vitest'
 import type { RegisterLaw } from '@/api/lawRegister'
-import { gradeTone, lawDetail, lawHref, lawRegisterTable, lawRegisterVerdict, lawRegisterWord } from '@/pages/shell/owner/lawRegisterModel'
+import { gradeTone, lawDetail, lawHref, lawRegisterTable, lawRegisterVerdict, lawRegisterWord, lawStandardsLine, lawState } from '@/pages/shell/owner/lawRegisterModel'
 
 const law = (n: string, counts?: RegisterLaw['counts'], steps?: RegisterLaw['steps']): RegisterLaw => ({
   law: n, version: 1, op: 'transcribed', text: `law ${n}`, status: '已落', source: 'OWNER_LAW.md', at: '2026-11-24T00:00:00Z',
@@ -20,7 +20,13 @@ describe('law register', () => {
   })
   it('leads with one verdict line, and an unread register is "?"', () => {
     const laws = [law('1', { reached: 2, missed: 1, unmeasured: 3 }), law('2')]
-    expect(lawRegisterVerdict(laws)).toBe('2 laws · 2 reached · 1 missed · 3 unmeasured · 1 without a plan item')
+    // Laws counted by their state, the worst standard deciding (箭10 2026-11-24); the standards' sums go in the hover.
+    expect(lawRegisterVerdict(laws)).toBe('2 laws · 0 reached · 1 missed · 0 unmeasured · 1 without a plan item')
+    expect(lawStandardsLine(laws)).toBe('standards: 2 reached · 1 missed · 3 unmeasured')
+    expect(lawState({ counts: { reached: 3, missed: 0, unmeasured: 0 } })).toBe('reached')
+    expect(lawState({ counts: { reached: 3, missed: 0, unmeasured: 1 } })).toBe('unmeasured')
+    expect(lawState({ counts: { reached: 3, missed: 1, unmeasured: 1 } })).toBe('missed')
+    expect(lawState({})).toBe('no-item')
     expect(lawRegisterVerdict(null)).toBe('? laws · ? reached · ? missed · ? unmeasured')
     expect(lawRegisterWord(laws)).toBe('warn')
     expect(lawRegisterWord([law('1', { reached: 2, missed: 0, unmeasured: 0 })])).toBe('ok')

@@ -18,8 +18,15 @@ const answer: Instruments = {
   unread: [],
 }
 const clients: QueryClient[] = []
+// The register of laws (GET /api/v1/agentrt/laws): laws 1 and 2 only, so 3 and H1 are in the governance files alone.
+const register = { laws: [
+  { law: '1', version: 1, op: 'transcribed', text: 'Enforced law', status: '已落', source: 'OWNER_LAW.md', at: '2026-11-24T00:00:00Z', plan_item: 'item-1', counts: { reached: 2, missed: 0, unmeasured: 0 } },
+  { law: '2', version: 1, op: 'transcribed', text: 'Open text law', status: '未落', source: 'OWNER_LAW.md', at: '2026-11-24T00:00:00Z' },
+] }
 function show(body: unknown, status = 200) {
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status }))))
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve(String(input).includes('/api/v1/agentrt/laws')
+    ? new Response(JSON.stringify(register), { status: 200 })
+    : new Response(JSON.stringify(body), { status }))))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   clients.push(client)
   render(<QueryClientProvider client={client}><CrewInstruments /></QueryClientProvider>)
@@ -31,10 +38,7 @@ describe('Crew: laws, skills and tools', () => {
   // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
   it('shows the counts and every table from the answer', async () => {
     show(answer)
-    await screen.findByRole('table', { name: 'Laws' })
-    expect(stat('laws landed')).toHaveTextContent('1')
-    expect(stat('laws open')).toHaveTextContent('2')
-    expect(stat('laws without machine enforcement')).toHaveTextContent('2')
+    await screen.findByRole('table', { name: 'Skills' })
     expect(stat('skills')).toHaveTextContent('1')
     expect(stat('MCP servers')).toHaveTextContent('1')
     expect(stat('MCP tools')).toHaveTextContent('2')
@@ -43,17 +47,16 @@ describe('Crew: laws, skills and tools', () => {
     expect(screen.queryByRole('region', { name: 'Unread' })).not.toBeInTheDocument()
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
-  it('filters laws by not landed and text only, together', async () => {
+  // 2026-11-24 箭10: a law has one source, the register. This block shows its count and state and leads to Command →
+  // Laws; a law only the governance files name is counted, so the difference shows instead of two lists disagreeing.
+  it('reads laws from the register, leads to it, and shows what the governance files name that it does not', async () => {
     show(answer)
-    await screen.findByRole('table', { name: 'Laws' })
-    fireEvent.click(screen.getByRole('button', { name: 'Not landed' }))
-    expect(screen.queryByText('Enforced law')).not.toBeInTheDocument()
-    expect(screen.queryByText('Waived law')).not.toBeInTheDocument()
-    expect(screen.getByText('Open enforced law')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Text only' }))
-    expect(screen.queryByText('Open enforced law')).not.toBeInTheDocument()
-    expect(screen.getByText('Open text law')).toBeInTheDocument()
+    const block = await screen.findByRole('region', { name: 'Laws' })
+    expect(await within(block).findByText('Laws · 2')).toBeInTheDocument()
+    expect(within(block).getByText('2 laws · 1 reached · 0 missed · 0 unmeasured · 1 without a plan item')).toBeInTheDocument()
+    expect(within(block).getByText('2 in governance files not in the register')).toHaveAttribute('title', '3, H1')
+    expect(within(block).getByRole('link', { name: /Open the register/ })).toHaveAttribute('href', '#command?section=laws')
+    expect(screen.queryByRole('table', { name: 'Laws' })).not.toBeInTheDocument()
   })
 
   // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
@@ -69,7 +72,7 @@ describe('Crew: laws, skills and tools', () => {
   // Owner rule 2026-11-17: pages show data, explanations go behind the "?".
   it('keeps the explanation behind the help button', async () => {
     show(answer)
-    await screen.findByRole('table', { name: 'Laws' })
+    await screen.findByRole('table', { name: 'Skills' })
     expect(screen.queryByText(/not recorded yet/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Help: laws, skills and tools' }))
     expect(screen.getByText(/actually invoked a Skill is not recorded yet/)).toBeInTheDocument()
@@ -78,14 +81,14 @@ describe('Crew: laws, skills and tools', () => {
   // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
   // An empty list beside an unread source is not a count of zero; the positive control is the "0" with nothing unread.
   it('shows unread sources plainly and does not count what was not read', async () => {
-    show({ ...answer, laws: [], commits: { ...answer.commits, infra: '' }, unread: [{ source: 'bifrost-trade-infra:agent-config/OWNER_LAW.md', error: 'gitea: HTTP 500' }] })
-    expect(await screen.findByText('bifrost-trade-infra:agent-config/OWNER_LAW.md')).toBeInTheDocument()
+    show({ ...answer, skills: [], commits: { ...answer.commits, infra: '' }, unread: [{ source: 'bifrost-trade-infra:agent-config/claude/skills', error: 'gitea: HTTP 500' }] })
+    expect(await screen.findByText('bifrost-trade-infra:agent-config/claude/skills')).toBeInTheDocument()
     expect(screen.getByText(/gitea: HTTP 500/)).toBeInTheDocument()
-    expect(stat('laws landed')).toHaveTextContent('?')
+    expect(stat('skills')).toHaveTextContent('?')
     cleanup()
-    show({ ...answer, laws: [] })
-    await screen.findByRole('table', { name: 'Laws' })
-    expect(stat('laws landed')).toHaveTextContent('0')
+    show({ ...answer, skills: [] })
+    await screen.findByRole('table', { name: 'Skills' })
+    expect(stat('skills')).toHaveTextContent('0')
   })
 
   // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.

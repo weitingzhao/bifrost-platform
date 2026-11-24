@@ -5,7 +5,7 @@ import { fetchLawRegister } from '@/api/lawRegister'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
-import { lawDetail, lawHref, lawRegisterTable, lawRegisterVerdict, lawRegisterWord } from './lawRegisterModel'
+import { lawDetail, lawHref, lawRegisterTable, lawRegisterVerdict, lawRegisterWord, lawStandardsLine } from './lawRegisterModel'
 
 const LAMP = { ok: 'ok', warn: 'degraded', unknown: 'unknown', pending: 'unknown' } as const
 
@@ -33,6 +33,7 @@ export function LawRegister() {
         tagLabel={word === 'pending' ? '…' : word}
         tagVariant={TAG_VARIANT[word]}
         summary={summary}
+        tagTitle={q.isLoading ? undefined : lawStandardsLine(unread ? null : laws)}
       />
       {unread ? <p className="m-0 text-sm text-muted-foreground">{`The register could not be read${q.error instanceof Error ? `: ${q.error.message}` : ''}. Its laws are unknown.`}</p> : null}
       {laws && laws.length > 0 ? (

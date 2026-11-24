@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchInstruments, type InstrumentLaw, type Instruments } from '@/api/governanceInstruments'
+import { fetchLawRegister } from '@/api/lawRegister'
+import { LAWS_HREF, lawRegisterVerdict } from './lawRegisterModel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { Stat } from './OwnerParts'
 
@@ -24,26 +26,21 @@ function Rows<T>({ label, columns, items, rowKey }: {
   </table>
 }
 
-const LAW_COLUMNS: { name: string; cell: (law: InstrumentLaw) => ReactNode }[] = [
-  { name: 'Law', cell: law => <strong>{law.number}</strong> },
-  { name: 'Date', cell: law => law.date },
-  { name: 'Text', cell: law => law.text },
-  { name: 'Status', cell: law => <span data-law-state={law.state}>{law.status}</span> },
-  { name: 'Enforced by', cell: law => law.enforcement || '—' },
-  { name: 'Skills', cell: law => law.skills.join(', ') || '—' },
-]
-
-function Laws({ laws }: { laws: InstrumentLaw[] }) {
-  const [notLanded, setNotLanded] = useState(false)
-  const [textOnly, setTextOnly] = useState(false)
-  const shown = laws.filter(law => (!notLanded || law.state === 'open') && (!textOnly || !law.machine_enforced))
-  return <section aria-label="Laws" className="flex min-w-0 flex-col gap-2">
-    <OpsSubsectionTitle>Laws · {shown.length} of {laws.length}</OpsSubsectionTitle>
-    <div className="flex flex-wrap gap-2">
-      <button type="button" className={BUTTON} aria-pressed={notLanded} onClick={() => setNotLanded(v => !v)}>Not landed</button>
-      <button type="button" className={BUTTON} aria-pressed={textOnly} onClick={() => setTextOnly(v => !v)}>Text only</button>
-    </div>
-    <Rows label="Laws" columns={LAW_COLUMNS} items={shown} rowKey={law => law.number} />
+/**
+ * Laws have one source, the register (箭10 2026-11-24): this block shows its count and state and leads to Command →
+ * Laws; it no longer lists laws parsed from the governance files. A law the governance files name that the register
+ * does not hold is said, so the difference shows instead of two lists disagreeing quietly.
+ */
+function RegisterLaws({ governance }: { governance: InstrumentLaw[] }) {
+  const q = useQuery({ queryKey: ['agentrt', 'laws'], queryFn: ({ signal }) => fetchLawRegister(signal), refetchInterval: 60_000, retry: false })
+  const laws = q.isError || q.isPaused ? null : q.data ?? null
+  const inRegister = new Set((laws ?? []).map(l => l.law.trim()))
+  const missing = laws == null ? [] : governance.filter(g => g.number.trim() !== '' && !inRegister.has(g.number.trim())).map(g => g.number.trim())
+  return <section aria-label="Laws" data-crew-laws className="flex min-w-0 flex-col gap-2">
+    <OpsSubsectionTitle>Laws · {laws == null ? (q.isLoading ? '…' : '?') : laws.length}</OpsSubsectionTitle>
+    <p className="m-0 text-sm">{q.isLoading ? 'Reading the register…' : lawRegisterVerdict(laws)}</p>
+    {missing.length > 0 ? <p className="m-0 text-sm text-muted-foreground" data-laws-not-in-register title={missing.join(', ')}>{`${missing.length} in governance files not in the register`}</p> : null}
+    <a href={LAWS_HREF} className="min-h-11 self-start text-sm underline">Open the register (Command → Laws)</a>
   </section>
 }
 
@@ -64,7 +61,7 @@ function Help() {
   return <div role="note" aria-label="About this section" className="rounded-[var(--card-radius)] border border-[var(--card-border)] p-3 text-sm">
     <ul className="m-0 flex list-disc flex-col gap-1 pl-5">
       <li>Everything is read from main of bifrost-trade-infra and bifrost-platform: the register in OWNER_LAW.md, each SKILL.md, .mcp.json and the platform MCP server's source. A complete answer is kept for up to 60 seconds.</li>
-      <li>Open and Not landed are the laws the register marks as not landed yet. Text only are the laws whose machine-enforcement column is empty or says that only text or nothing holds them.</li>
+      <li>Laws are read from the register (Command → Laws); this block shows their count and state. A law the governance files name that the register does not hold is counted here, so the difference shows.</li>
       <li>A law's Skills are those its location or machine-enforcement column names. A skill's Laws are those its SKILL.md cites.</li>
       <li>Whether an agent actually invoked a Skill is not recorded yet, so nothing here says a Skill was used.</li>
       <li>MCP servers show only a name and a transport. Unread lists every source or item this answer does not have; an unread source is empty, never an older copy.</li>
@@ -78,9 +75,6 @@ function Body({ data }: { data: Instruments }) {
   const count = (items: unknown[], value = items.length) => items.length === 0 && unread.length > 0 ? '?' : value
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="grid grid-cols-2 gap-2 @xl:grid-cols-3 @5xl:grid-cols-6">
-      <Stat value={count(laws, laws.filter(law => law.state === 'landed').length)} label="laws landed" />
-      <Stat value={count(laws, laws.filter(law => law.state === 'open').length)} label="laws open" />
-      <Stat value={count(laws, laws.filter(law => !law.machine_enforced).length)} label="laws without machine enforcement" />
       <Stat value={count(skills)} label="skills" />
       <Stat value={count(mcp.servers)} label="MCP servers" />
       <Stat value={count(mcp.tools)} label="MCP tools" />
@@ -90,7 +84,7 @@ function Body({ data }: { data: Instruments }) {
       <OpsSubsectionTitle>Unread · {unread.length}</OpsSubsectionTitle>
       <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">{unread.map(item => <li key={`${item.source} ${item.error}`} className={WRAP}><span className="font-mono text-xs">{item.source}</span> · {item.error}</li>)}</ul>
     </section>}
-    <Laws laws={laws} />
+    <RegisterLaws governance={laws} />
     <section aria-label="Skills" className="flex min-w-0 flex-col gap-2">
       <OpsSubsectionTitle>Skills · {skills.length}</OpsSubsectionTitle>
       <Rows label="Skills" items={skills} rowKey={skill => skill.path} columns={[

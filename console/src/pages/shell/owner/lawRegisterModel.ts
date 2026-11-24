@@ -19,16 +19,37 @@ export function gradeTone(grade: string | undefined): 'ok' | 'warn' | 'unknown' 
 
 const GRADE_WORD: Record<'ok' | 'warn' | 'unknown', string> = { ok: 'reached', warn: 'missed', unknown: 'unmeasured' }
 
-/** The page's one-line verdict: "83 laws · 12 reached · 3 missed · 40 unmeasured · 61 without a plan item". */
+/**
+ * A law's own state, its worst standard deciding (箭10 2026-11-24, as every rollup here): any standard missed is
+ * missed; else any unmeasured is unmeasured; all reached is reached. A law with no counts has no plan item.
+ */
+export function lawState(l: Pick<RegisterLaw, 'counts'>): 'reached' | 'missed' | 'unmeasured' | 'no-item' {
+  const c = l.counts
+  if (c == null) return 'no-item'
+  if (c.missed > 0) return 'missed'
+  if (c.unmeasured > 0 || c.reached === 0) return 'unmeasured'
+  return 'reached'
+}
+
+/** The page's one-line verdict, laws counted by their state: "83 laws · 12 reached · 3 missed · 7 unmeasured · 61 without a plan item". */
 export function lawRegisterVerdict(laws: readonly RegisterLaw[] | null): string {
   if (laws == null) return '? laws · ? reached · ? missed · ? unmeasured'
-  const counted = laws.filter(l => l.counts != null)
-  const sum = (k: 'reached' | 'missed' | 'unmeasured') => counted.reduce((n, l) => n + (l.counts?.[k] ?? 0), 0)
-  const without = laws.length - counted.length
-  const parts = [`${laws.length} laws`, `${sum('reached')} reached`, `${sum('missed')} missed`, `${sum('unmeasured')} unmeasured`]
+  const by = (k: ReturnType<typeof lawState>) => laws.filter(l => lawState(l) === k).length
+  const parts = [`${laws.length} laws`, `${by('reached')} reached`, `${by('missed')} missed`, `${by('unmeasured')} unmeasured`]
+  const without = by('no-item')
   if (without > 0) parts.push(`${without} without a plan item`)
   return parts.join(' · ')
 }
+
+/** The standards summed, for the hover: "standards: 40 reached · 5 missed · 60 unmeasured". */
+export function lawStandardsLine(laws: readonly RegisterLaw[] | null): string {
+  if (laws == null) return 'standards: not read'
+  const sum = (k: 'reached' | 'missed' | 'unmeasured') => laws.reduce((n, l) => n + (l.counts?.[k] ?? 0), 0)
+  return `standards: ${sum('reached')} reached · ${sum('missed')} missed · ${sum('unmeasured')} unmeasured`
+}
+
+/** The register on Command. */
+export const LAWS_HREF = formatShellHash('command', 'section=laws')
 
 /** A law's address on Command: the register, that law picked. */
 export const lawHref = (law: string) => formatShellHash('command', new URLSearchParams({ section: 'laws', law }).toString())
