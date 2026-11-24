@@ -1,3 +1,4 @@
+import { DeliveryLanePage } from '@/pages/shell/delivery/DeliveryLanePage'
 import { useEffect, useRef } from 'react'
 import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
 import { canonicalQuery, hashNamesSection, scrollAfterShell } from '@/lib/shell/useHashSection'
@@ -75,7 +76,7 @@ function WorkSectionPage({ section, data }: { section: WorkSection; data: OwnerC
       <OwnerRuntimeCards data={data} />
       <OwnerReleaseLane data={data} />
       <ProgressPage part="activity" />
-    </> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : section === 'ci' ? <CiSection /> : <ProgressPage part={section} />}
+    </> : section === 'delivery' ? <DeliveryLanePage /> : section === 'delivery-boundaries' ? <DeliveryBoundaries /> : section === 'ci' ? <CiSection /> : <ProgressPage part={section} />}
   </section>
 }
 
