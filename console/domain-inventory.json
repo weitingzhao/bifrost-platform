@@ -5482,6 +5482,7 @@
         "console/src/pwa/__tests__/consoleCrashScreen.test.tsx",
         "console/src/pwa/__tests__/nginxConf.test.ts",
         "console/src/pwa/__tests__/pwa.test.ts",
+        "console/src/pwa/__tests__/serviceWorkerShell.test.ts",
         "console/src/pwa/appBadge.ts",
         "console/src/pwa/consoleBuild.ts",
         "console/src/pwa/consoleCrash.ts",
