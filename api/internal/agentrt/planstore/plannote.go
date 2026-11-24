@@ -45,9 +45,12 @@ func checkNoteText(text string) error {
 	return nil
 }
 
-// PostPlanNote records a writer's note on an architecture row (POST
-// /plan/{id}/notes): a note event naming the row, on the stream of the
-// row's root. A node there is not is pgx.ErrNoRows; any other kind of node
+// PostPlanNote records a writer's note on an architecture row or a step
+// (POST /plan/{id}/notes): a note event naming the node, on the stream of
+// its root. A step takes notes since 2026-11-23 (closed loop): Audit records
+// its conclusion on a standard's step and Triage the cause of a miss, one
+// line each ("结论 s1：达到|部分|没达到|没核｜标准版本 appr_…｜读数 …"); the
+// plan page counts the latest conclusion of each step. A node there is not is pgx.ErrNoRows; any other kind of node
 // is refused. The writer is registered as for proposals (a thread on its
 // first write) and the key is the writer's, as for proposals: a retry gets
 // the first answer, the same key with another note is a conflict.
@@ -63,18 +66,20 @@ func PostPlanNote(ctx context.Context, db eventlog.DB, w actor.Writer, key, node
 		if err := actor.Ensure(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
-		var kind string
-		var parent *string
-		err := tx.QueryRow(ctx, `SELECT node_kind, parent_plan_node_id FROM agentrt.plan_node WHERE plan_node_id = $1`, nodeID).Scan(&kind, &parent)
+		var kind, root string
+		err := tx.QueryRow(ctx, `WITH RECURSIVE up AS (
+		    SELECT plan_node_id, parent_plan_node_id, node_kind, 0 AS depth FROM agentrt.plan_node WHERE plan_node_id = $1
+		    UNION ALL SELECT p.plan_node_id, p.parent_plan_node_id, p.node_kind, up.depth + 1 FROM agentrt.plan_node p JOIN up ON p.plan_node_id = up.parent_plan_node_id)
+		  SELECT COALESCE((SELECT node_kind FROM up WHERE depth = 0), ''), COALESCE((SELECT plan_node_id FROM up WHERE parent_plan_node_id IS NULL), '')`, nodeID).Scan(&kind, &root)
 		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, fmt.Errorf("store: no plan node %s: %w", nodeID, err)
+		case errors.Is(err, pgx.ErrNoRows) || (err == nil && kind == ""):
+			return nil, fmt.Errorf("store: no plan node %s: %w", nodeID, pgx.ErrNoRows)
 		case err != nil:
 			return nil, err
-		case kind != "arch_row" || parent == nil:
-			return nil, eventlog.Invalid("%s is a %s: only an architecture row takes a note", nodeID, kind)
+		case (kind != "arch_row" && kind != "step") || root == "" || root == nodeID:
+			return nil, eventlog.Invalid("%s is a %s: only an architecture row or a step takes a note", nodeID, kind)
 		}
-		ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(*parent), Type: "note", Actor: w.Actor, PlanNode: nodeID,
+		ev, err := appendPlan(ctx, tx, eventlog.Event{Stream: PlanStream(root), Type: "note", Actor: w.Actor, PlanNode: nodeID,
 			Body: map[string]any{"text": text}})
 		if err != nil {
 			return nil, err
@@ -82,7 +87,7 @@ func PostPlanNote(ctx context.Context, db eventlog.DB, w actor.Writer, key, node
 		// A note that says the Owner approved is recorded as a spec's or a
 		// message's is (T04; review 489 B3), and grants nothing: the row's
 		// tick is its gates'.
-		if err = alertClaim(ctx, tx, eventlog.Event{Stream: PlanStream(*parent), PlanNode: nodeID}, ev.EventID, "plan_note", "", []byte(text)); err != nil {
+		if err = alertClaim(ctx, tx, eventlog.Event{Stream: PlanStream(root), PlanNode: nodeID}, ev.EventID, "plan_note", "", []byte(text)); err != nil {
 			return nil, err
 		}
 		return map[string]any{"event_id": ev.EventID, "plan_node_id": nodeID, "by": w.Actor,

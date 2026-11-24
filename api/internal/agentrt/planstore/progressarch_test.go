@@ -167,7 +167,6 @@ func TestPlanNotes(t *testing.T) {
 		node, text string
 		want       error
 	}{
-		"a step":            {s1, "x", eventlog.ErrInvalid},
 		"a round":           {root, "x", eventlog.ErrInvalid},
 		"the root":          {"ARCH", "x", eventlog.ErrInvalid},
 		"no such node":      {"ARCH:nothing", "x", pgx.ErrNoRows},
@@ -189,6 +188,14 @@ func TestPlanNotes(t *testing.T) {
 			t.Errorf("%s: err = %v; want %v", name, perr, c.want)
 		}
 	}
+	// A step takes a note since 2026-11-23 (closed loop: Audit's conclusion
+	// on a standard), on its root's stream.
+	stepNote, err := planstore.PostPlanNote(ctx, w.rt, thread, "k-step", s1, "结论 s1：没核")
+	ok(t, err)
+	if stepNote["plan_node_id"] != s1 {
+		t.Fatalf("a step's note = %v", stepNote)
+	}
+	w.chainHolds(t, planstore.PlanStream(root))
 	// At the bound it is taken.
 	_, err = planstore.PostPlanNote(ctx, w.rt, thread, "k-bound", "ARCH:bus", strings.Repeat("a", planstore.MaxNoteText))
 	ok(t, err)

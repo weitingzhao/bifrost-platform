@@ -142,7 +142,6 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 		code int
 	}{
 		"no such node":   {"plan/ARCH:nothing/notes", note("e1", "x"), http.StatusNotFound},
-		"a step":         {"plan/R2:2.0-1/notes", note("e2", "x"), http.StatusUnprocessableEntity},
 		"a round":        {"plan/R2/notes", note("e3", "x"), http.StatusUnprocessableEntity},
 		"the table":      {"plan/ARCH/notes", note("e4", "x"), http.StatusUnprocessableEntity},
 		"empty":          {"plan/ARCH:state-db/notes", note("e5", ""), http.StatusUnprocessableEntity},
@@ -154,6 +153,16 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 		if code, out := call(t, s, "operator", "POST", c.path, c.body, session, "night"); code != c.code {
 			t.Errorf("%s: %d %v; want %d", name, code, out, c.code)
 		}
+	}
+	// 2026-11-23, closed loop: a step takes a note too (Audit's conclusion,
+	// Triage's cause), on the stream of its tree's root, not its parent's.
+	if code, out := call(t, s, "operator", "POST", "plan/R2:2.0-1/notes", note("e2", "结论 s1：没核｜标准版本 appr_0000000000000001"), session, "night"); code != 200 {
+		t.Fatalf("a note on a step = %d %v", code, out)
+	}
+	var stream string
+	must(t, pool.QueryRow(ctx, `SELECT event_stream_id FROM agentrt.event WHERE event_type = 'note' AND plan_node_id = 'R2:2.0-1'`).Scan(&stream))
+	if stream != "plan:R2" {
+		t.Fatalf("the step's note is on %s; want plan:R2", stream)
 	}
 	var notes int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND plan_node_id LIKE 'ARCH%'`).Scan(&notes))

@@ -22,9 +22,9 @@ export function registerPlanImportTools(reg: McpServer['tool']): void {
 
   reg(
     'post_plan_note',
-    `Agent runtime: write what an architecture row (ARCH:…, a row of the architecture table) actually is now, in words: a note appended to the row (POST /plan/{id}/notes). Progress shows the latest note beside the row's tick; the tick is the row's gate tests against what is deployed now, never the note. Only an architecture row takes one; text up to 8 KiB, no local paths. Recorded as this thread. ${NOTE_KEY_RULE}`,
+    `Agent runtime: write what an architecture row (ARCH:…, a row of the architecture table) actually is now, in words: a note appended to the row (POST /plan/{id}/notes). Progress shows the latest note beside the row's tick; the tick is the row's gate tests against what is deployed now, never the note. A step takes one too: Audit records its conclusion on a standard step as one line, 结论 s<id>：达到|部分|没达到|没核｜标准版本 appr_<id>｜读数 <reading>, and Triage the cause of a miss, 归因 s<id>：类别 法|Agent|工具｜原因 …｜去向 …｜标准版本 appr_<id>; the plan page counts the latest conclusion of each step. Rounds, items and the table itself take none; text up to 8 KiB, no local paths. Recorded as this thread. ${NOTE_KEY_RULE}`,
     {
-      plan_node_id: z.string().min(1).describe('The row, ARCH:<label>'),
+      plan_node_id: z.string().min(1).describe('The row, ARCH:<label>, or a step, R<n>:<label>'),
       text: z.string().min(1).max(8192),
       idempotency_key: z.string().min(1).describe('One key per note; see the description'),
     },

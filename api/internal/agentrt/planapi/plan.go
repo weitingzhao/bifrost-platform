@@ -106,8 +106,9 @@ type planNoteBody struct {
 
 // HandlePostPlanNote is POST /plan/{id}/notes: what an architecture row actually
 // is now, in words (W-31 2.5 G2 A), appended as a note event on the row;
-// GET /progress shows the latest beside the row's tick. Only an architecture
-// row takes one: a node there is not is 404, another kind 422. Who may
+// GET /progress shows the latest beside the row's tick. A step takes one too
+// (2026-11-23: Audit's conclusion on a standard, Triage's cause of a miss).
+// A node there is not is 404, another kind 422. Who may
 // propose a plan change may write one, recorded as the proposer is; the key
 // is the writer's, as for proposals.
 func (rt Routes) HandlePostPlanNote(w http.ResponseWriter, r *http.Request) {

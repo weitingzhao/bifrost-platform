@@ -484,7 +484,6 @@ func TestContractPlanNotes(t *testing.T) {
 		want            error
 	}{
 		"no key":         {"", archRowB, "x", eventlog.ErrInvalid},
-		"a step":         {"a", stepA, "x", eventlog.ErrInvalid},
 		"an item":        {"b", item1, "x", eventlog.ErrInvalid},
 		"the table root": {"c", archRoot, "x", eventlog.ErrInvalid},
 		"no such node":   {"d", "ARCH:none", "x", pgx.ErrNoRows},

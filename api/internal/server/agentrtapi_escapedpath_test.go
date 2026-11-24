@@ -75,8 +75,9 @@ func TestEscapedPathsNameTheSameRows(t *testing.T) {
 		!strings.Contains(out["message"].(string), "R2:2.0-1") {
 		t.Fatalf("sign off by an escaped id = %d %v", code, out)
 	}
-	if code, out := call(t, s, "proposer", "POST", "plan/"+escape("R2:2.0-1")+"/notes", map[string]any{"idempotency_key": "n1", "text": "x"}, session, "s1"); code != http.StatusUnprocessableEntity ||
-		!strings.Contains(out["message"].(string), "only an architecture row takes a note") {
+	// A step takes a note (2026-11-23): by the escaped id it lands on the same step.
+	if code, out := call(t, s, "proposer", "POST", "plan/"+escape("R2:2.0-1")+"/notes", map[string]any{"idempotency_key": "n1", "text": "x"}, session, "s1"); code != http.StatusOK ||
+		out["plan_node_id"] != "R2:2.0-1" {
 		t.Fatalf("a note by an escaped id = %d %v", code, out)
 	}
 
