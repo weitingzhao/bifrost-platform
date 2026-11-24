@@ -8,10 +8,13 @@ export function laneLabel(l: { repo: string; branch?: string }): string {
   return l.branch != null ? `↳ ${l.branch.replace(/^(claude|fix|chore|td-batch|debt|feat)\//, '')}` : shortRepo(l.repo)
 }
 
-/** The vertical advance of one character of a 10px lane name, generous so a name is never cut. */
-export const LABEL_CHAR_PX = 6.4
+/** The advance of one character of a 10px lane name, with room to spare (measured 2026-11-23: 51 characters run 186px up at 45°). */
+export const LABEL_CHAR_PX = 5.6
 
-/** The lane header's height: at least `min`, and tall enough for the longest vertical name to read whole. */
+/** Names lean at 45°: a name of length L rises L · sin 45°. */
+const SIN45 = Math.SQRT1_2
+
+/** The lane header's height: at least `min`, and tall enough for the longest slanted name to read whole. */
 export function laneHeaderHeight(labels: readonly string[], min: number): number {
-  return Math.max(min, Math.ceil(Math.max(0, ...labels.map(l => l.length)) * LABEL_CHAR_PX) + 10)
+  return Math.max(min, Math.ceil(Math.max(0, ...labels.map(l => l.length)) * LABEL_CHAR_PX * SIN45) + 18)
 }

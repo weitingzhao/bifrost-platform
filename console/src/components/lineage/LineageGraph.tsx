@@ -15,7 +15,7 @@ const LANE = 14
 const PAD = 10
 const OVERSCAN = 12
 const VIEW_ROWS = 28
-const HEADER_H = 112
+const HEADER_MIN = 40
 /** Room the commit column keeps beside the lanes; on a narrow screen the graph scrolls sideways instead. */
 const COMMIT_COLUMN_MIN = 360
 
@@ -328,7 +328,7 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
   // Every lane's name reads whole at any width (箭10 2026-11-23, the 390 sweep: names cut to "ready/ci-cc…" lost which
   // line a lane is): the header is as tall as the longest vertical name, and header and graph scroll sideways together
   // with room for the commit column, so a phone scrolls instead of cutting the names or the column.
-  const headerH = laneHeaderHeight(lanes.map(laneLabel), HEADER_H)
+  const headerH = laneHeaderHeight(lanes.map(laneLabel), HEADER_MIN)
   const contentW = graphW + COMMIT_COLUMN_MIN
 
   const chip = (on: boolean) =>
@@ -449,6 +449,10 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
         <p className="py-4 text-center text-[var(--text-dense-meta)] text-muted-foreground">No commits match these filters.</p>
       ) : (
         <>
+          {/* The view's hint sits above the graph: the slanted names lean over the space where it used to be. */}
+          <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
+            {VIEWS.find(v => v.id === view)?.hint} · {rows.length} rows
+          </p>
           <div className="overflow-x-auto" data-lineage-scroll>
           <div style={{ minWidth: contentW }}>
           <div className="relative" style={{ height: headerH }} aria-label="Lanes">
@@ -467,14 +471,13 @@ export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
                 title={l.branch != null ? `${l.repo} ⎇ ${l.branch} (changes not on ${shortRepo(l.repo)}'s main)` : `${l.repo} — default branch`}
                 data-lane-label
                 className={`absolute bottom-1 whitespace-nowrap text-[10px] leading-[14px] ${l.branch != null ? 'text-warning' : 'font-semibold text-foreground'}`}
-                style={{ left: l.x - 7, width: 14, maxHeight: headerH - 6, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                // 45° from the lane's foot, leaning right (箭10 2026-11-23): the whole name, in about 0.7 of the height
+                // a vertical name needs; the hover keeps the full repo and branch.
+                style={{ left: l.x - 3, transformOrigin: '0 100%', transform: 'rotate(-45deg)' }}
               >
                 {laneLabel(l)}
               </span>
             ))}
-            <span className="absolute bottom-0 text-[var(--text-dense-meta)] text-muted-foreground" style={{ left: graphW + 4 }}>
-              {VIEWS.find(v => v.id === view)?.hint} · {rows.length} rows
-            </span>
           </div>
 
           <div
