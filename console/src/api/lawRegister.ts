@@ -11,6 +11,8 @@ export type LawStep = {
   /** 达到, 部分, 没达到, 没核; empty when not judged. */
   grade?: string
   version?: string
+  /** The audit line's latest attribution on the step (plan_step_attributed, platform 2026-11-24; only added): 法, Agent, 工具 or 没核. */
+  attribution?: { category: string; cause?: string; destination?: string; version?: string }
 }
 
 export type LawCounts = { reached: number; missed: number; unmeasured: number }

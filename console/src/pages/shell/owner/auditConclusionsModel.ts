@@ -1,170 +1,209 @@
 import type { Block, Cell } from '@bifrost/ui/city/cards'
-import type { RegisterLaw } from '@/api/lawRegister'
+import type { LawStep, RegisterLaw } from '@/api/lawRegister'
 import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
 
 /*
- * Command → Audit: the audit's conclusions (箭10 2026-11-24; the Owner: 「审计基于立法的标准出结果，来监督行政」).
- * Every standard of every law, one row each:
- * - its result: reached / missed / unmeasured, from the step's grade;
- * - for a missed one, its cause: law, agent or tool;
- * - the plan step it is judged on (R6:6.x-n), linked;
- * - opened, its evidence: the standard, how it is measured, where it stands now, and the card that set it.
- * The data is the law register as the UI engine serves it (/engine/v1/agents?read=laws).
- * The cause is the audit line's call (get_approval_readings), not served yet. Until it is, a missed standard's cause
- * says unknown and why; nothing is guessed from the text.
+ * Command → Audit conclusions (箭10 2026-11-24; the Owner: 「审计基于立法的标准出结果，来监督行政」; the audit line's
+ * brief, domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). One row per standard, grouped by law.
+ * The conclusion and the cause are apart:
+ * - the conclusion: reached / missed / unmeasured, and whether its numbers are kept by the system or read once;
+ * - the cause: law / agent / tool, only for a missed one.
+ * Evidence is one click away. Unmeasured is not missed: an unmeasured standard lists what read it still lacks.
+ * The page's three numbers are GET /laws' own counts, never recounted here.
+ * Everything is read through the UI engine:
+ * - /engine/v1/agents?read=laws for the register;
+ * - read=plan-step for a step's events;
+ * - read=approval-readings for law 85 s1.
  */
 
 export type Result = 'reached' | 'missed' | 'unmeasured'
 const TONE: Record<Result, 'ok' | 'warn' | 'unknown'> = { reached: 'ok', missed: 'warn', unmeasured: 'unknown' }
+/** Missed first, unmeasured last (the audit line's default). */
+const ORDER: Record<Result, number> = { missed: 0, reached: 1, unmeasured: 2 }
 
-/** The causes the audit names (law, agent, tool); null until the audit's readings are served. */
 export type Cause = 'law' | 'agent' | 'tool'
+const CATEGORY: Record<string, Cause | 'unchecked'> = { '法': 'law', 'Agent': 'agent', '工具': 'tool', '没核': 'unchecked' }
+
+/** A plan step's events as the platform serves them (GET /api/v1/agentrt/plan/{node} events, the last 50). */
+export type PlanEvent = { event_id: number; event_type: string; body?: Record<string, unknown> }
+
+/** The audit's reading of a step: the note its latest verdict points at; its numbers kept by the system or read once. */
+export type Reading = { text: string; source: 'archived' | 'ad hoc' | 'mixed' | 'unsaid'; noteEventId: number; judgedEventId: number; found: boolean }
+
+/**
+ * The audit's cause of a step: structured (GET /laws steps[].attribution, plan_step_attributed) when there, else the
+ * latest 「归因 sN：」 note. A note whose category cannot be read is kept as raw text, its category unknown.
+ */
+export type Attribution = { category: Cause | 'unchecked' | 'unreadable'; reason: string; to: string; version?: string; from: 'event' | 'note'; raw?: string; noteEventId?: number }
 
 export type StandardRow = {
   law: string
   lawText: string
   planItem: string
   step: string
-  /** s1, s2…: the standard's own number, when its title has one. */
   label: string
   standard: string
   method: string
   now: string
   grade: string
   result: Result
-  cause: Cause | null
   card?: string
-  /** From the step's own events (plan_step_judged → its note): the reading as the audit wrote it, and its source. */
-  reading?: Reading
-  attribution?: Attribution | null
+  attribution: Attribution | null | undefined
+  /** undefined: the step's events are not read (yet); else what they say. */
+  reading?: Reading | null
 }
-
-/** A plan step's events as the platform serves them (GET /api/v1/agentrt/plan/{node} events). */
-export type PlanEvent = { event_id: number; event_type: string; body?: Record<string, unknown> }
-
-/** The audit's reading of a step: the note its latest verdict points at, and whether its numbers are kept by the system or read once. */
-export type Reading = { text: string; source: 'archived' | 'ad hoc' | 'mixed' | 'unsaid'; noteEventId: number; found: boolean }
-
-/** The audit's cause of a missed standard (a note "归因 sN：… 类别 X … 原因：… ｜去向：…"), the latest one on the step. */
-export type Attribution = { category: Cause | 'unchecked'; reason: string; to: string; noteEventId: number }
 
 const textOf = (e: PlanEvent | undefined) => (e?.body && typeof e.body.text === 'string' ? e.body.text : '')
 
-/**
- * The step's reading (Audit 2026-11-24, ui-audit-page-fields): the plan_step_judged with the largest event_id, then the
- * note it names (note_event_id). The text says 系统存档 (kept by the system) or 临时 (read once), often both.
- */
-export function readingOf(events: readonly PlanEvent[]): Reading | undefined {
-  const judged = events.filter(e => e.event_type === 'plan_step_judged').sort((a, b) => b.event_id - a.event_id)[0]
-  const id = judged?.body?.note_event_id
-  if (typeof id !== 'number') return undefined
-  const text = textOf(events.find(e => e.event_id === id))
-  // The engine passes the step's last 50 events: an older note is not among them, said so, never guessed.
-  if (!text) return { text: '', source: 'unsaid', noteEventId: id, found: false }
-  const archived = text.includes('系统存档'), adhoc = text.includes('临时')
-  return { text, noteEventId: id, found: true, source: archived && adhoc ? 'mixed' : archived ? 'archived' : adhoc ? 'ad hoc' : 'unsaid' }
-}
-
-const CATEGORY: Record<string, Cause | 'unchecked'> = { '法': 'law', 'Agent': 'agent', '工具': 'tool', '没核': 'unchecked' }
-
-/**
- * The step's cause, from the latest note that starts 「归因 sN：」 (no structured event yet; Audit has asked the
- * legislation line for plan_step_attributed). A later note that says 作废 withdraws it: then there is none.
- */
-export function attributionOf(events: readonly PlanEvent[], label: string): Attribution | null {
-  if (!label) return null
-  const latest = events.filter(e => e.event_type === 'note' && textOf(e).startsWith(`归因 ${label}：`)).sort((a, b) => b.event_id - a.event_id)[0]
-  if (!latest) return null
-  const text = textOf(latest)
-  if (text.includes('作废')) return null
-  const category = CATEGORY[/类别\s*(法|Agent|工具|没核)/.exec(text)?.[1] ?? ''] ?? 'unchecked'
-  const reason = /原因[：:]\s*([^｜]*)/.exec(text)?.[1]?.trim() ?? ''
-  const to = /去向[：:]\s*([^｜]*)/.exec(text)?.[1]?.trim() ?? ''
-  return { category, reason, to, noteEventId: latest.event_id }
-}
-
-/** A row with its step's events read in. */
-export function withEvents(r: StandardRow, events: readonly PlanEvent[] | undefined): StandardRow {
-  if (!events) return r
-  const attribution = attributionOf(events, r.label)
-  const cause = attribution && attribution.category !== 'unchecked' ? attribution.category : null
-  return { ...r, reading: readingOf(events), attribution, cause }
-}
-
-/** A step's grade as a result: 达到 reached; 部分 and 没达到 missed (部分 is not reached); 没核 or none unmeasured. */
+/** A step's grade as a result: 达到 reached; 部分 and 没达到 missed (not reached); 没核 or none unmeasured. */
 export function resultOf(grade: string | undefined): Result {
   const t = gradeTone(grade)
   return t === 'ok' ? 'reached' : t === 'warn' ? 'missed' : 'unmeasured'
 }
 
-/**
- * A standard's title as the plan line writes it: "s1：<standard>｜量法：<how it is measured>…现在：<where it stands>".
- * A title not in that shape is kept whole as the standard.
- */
+/** "s1：<standard>｜量法：<how it is measured>…现在：<where it stands>"; another shape is kept whole as the standard. */
 export function splitStandard(title: string): { label: string; standard: string; method: string; now: string } {
   const [head, rest = ''] = title.split('｜量法：')
   const m = /^(s\d+)[：:]\s*/.exec(head)
-  const label = m ? m[1] : ''
-  const standard = m ? head.slice(m[0].length) : head
   const at = rest.lastIndexOf('现在：')
-  return { label, standard: standard.trim(), method: (at >= 0 ? rest.slice(0, at) : rest).trim(), now: at >= 0 ? rest.slice(at + 3).trim() : '' }
+  return {
+    label: m ? m[1] : '',
+    standard: (m ? head.slice(m[0].length) : head).trim(),
+    method: (at >= 0 ? rest.slice(0, at) : rest).trim(),
+    now: at >= 0 ? rest.slice(at + 3).trim() : '',
+  }
 }
 
-/** Every standard of every law that has some, in law then step order. */
+/** The step's reading: the latest plan_step_judged and the note it names (an older note than the last 50 is said so). */
+export function readingOf(events: readonly PlanEvent[]): Reading | null {
+  const judged = events.filter(e => e.event_type === 'plan_step_judged').sort((a, b) => b.event_id - a.event_id)[0]
+  const id = judged?.body?.note_event_id
+  if (!judged || typeof id !== 'number') return null
+  const text = textOf(events.find(e => e.event_id === id))
+  if (!text) return { text: '', source: 'unsaid', noteEventId: id, judgedEventId: judged.event_id, found: false }
+  const archived = text.includes('系统存档'), adhoc = text.includes('临时')
+  return { text, noteEventId: id, judgedEventId: judged.event_id, found: true, source: archived && adhoc ? 'mixed' : archived ? 'archived' : adhoc ? 'ad hoc' : 'unsaid' }
+}
+
+// 「归因 s4：」, or with a correction's parenthesis 「归因 s4（更正）：」 (the platform's own pattern, planstore 0046).
+const ATTRIBUTION = (label: string) => new RegExp(`^\\s*归因\\s*${label}\\s*(?:（[^）]*）|\\([^)]*\\))?\\s*[:：]`)
+
+/** From the latest attribution note on the step (no structured event yet); a later 作废 withdraws it. */
+export function attributionOf(events: readonly PlanEvent[], label: string): Attribution | null {
+  if (!label) return null
+  const re = ATTRIBUTION(label)
+  const latest = events.filter(e => e.event_type === 'note' && re.test(textOf(e))).sort((a, b) => b.event_id - a.event_id)[0]
+  if (!latest) return null
+  const text = textOf(latest)
+  if (text.includes('作废')) return null
+  const c = /类别\s*(法|Agent|工具|没核)/.exec(text)?.[1]
+  const reason = /原因[：:\s]\s*([^｜]*)/.exec(text)?.[1]?.trim() ?? ''
+  const to = /去向[：:\s]\s*([^｜]*)/.exec(text)?.[1]?.trim() ?? ''
+  const version = /appr_[0-9a-f]+/.exec(text)?.[0]
+  return { category: c ? CATEGORY[c] : 'unreadable', reason, to, ...(version ? { version } : {}), from: 'note', noteEventId: latest.event_id, ...(c ? {} : { raw: text }) }
+}
+
+/** The structured attribution GET /laws carries on a step, when there. */
+function attributionFromStep(s: LawStep): Attribution | null {
+  const a = s.attribution
+  if (!a) return null
+  return { category: CATEGORY[a.category] ?? 'unreadable', reason: a.cause ?? '', to: a.destination ?? '', ...(a.version ? { version: a.version } : {}), from: 'event', ...(CATEGORY[a.category] ? {} : { raw: a.category }) }
+}
+
+/** The current steps of every law that has some, the law's own plan item only (an older item, such as R6:6.10, is folded away). */
 export function standardsOf(laws: readonly RegisterLaw[]): StandardRow[] {
-  return laws.flatMap(l => (l.steps ?? []).map(s => {
-    const parts = splitStandard(s.title)
-    return {
-      law: l.law, lawText: l.text, planItem: l.plan_item ?? '', step: s.plan_node_id,
-      ...parts, grade: s.grade ?? '', result: resultOf(s.grade), cause: null,
-      ...(s.version ? { card: s.version } : {}),
-    }
-  }))
+  return laws.flatMap(l => (l.steps ?? [])
+    .filter(s => !l.plan_item || s.plan_node_id.startsWith(l.plan_item + '-'))
+    .map(s => {
+      const structured = attributionFromStep(s)
+      return {
+        law: l.law, lawText: l.text, planItem: l.plan_item ?? '', step: s.plan_node_id,
+        ...splitStandard(s.title), grade: s.grade ?? '', result: resultOf(s.grade),
+        // A structured attribution is read with the register; otherwise the step's notes are read (undefined until they are).
+        attribution: structured ?? undefined,
+        ...(s.version ? { card: s.version } : {}),
+      }
+    }))
 }
 
-/** The page's verdict: "10 standards in 2 laws · 2 reached · 6 missed · 2 unmeasured · 83 laws have no standards yet". */
-export function auditVerdict(laws: readonly RegisterLaw[] | null): string {
-  if (laws == null) return '? standards · ? reached · ? missed · ? unmeasured'
-  const rows = standardsOf(laws)
-  const judged = new Set(rows.map(r => r.law)).size
-  const by = (r: Result) => rows.filter(x => x.result === r).length
-  const parts = [`${rows.length} standards in ${judged} laws`, `${by('reached')} reached`, `${by('missed')} missed`, `${by('unmeasured')} unmeasured`]
-  const none = laws.length - judged
-  if (none > 0) parts.push(`${none} laws have no standards yet`)
+/** A row with its step's events read in (the structured attribution, when there, stays). */
+export function withEvents(r: StandardRow, events: readonly PlanEvent[] | undefined): StandardRow {
+  if (!events) return r
+  return { ...r, reading: readingOf(events), attribution: r.attribution?.from === 'event' ? r.attribution : attributionOf(events, r.label) }
+}
+
+/** Grouped by law, then missed first and unmeasured last. */
+export function ordered(rows: readonly StandardRow[]): StandardRow[] {
+  return [...rows].sort((a, b) => Number(a.law) - Number(b.law) || a.law.localeCompare(b.law) || ORDER[a.result] - ORDER[b.result] || a.step.localeCompare(b.step, undefined, { numeric: true }))
+}
+
+/** The three numbers as GET /laws gives them (summed over laws, never recounted from the steps). */
+export function lawCounts(laws: readonly RegisterLaw[]): { reached: number; missed: number; unmeasured: number; laws: number } {
+  const counted = laws.filter(l => l.counts != null)
+  const sum = (k: 'reached' | 'missed' | 'unmeasured') => counted.reduce((n, l) => n + (l.counts?.[k] ?? 0), 0)
+  return { reached: sum('reached'), missed: sum('missed'), unmeasured: sum('unmeasured'), laws: counted.length }
+}
+
+/** A missed standard with no cause yet (none, 没核, or unreadable); null while its events are not read. */
+const unattributed = (r: StandardRow): boolean | null => r.result !== 'missed' ? false : r.attribution === undefined ? null : !r.attribution || r.attribution.category === 'unchecked' || r.attribution.category === 'unreadable'
+
+/** "2 reached · 6 missed · 3 unmeasured (2 laws, from GET /laws) · 5 missed without a cause". */
+export function auditVerdict(laws: readonly RegisterLaw[] | null, rows: readonly StandardRow[]): string {
+  if (laws == null) return '? reached · ? missed · ? unmeasured'
+  const c = lawCounts(laws)
+  const parts = [`${c.reached} reached`, `${c.missed} missed`, `${c.unmeasured} unmeasured (${c.laws} laws, from GET /laws)`]
+  const open = rows.map(unattributed)
+  parts.push(open.includes(null) ? '? missed without a cause' : `${open.filter(Boolean).length} missed without a cause`)
   return parts.join(' · ')
 }
 
-/** The page's word: any standard missed is warn; all reached is ok; otherwise unknown (not read, or nothing measured). */
+/** The page's word: any missed is warn; all reached is ok; otherwise unknown. From GET /laws' counts. */
 export function auditWord(laws: readonly RegisterLaw[] | null): 'ok' | 'warn' | 'unknown' {
   if (laws == null) return 'unknown'
-  const rows = standardsOf(laws)
-  if (rows.some(r => r.result === 'missed')) return 'warn'
-  if (rows.length > 0 && rows.every(r => r.result === 'reached')) return 'ok'
+  const c = lawCounts(laws)
+  if (c.missed > 0) return 'warn'
+  if (c.reached > 0 && c.unmeasured === 0) return 'ok'
   return 'unknown'
 }
 
-export const CAUSE_UNREAD = 'Cause not read: this step’s events could not be read'
-
+export const CAUSE_UNREAD = 'Cause not read yet: this step’s events are not read'
 export const CAUSE_NONE = 'The audit has not attributed this missed standard yet'
-export const CAUSE_UNCHECKED = 'The audit attributed it as not checked (没核)'
+const CAUSE_WORD: Record<Attribution['category'], string> = { law: 'law', agent: 'agent', tool: 'tool', unchecked: 'not checked', unreadable: 'unknown' }
+const SOURCE_WORD: Record<Reading['source'], string> = { archived: 'kept by the system', 'ad hoc': 'read once', mixed: 'some read once', unsaid: 'not said' }
 
 function causeCell(r: StandardRow): Cell {
   if (r.result !== 'missed') return '—'
-  if (r.cause) return { text: r.cause, title: r.attribution ? `${r.attribution.reason}${r.attribution.to ? ' → ' + r.attribution.to : ''}` : r.cause }
-  return { text: 'unknown', tone: 'unknown', title: r.attribution === undefined ? CAUSE_UNREAD : r.attribution?.category === 'unchecked' ? CAUSE_UNCHECKED : CAUSE_NONE }
+  const a = r.attribution
+  if (a === undefined) return { text: 'unknown', tone: 'unknown', title: CAUSE_UNREAD }
+  if (a === null) return { text: 'not attributed', tone: 'unknown', title: CAUSE_NONE }
+  const word = CAUSE_WORD[a.category]
+  return { text: word, ...(a.category === 'unchecked' || a.category === 'unreadable' ? { tone: 'unknown' as const } : {}), title: [a.reason, a.to ? '→ ' + a.to : '', a.raw ? `(not readable: ${a.raw})` : ''].filter(Boolean).join(' ') }
 }
 
-/** The conclusions as a Ledger table, one row per standard; the key is the plan step, so a row can be linked. */
+const short = (t: string, n = 18) => (t.length > n ? t.slice(0, n) + '…' : t)
+
+function numbersCell(r: StandardRow): Cell {
+  if (r.reading === undefined) return { text: '…', title: 'Reading this step’s events' }
+  if (r.reading === null) return { text: '—', title: 'No verdict posted on this step' }
+  if (!r.reading.found) return { text: 'not found', tone: 'unknown', title: `Note ${r.reading.noteEventId} is not among the step’s last 50 events` }
+  // A number read once is never drawn as a conclusion (the Owner, 11-19): it says so.
+  return { text: SOURCE_WORD[r.reading.source], ...(r.reading.source === 'archived' ? {} : { tone: 'unknown' as const }) }
+}
+
+/** The conclusions as a Ledger table: law and standard, result, where its numbers come from, cause, plan step. */
 export function auditTable(rows: readonly StandardRow[]): Extract<Block, { kind: 'table' }> {
   return {
     kind: 'table',
-    head: [{ label: 'Law', num: true }, { label: 'Standard' }, { label: 'Result' }, { label: 'Cause' }, { label: 'Plan step' }],
-    rows: rows.map(r => ({
+    head: [{ label: 'Law · standard' }, { label: 'Result' }, { label: 'Numbers' }, { label: 'Cause' }, { label: 'Plan step' }],
+    rows: ordered(rows).map(r => ({
       key: r.step,
+      // The first cell opens the row (the Ledger opens a row by its first cell); the law leads it, so rows read grouped.
+      open: r.step,
       cells: [
-        r.law,
-        { text: (r.label ? r.label + ' · ' : '') + r.standard, title: r.standard },
-        { text: r.result, tone: TONE[r.result], title: r.grade || 'no verdict yet' },
+        // Short, so the result stays in view on a phone (390 check, 2026-11-24); the whole standard is in the title and the detail.
+        { text: `${r.law} ${r.label ? r.label + ' · ' : '· '}${short(r.standard)}`, title: `Law ${r.law}: ${r.standard}` },
+        { text: r.result, tone: TONE[r.result], title: r.grade ? `${r.grade}${r.card ? ' · standard version ' + r.card : ''}` : 'no verdict yet' },
+        numbersCell(r),
         causeCell(r),
         r.step,
       ],
@@ -172,26 +211,66 @@ export function auditTable(rows: readonly StandardRow[]): Extract<Block, { kind:
   }
 }
 
-/** A row opened: its evidence as the plan line wrote it, and where to look further. */
-export function auditDetail(r: StandardRow | undefined): Block[] | null {
+/** The next fillers' list: every unmeasured standard and what it still lacks, as its plan step says. */
+export function unmeasuredList(rows: readonly StandardRow[]): { key: string; what: string; lacks: string; href: string }[] {
+  return ordered(rows).filter(r => r.result === 'unmeasured').map(r => ({
+    key: r.step, what: `Law ${r.law} ${r.label || r.step}`, lacks: r.now || 'not written on the step', href: planNodeHref(r.step),
+  }))
+}
+
+/** References written in a reading: approval #n, evidence_id n, run names, commit ids. Listed as written, nothing guessed. */
+export function refsOf(text: string): string[] {
+  const out = new Set<string>()
+  for (const m of text.matchAll(/#\d+/g)) out.add('approval ' + m[0])
+  for (const m of text.matchAll(/evidence_id\s*[:：]?\s*(\d+)/g)) out.add('evidence_id ' + m[1])
+  for (const m of text.matchAll(/\b(?:ci|land)-[a-z0-9-]+/g)) out.add('run ' + m[0])
+  for (const m of text.matchAll(/(?<![_a-z0-9])[0-9a-f]{8,40}(?![0-9a-z])/g)) out.add('commit ' + m[0])
+  return [...out]
+}
+
+/** A row opened: the conclusion and the cause apart, then the evidence and where to go. */
+export function auditDetail(r: StandardRow | undefined, extra?: { label: string; text: string }): Block[] | null {
   if (!r) return null
-  const facts: [string, string][] = [
+  const reading = r.reading === undefined ? 'not read yet' : r.reading === null ? 'no verdict posted on this step' : r.reading.found ? r.reading.text : `note ${r.reading.noteEventId} is not among the step’s last 50 events`
+  const a = r.attribution
+  const conclusion: [string, string][] = [
+    ['Result', `${r.result}${r.grade ? ' (' + r.grade + ')' : ''}`],
     ['Standard', r.standard],
+    ['Standard version', r.card ?? 'not recorded'],
     ['How it is measured', r.method || 'not written'],
     ['Where it stands', r.now || 'not written'],
-    ['Verdict', r.grade || 'no verdict yet'],
-    ['Reading', r.reading ? (r.reading.found ? r.reading.text : `note ${r.reading.noteEventId} is not among the step’s last 50 events`) : r.attribution === undefined ? 'not read: this step’s events could not be read' : 'no reading posted'],
-    ['Numbers', r.reading?.found ? { archived: 'kept by the system', 'ad hoc': 'read once (ad hoc)', mixed: 'some read once (ad hoc)', unsaid: 'not said' }[r.reading.source] : '—'],
-    ['Cause', r.result !== 'missed' ? '—' : r.attribution ? `${r.attribution.category} · ${r.attribution.reason}${r.attribution.to ? ' → ' + r.attribution.to : ''}` : r.attribution === undefined ? CAUSE_UNREAD : CAUSE_NONE],
-    ['Law', `${r.law} · ${r.lawText}`],
-    ['Set by card', r.card ?? 'not recorded'],
+    ['Reading', reading],
+    ['Numbers', r.reading?.found ? SOURCE_WORD[r.reading.source] : '—'],
+    ...(extra ? [[extra.label, extra.text] as [string, string]] : []),
   ]
+  const cause: [string, string][] = r.result !== 'missed' ? [['Cause', 'only a missed standard has one']]
+    : a === undefined ? [['Cause', CAUSE_UNREAD]]
+      : a === null ? [['Cause', CAUSE_NONE]]
+        : [['Category', CAUSE_WORD[a.category]], ['Reason', a.reason || 'not written'], ['Goes to', a.to || 'not written'], ['Read from', a.from === 'event' ? 'plan_step_attributed (GET /laws)' : `note ${a.noteEventId ?? ''} (text)`], ...(a.raw ? [['As written', a.raw] as [string, string]] : [])]
+  const refs = r.reading?.found ? refsOf(r.reading.text) : []
+  const table = (title: string, facts: [string, string][]): Block => ({ kind: 'table', head: [{ label: title }, { label: '' }], rows: facts.map(([k, v]) => ({ key: title + k, cells: [k, v] })) })
   return [
-    { kind: 'table', head: [{ label: 'Evidence' }, { label: '' }], rows: facts.map(([k, v]) => ({ key: k, cells: [k, v] })) },
-    { kind: 'table', head: [{ label: 'Open' }], rows: [
+    table('Conclusion', conclusion),
+    table('Cause', cause),
+    { kind: 'table', head: [{ label: 'Evidence' }], rows: [
       { key: 'step', cells: [`Plan step ${r.step}`], href: planNodeHref(r.step) },
+      ...(r.reading ? [{ key: 'judged', cells: [`Verdict event ${r.reading.judgedEventId} · reading note ${r.reading.noteEventId}`] }] : []),
+      ...refs.map(x => ({ key: 'ref:' + x, cells: [x] })),
       ...(r.planItem ? [{ key: 'item', cells: [`Plan item ${r.planItem}`], href: planNodeHref(r.planItem) }] : []),
       { key: 'law', cells: [`Law ${r.law} in the register`], href: lawHref(r.law) },
     ] },
   ]
+}
+
+/**
+ * Law 85 s1 (the audit line): the daily cards pushed to the Owner, per day, newest first; only the days since the law
+ * was said count (its said_on from GET /laws; the cards before it declared no class).
+ */
+export type ApprovalReadings = { days?: { day: string; to_owner?: { daily?: unknown[] } }[] }
+export function dailyCards(r: ApprovalReadings | undefined, from: string | undefined): string {
+  if (!r?.days) return 'not read'
+  if (!from) return 'the law’s date is not read, so the days that count are not known'
+  const days = r.days.filter(d => d.day >= from.slice(0, 10))
+  if (days.length === 0) return `no day since ${from} yet`
+  return days.map(d => `${d.day}: ${d.to_owner?.daily?.length ?? 0} daily cards`).join(' · ') + ` (GET /api/v1/readings/approvals, kept by the system; days since ${from})`
 }

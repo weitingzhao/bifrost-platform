@@ -7,7 +7,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
-import { auditDetail, auditTable, auditVerdict, auditWord, standardsOf, withEvents, type PlanEvent } from './auditConclusionsModel'
+import { auditDetail, auditTable, auditVerdict, auditWord, dailyCards, standardsOf, unmeasuredList, withEvents, type ApprovalReadings, type PlanEvent } from './auditConclusionsModel'
 
 const LAMP = { ok: 'ok', warn: 'degraded', unknown: 'unknown', pending: 'unknown' } as const
 const AGENTS = '/engine/v1/agents'
@@ -49,12 +49,23 @@ export function AuditConclusions() {
     })),
   })
   const rows = useMemo(() => base.map((r, i) => withEvents(r, steps[i]?.data)), [base, steps])
+  // Law 85 s1 is read from the approvals readings (the audit line, 2026-11-24): only when the register has that standard.
+  const wants85 = base.some(r => r.law === '85' && r.label === 's1')
+  const readings = useQuery({
+    queryKey: engineQueryKey(AGENTS, { read: 'approval-readings' }),
+    queryFn: ({ signal }) => readAgents<ApprovalReadings>({ read: 'approval-readings' }, signal),
+    enabled: wants85, staleTime: 60_000, retry: false,
+  })
+  const extraFor = (r: { law: string; label: string } | undefined) => r && r.law === '85' && r.label === 's1'
+    ? { label: 'Daily cards to the Owner', text: readings.isError ? `not read: ${readings.error instanceof Error ? readings.error.message : ''}` : dailyCards(readings.data, laws?.find(l => l.law === '85')?.said_on) }
+    : undefined
+  const lacks = useMemo(() => unmeasuredList(rows), [rows])
   const byStep = useMemo(() => new Map(rows.map(r => [r.step, r])), [rows])
   const table = useMemo(() => auditTable(rows), [rows])
   const picked = useHashParam('step') ?? ''
   const unread = q.isError
   const word = q.isLoading ? 'pending' : auditWord(unread ? null : laws)
-  const summary = q.isLoading ? 'Reading the audit…' : auditVerdict(unread ? null : laws)
+  const summary = q.isLoading ? 'Reading the audit…' : auditVerdict(unread ? null : laws, rows)
   return (
     <div className="flex w-full min-w-0 flex-col gap-3" data-audit-conclusions>
       <OpsVerdictStrip
@@ -73,8 +84,17 @@ export function AuditConclusions() {
           selected={picked}
           onSelect={key => { window.location.hash = auditHref(key) }}
           scope="the audit’s conclusions on the laws’ standards (UI engine: agents laws and plan steps)"
-          detail={key => auditDetail(byStep.get(key))}
+          detail={key => auditDetail(byStep.get(key), extraFor(byStep.get(key)))}
         />
+      ) : null}
+      {/* Unmeasured is not missed: what each still lacks is the next fillers' list (the audit line's brief). */}
+      {lacks.length > 0 ? (
+        <section aria-label="Not measured yet" data-audit-lacks className="flex flex-col gap-1 text-sm">
+          <strong className="text-xs uppercase tracking-wide text-muted-foreground">Not measured yet · what each still lacks</strong>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {lacks.map(l => <li key={l.key} className="flex min-w-0 flex-col gap-0.5 border-l-2 border-dashed border-[var(--border)] pl-2"><a href={l.href} className="font-medium text-foreground">{l.what}</a><span className="break-words text-muted-foreground">{l.lacks}</span></li>)}
+          </ul>
+        </section>
       ) : null}
       {laws && rows.length === 0 ? <p className="m-0 text-sm text-muted-foreground">{`No law has standards judged yet (${laws.length} laws read). Nothing to audit here.`}</p> : null}
     </div>
