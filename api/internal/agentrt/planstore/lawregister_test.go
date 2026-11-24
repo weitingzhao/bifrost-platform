@@ -220,3 +220,38 @@ func TestLawFrameRecorded(t *testing.T) {
 		t.Fatalf("law 3 after enforcement = %+v", l)
 	}
 }
+
+// 2026-11-24, the Owner asked whether keeping laws in the shared event table
+// mixes them with data a clean-up rule could remove (law 42 asks growing data
+// to have one). A law's records are kept for ever: today the table refuses
+// every delete, update and truncate (event_append_only, event_no_truncate,
+// migration 0002). This test holds that for the laws: whoever relaxes the
+// table for a clean-up must keep law:* out of it, or this goes red.
+func TestLawRecordsCannotBeDeleted(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	// As the table's owner, the role a clean-up migration would run as: the
+	// runtime role cannot even alter the table, so trying as it would stay
+	// green with the protection gone (checked 2026-11-24: with the trigger
+	// disabled, the owner's delete removes law:1).
+	own, err := pgx.Connect(ctx, w.db.Owner)
+	ok(t, err)
+	defer own.Close(ctx)
+	for name, q := range map[string]string{
+		"delete":   `DELETE FROM agentrt.event WHERE event_stream_id = 'law:1'`,
+		"update":   `UPDATE agentrt.event SET body_json = body_json || '{"text":"rewritten"}'::jsonb WHERE event_stream_id = 'law:1'`,
+		"truncate": `TRUNCATE agentrt.event`,
+	} {
+		if _, err := own.Exec(ctx, q); err == nil {
+			t.Errorf("%s of a law's records was allowed to the table's owner", name)
+		}
+	}
+	if l, have, _ := planstore.CurrentLaw(ctx, w.rt, "1"); !have || l.Text != rows[0].Text {
+		t.Fatalf("law 1 after the attempts = %+v, %v", l, have)
+	}
+	w.chainHolds(t, "law:1")
+}
