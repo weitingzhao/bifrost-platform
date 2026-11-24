@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 
@@ -24,24 +24,32 @@ export function shouldAutoReload(stale: boolean, lastInputMs: number, nowMs: num
   return stale && nowMs - lastInputMs >= idleMs
 }
 
-/** The shell's idle reload: mounted once; reloads when the build drifted and the page sat idle. */
+/**
+ * The shell's idle reload: mounted once. Idle counts from the last click, key, input, scroll or touch since the page
+ * opened, not from when the newer build was found (箭10 2026-11-23): a page nobody has touched for ten minutes
+ * reloads the moment a newer build is found; one touched a minute ago waits until it has sat five.
+ */
 export function useIdleReloadWhenStale(opts: { reload?: () => void; now?: () => number; idleMs?: number } = {}): void {
   const stale = useConsoleBuildDrift()
   const { reload = () => window.location.reload(), now = Date.now, idleMs = IDLE_MS } = opts
+  const lastInput = useRef<number>(now())
   useEffect(() => {
-    if (!stale) return
-    let lastInput = now()
-    const touch = () => { lastInput = now() }
+    const touch = () => { lastInput.current = now() }
     const events = ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart'] as const
     events.forEach(e => window.addEventListener(e, touch, { passive: true }))
-    const timer = window.setInterval(() => {
-      if (!onDecisionPage() && shouldAutoReload(true, lastInput, now(), idleMs)) reload()
-    }, Math.min(IDLE_CHECK_MS, idleMs))
-    return () => {
-      window.clearInterval(timer)
-      events.forEach(e => window.removeEventListener(e, touch))
+    return () => events.forEach(e => window.removeEventListener(e, touch))
+    // now is stable for a page
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (!stale) return
+    const check = () => {
+      if (!onDecisionPage() && shouldAutoReload(true, lastInput.current, now(), idleMs)) reload()
     }
-    // reload / now are stable for a page; re-arming only on drift keeps the idle clock honest
+    check()
+    const timer = window.setInterval(check, Math.min(IDLE_CHECK_MS, idleMs))
+    return () => window.clearInterval(timer)
+    // reload / now are stable for a page; re-arming only on drift keeps the check honest
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stale, idleMs])
 }
