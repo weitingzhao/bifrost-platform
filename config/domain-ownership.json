@@ -165,7 +165,7 @@
     },
     {
       "id": "plan",
-      "name": "Demand & planning",
+      "name": "Legislation",
       "tier": 3,
       "source": "domains/1-plan/charter.md",
       "contracts": {
@@ -581,16 +581,9 @@
       }
     },
     {
-      "id": "crew",
-      "name": "Crew",
-      "tier": 1,
-      "source": "domains/9-crew/charter.md",
-      "contracts": {}
-    },
-    {
       "id": "station",
-      "name": "Station",
-      "tier": 2,
+      "name": "Workshop",
+      "tier": 1,
       "source": "domains/win2-workshop/charter.md",
       "contracts": {}
     },
@@ -599,13 +592,6 @@
       "name": "Audit",
       "tier": 3,
       "source": "domains/12-audit/charter.md",
-      "contracts": {}
-    },
-    {
-      "id": "triage",
-      "name": "Triage",
-      "tier": 3,
-      "source": "domains/13-triage/charter.md",
       "contracts": {}
     },
     {

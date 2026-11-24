@@ -10,8 +10,6 @@
     "compute": {"kind": "nuclear", "page": "#infrastructure?section=cluster"},
     "payload": {"kind": "payload-hangar", "page": "#services?section=applications"},
     "coordination": {"kind": "comms-tower", "page": "#bus"},
-    "crew": {"kind": "dormitory", "page": "#work?section=activity"},
-    "triage": {"kind": "court"},
     "station": {"kind": "workshop", "page": "#work?section=activity"},
     "audit": {"kind": "measuring-office"}
   },
