@@ -66,6 +66,10 @@ var lawModalities = []string{"必须", "禁止", "允许"}
 var LawSubjects = []string{
 	"审批", "发布", "合入", "数据", "合约", "归属", "算力", "观测", "计划", "审计",
 	"立法", "沟通", "安全", "交易", "工坊", "结构", "评估", "执行口",
+	// 方法: how to judge and in what order to act, the laws every other law
+	// leans on (2026-11-24: first principles and the five steps, Owner
+	// 「五步法按照马斯克的原话写两段」).
+	"方法",
 }
 
 // A scope is the whole system, a domain of the system, one domain line, one
