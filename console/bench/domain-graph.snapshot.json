@@ -3,7 +3,7 @@
   "repo": "bifrost-platform",
   "commit": "9d9fd3e2 bench snapshot",
   "measured": true,
-  "note": "bench only: measured on platform main 9d9fd3e2 (2026-11-20) with cidomains.GraphOf; the page reads GET /api/v1/ci/domains (ids renamed per law 66, 2026-11-21: owner->approvals, tenant->payload; the graph is still as measured at 9d9fd3e2)",
+  "note": "bench only: measured on platform main 9d9fd3e2 (2026-11-20) with cidomains.GraphOf; the page reads GET /api/v1/ci/domains (ids renamed 2026-11-21: owner->approvals, tenant->payload; the graph is still as measured at 9d9fd3e2)",
   "base": "foundation",
   "domains": [],
   "edges": [
