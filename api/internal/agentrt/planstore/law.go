@@ -44,6 +44,7 @@ type LawCard struct {
 	Repeals    []LawRepeal // op repeal_many: the laws it repeals; op purge: the repealed laws it deletes
 	Frame      *LawFrame   // the framework's fields of the new version
 	Adds       []LawCard   // op add_many: the laws it adds, in order
+	Amends     []LawCard   // op amend_many: the laws it amends
 	DecidedOn  string      // the day the Owner approved it, YYYY-MM-DD
 }
 
@@ -53,6 +54,9 @@ func lawNote(approvalID string) string { return "law_amend " + approvalID }
 
 // LawTitle is the item's title: the law, the change and the version.
 func LawTitle(c LawCard) string {
+	if c.Op == "amend_many" {
+		return fmt.Sprintf("修改 %d 条法（标准版本 %s #%d）", len(c.Amends), c.ApprovalID, c.Number)
+	}
 	if c.Op == "add_many" {
 		return fmt.Sprintf("新增 %d 条法（标准版本 %s #%d）", len(c.Adds), c.ApprovalID, c.Number)
 	}
@@ -123,7 +127,7 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 		// Only an enforced law goes into the plan to be measured: a framed
 		// law enacted but not enforced, and a batch repeal, do not. A card
 		// from before the framework (no frame) keeps its item.
-		if c.Op == "repeal_many" || c.Op == "purge" || c.Op == "add_many" || c.Op == "archive" || (c.Frame != nil && c.Frame.Enforce != EnforceOn) {
+		if c.Op == "repeal_many" || c.Op == "purge" || c.Op == "add_many" || c.Op == "amend_many" || c.Op == "archive" || (c.Frame != nil && c.Frame.Enforce != EnforceOn) {
 			continue
 		}
 		ok, err := recordLaw(ctx, db, c)

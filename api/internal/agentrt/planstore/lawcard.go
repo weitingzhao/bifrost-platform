@@ -41,6 +41,17 @@ type LawAmend struct {
 	Revert    string        `json:"revert"`
 	// Adds are the laws an add_many card adds, each read as an add card.
 	Adds []LawAmend `json:"adds,omitempty"`
+	// Amends are the laws an amend_many card amends, each read as an amend card.
+	Amends []LawAmend `json:"amends,omitempty"`
+}
+
+// AmendCards are an amend_many card's laws as the plan's cards.
+func (la LawAmend) AmendCards() []LawCard {
+	out := make([]LawCard, 0, len(la.Amends))
+	for _, a := range la.Amends {
+		out = append(out, LawCard{Op: "amend", Law: a.Law, Before: a.Before, After: a.After, Standards: a.Standards, Frame: a.Frame})
+	}
+	return out
 }
 
 // AddCards are an add_many card's laws as the plan's cards, numbered in
@@ -90,6 +101,8 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 	switch la.Op {
 	case "add_many":
 		return readAddMany(params, la)
+	case "amend_many":
+		return readAmendMany(params, la)
 	case "archive":
 		return readArchive(params, la)
 	case "add":
@@ -143,7 +156,7 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 		}
 		return la, nil
 	default:
-		return la, fmt.Errorf("law_amend: op must be add, amend, repeal, repeal_many, purge, add_many or archive, not %q", la.Op)
+		return la, fmt.Errorf("law_amend: op must be add, amend, repeal, repeal_many, purge, add_many, amend_many or archive, not %q", la.Op)
 	}
 	if la.Revert == "" {
 		return la, errors.New("law_amend: revert (how to undo it) is required")
@@ -208,6 +221,45 @@ func readAddMany(params map[string]any, la LawAmend) (LawAmend, error) {
 			return la, fmt.Errorf("law_amend add_many: adds[%d] is enforced; a batch only enacts, enforcement turns on law by law", i)
 		}
 		la.Adds = append(la.Adds, one)
+	}
+	return la, nil
+}
+
+// readAmendMany reads an amend_many card (2026-11-24: the audit line's check
+// of the first batch against the material asked for changes to seven laws at
+// once): amends lists 1 to lawCardMaxAdds laws, each read as an amend card
+// (law, before, after, standards, frame), none named twice. Like a batch of
+// adds, it does not turn enforcement on.
+func readAmendMany(params map[string]any, la LawAmend) (LawAmend, error) {
+	if la.Law != "" || la.Before != "" || la.After != "" || params["standards"] != nil || params["frame"] != nil {
+		return la, errors.New("law_amend amend_many: law, before, after, standards and frame stay empty; put each law in amends")
+	}
+	if la.Revert == "" {
+		return la, errors.New("law_amend: revert (how to undo it) is required")
+	}
+	raw, _ := params["amends"].([]any)
+	if len(raw) == 0 || len(raw) > lawCardMaxAdds {
+		return la, fmt.Errorf("law_amend amend_many: amends names 1 to %d laws", lawCardMaxAdds)
+	}
+	seen := map[string]bool{}
+	for i, r := range raw {
+		m, ok := r.(map[string]any)
+		if !ok {
+			return la, fmt.Errorf("law_amend amend_many: amends[%d] must be an object", i)
+		}
+		one, err := ReadLawAmend(map[string]any{"op": "amend", "law": m["law"], "before": m["before"], "after": m["after"],
+			"standards": m["standards"], "frame": m["frame"], "revert": la.Revert})
+		if err != nil {
+			return la, fmt.Errorf("law_amend amend_many: amends[%d]: %w", i, err)
+		}
+		if one.Frame != nil && one.Frame.Enforce == EnforceOn {
+			return la, fmt.Errorf("law_amend amend_many: amends[%d] turns enforcement on; that is one law at a time, on its own card", i)
+		}
+		if seen[one.Law] {
+			return la, fmt.Errorf("law_amend amend_many: law %s appears twice", one.Law)
+		}
+		seen[one.Law] = true
+		la.Amends = append(la.Amends, one)
 	}
 	return la, nil
 }
@@ -322,6 +374,17 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 	}
 	if la.Op == "archive" {
 		return checkArchive(ctx, reg, la.Repeals)
+	}
+	if la.Op == "amend_many" {
+		for i, a := range la.Amends {
+			if _, err := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); err != nil {
+				return fmt.Errorf("amends[%d]: %w", i, err)
+			}
+			if err := checkInForce(ctx, reg, "amend", a.Law, a.Before); err != nil {
+				return fmt.Errorf("amends[%d]: %w", i, err)
+			}
+		}
+		return nil
 	}
 	if la.Op == "add" {
 		next, err := reg.Next(ctx)
@@ -439,6 +502,25 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 			}
 		}
 		return line + lawCardNoteLine(ctx, reg, params)
+	}
+	if op == "amend_many" {
+		la, err := ReadLawAmend(params)
+		if err != nil {
+			return "Law amend (several)"
+		}
+		ns := make([]string, 0, len(la.Amends))
+		var notes []string
+		for _, a := range la.Amends {
+			ns = append(ns, a.Law)
+			if fn, _ := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); len(fn) > 0 {
+				notes = append(notes, fmt.Sprintf("第 %s 条：%s", a.Law, strings.Join(fn, "，")))
+			}
+		}
+		line := fmt.Sprintf("Law amend ×%d: %s", len(ns), strings.Join(ns, ", "))
+		if len(notes) > 0 {
+			line += clip(" ｜框架："+strings.Join(notes, "；"), 600)
+		}
+		return line
 	}
 	if op == "add_many" {
 		la, err := ReadLawAmend(params)

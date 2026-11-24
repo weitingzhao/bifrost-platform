@@ -153,3 +153,61 @@ func TestArchivedMaterialLeavesThePlan(t *testing.T) {
 		t.Fatalf("archived material still has %d live steps", n)
 	}
 }
+
+// Origin: 2026-11-24, the audit line checked the first batch against the
+// material and asked for changes to seven laws at once; one card amends them
+// all, each checked as an amend card (in the register, quoted as it stands,
+// enforcement not turned on), written once.
+func TestLawAmendMany(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	lv := 2
+	std := []planstore.LawStandard{{ID: "s1", Standard: "x", Measure: "y"}}
+	frame := func() *planstore.LawFrame {
+		return &planstore.LawFrame{Level: &lv, Scope: "全系统", Subject: "立法", Modality: "必须", Absorbs: []string{"1"}}
+	}
+	batch := planstore.LawCard{ApprovalID: "appr_00000000000000b1", Number: 901, Op: "add_many", Adds: []planstore.LawCard{
+		{Op: "add", After: "law three", Standards: std, Frame: frame()}, {Op: "add", After: "law four", Standards: std, Frame: frame()}}}
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{batch})
+	ok(t, err)
+	reg := planstore.DBLawLookup(func() (eventlog.DB, error) { return w.rt, nil })
+	stdAny := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}
+	good := map[string]any{"op": "amend_many", "revert": "amend back", "amends": []any{
+		map[string]any{"law": "3", "before": "law three", "after": "law three, amended", "standards": stdAny},
+		map[string]any{"law": "4", "before": "law four", "after": "law four, amended", "standards": stdAny}}}
+	ok(t, planstore.CheckLawCard(ctx, reg, good))
+	if got := planstore.LawCardSummary(ctx, reg, good); !strings.HasPrefix(got, "Law amend ×2: 3, 4") {
+		t.Fatalf("summary = %q", got)
+	}
+	bad := map[string]map[string]any{
+		"stale before": {"op": "amend_many", "revert": "r", "amends": []any{map[string]any{"law": "3", "before": "old", "after": "x", "standards": stdAny}}},
+		"twice": {"op": "amend_many", "revert": "r", "amends": []any{map[string]any{"law": "3", "before": "law three", "after": "x", "standards": stdAny},
+			map[string]any{"law": "3", "before": "law three", "after": "y", "standards": stdAny}}},
+		"enforce": {"op": "amend_many", "revert": "r", "amends": []any{map[string]any{"law": "3", "before": "law three", "after": "x", "standards": stdAny,
+			"frame": map[string]any{"level": 2, "enforce": planstore.EnforceOn}}}},
+		"missing law": {"op": "amend_many", "revert": "r", "amends": []any{map[string]any{"law": "99", "before": "z", "after": "x", "standards": stdAny}}},
+	}
+	for name, p := range bad {
+		if err := planstore.CheckLawCard(ctx, reg, p); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+	amend := planstore.LawCard{ApprovalID: "appr_00000000000000b2", Number: 902, Op: "amend_many", Amends: []planstore.LawCard{
+		{Op: "amend", Law: "3", Before: "law three", After: "law three, amended", Standards: std, Frame: frame()},
+		{Op: "amend", Law: "4", Before: "law four", After: "law four, amended", Standards: std, Frame: frame()}}}
+	for range 2 {
+		_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{amend})
+		ok(t, err)
+	}
+	for _, n := range []string{"3", "4"} {
+		l, _, _ := planstore.CurrentLaw(ctx, w.rt, n)
+		if l.Version != 2 || !strings.HasSuffix(l.Text, ", amended") || l.ApprovalID != amend.ApprovalID || l.Op != "amend" {
+			t.Fatalf("law %s after the amend = %+v", n, l)
+		}
+		w.chainHolds(t, planstore.LawStream(n))
+	}
+}

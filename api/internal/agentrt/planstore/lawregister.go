@@ -373,6 +373,20 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	if c.Op == "archive" {
 		return "", true, archiveMaterial(ctx, tx, c)
 	}
+	if c.Op == "amend_many" {
+		for _, a := range c.Amends {
+			a.ApprovalID, a.Number, a.DecidedOn = c.ApprovalID, c.Number, c.DecidedOn
+			if _, have, err := lastLaw(ctx, tx, a.Law); err != nil {
+				return "", false, err
+			} else if !have {
+				return "", false, eventlog.Invalid("law_amend %s: the register has no law %s", c.ApprovalID, a.Law)
+			}
+			if _, err := registerOne(ctx, tx, a, a.Law); err != nil {
+				return "", false, err
+			}
+		}
+		return "", true, nil
+	}
 	if c.Op == "add_many" {
 		for _, a := range c.Adds {
 			a.ApprovalID, a.Number, a.DecidedOn = c.ApprovalID, c.Number, c.DecidedOn

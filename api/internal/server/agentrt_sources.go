@@ -101,7 +101,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 				if !a.DecidedAt.IsZero() {
 					c.DecidedOn = a.DecidedAt.UTC().Format("2006-01-02")
 				}
-				c.Standards, c.Repeals, c.Frame, c.Adds = la.Standards, la.Repeals, la.Frame, la.AddCards()
+				c.Standards, c.Repeals, c.Frame, c.Adds, c.Amends = la.Standards, la.Repeals, la.Frame, la.AddCards(), la.AmendCards()
 				out = append(out, c)
 			}
 			return out, true
