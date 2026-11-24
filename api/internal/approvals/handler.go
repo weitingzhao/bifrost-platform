@@ -179,6 +179,7 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 		Confirm:      confirm,
 		ApprovalLine: body.ApprovalLine,
 		ParamsHash:   body.ParamsHash,
+		By:           decider(r),
 	})
 	if out.Status == http.StatusOK || out.Status == http.StatusAccepted {
 		id, _ := out.Body["id"].(string)
@@ -253,7 +254,7 @@ func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	out := s.reject(chi.URLParam(r, "id"), body.Reason)
+	out := s.rejectBy(chi.URLParam(r, "id"), body.Reason, decider(r))
 	if out.Status == http.StatusOK && s.audit != nil {
 		id, _ := out.Body["id"].(string)
 		s.writeAudit(r, []event{{"approval.reject", id, StatusRejected, oneLine(Redact(strings.TrimSpace(body.Reason)))}})
@@ -302,6 +303,18 @@ func (s *Service) HandleResult(w http.ResponseWriter, r *http.Request) {
 	out := s.result(chi.URLParam(r, "id"), body)
 	s.record(r, out.events)
 	writeJSON(w, out.Status, out.Body)
+}
+
+// decidedByPlatform is DecidedBy for a card the platform itself closed.
+const decidedByPlatform = "platform"
+
+// decider names who approves or rejects: an admin token is the Owner's.
+func decider(r *http.Request) string {
+	p := actuation.PrincipalFromContext(r.Context())
+	if p.Role == actuation.RoleAdmin {
+		return "owner"
+	}
+	return p.Name
 }
 
 func requester(r *http.Request) string {

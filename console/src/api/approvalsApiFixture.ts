@@ -25,6 +25,7 @@ export function buildPlatformApproval(
     requester_thread: '',
     work_id: '',
     owner_class: '',
+    decided_by: '',
     track: 'daily',
     drill: false,
     inline_gpu_shutdown: false,

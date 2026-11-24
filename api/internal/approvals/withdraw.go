@@ -72,6 +72,7 @@ func (s *Service) withdraw(ref, caller, reason string) decided {
 		found.Status = StatusRejected
 		found.RejectReason = withdrawnPrefix + reason
 		found.DecidedAt = now
+		found.DecidedBy = found.Requester
 		doc.put(found)
 		rec = found
 		return nil

@@ -334,6 +334,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 					a.Status = StatusRejected
 					a.RejectReason = fmt.Sprintf("%s#%d", supersededPrefix, rec.Number)
 					a.DecidedAt = now
+					a.DecidedBy = decidedByPlatform
 					doc.put(a)
 					superseded = append(superseded, a)
 				}
@@ -448,6 +449,7 @@ func sweep(doc *file, now time.Time) []event {
 			if now.After(a.ExpiresAt) {
 				a.Status = StatusExpired
 				a.DecidedAt = now
+				a.DecidedBy = decidedByPlatform
 				evs = append(evs, event{"approval.expire", a.ID, StatusExpired, "ttl 24h"})
 			}
 		case StatusApproved:
@@ -486,6 +488,8 @@ type approveInput struct {
 	// and the stored params hash. Both are required and compared strictly.
 	ApprovalLine string
 	ParamsHash   string
+	// By is who approves (Approval.DecidedBy).
+	By string
 }
 
 func (s *Service) approve(ctx context.Context, id, channel string) decided {
@@ -558,6 +562,7 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 			return keepSwept(evs)
 		}
 		found.DecidedAt = now
+		found.DecidedBy = in.By
 		found.Channel = channel
 		found.ApprovedLine = line
 		found.ConfirmedNumber = 0
@@ -705,7 +710,10 @@ func decisionBody(rec Approval) map[string]any {
 	return body
 }
 
-func (s *Service) reject(ref, reason string) decided {
+func (s *Service) reject(ref, reason string) decided { return s.rejectBy(ref, reason, "") }
+
+// rejectBy rejects and records who did (Approval.DecidedBy).
+func (s *Service) rejectBy(ref, reason, by string) decided {
 	reason = oneLine(Redact(strings.TrimSpace(reason)))
 	if reason == "" {
 		return decided{Status: 400, Body: map[string]any{"error": "reason is required"}}
@@ -733,6 +741,7 @@ func (s *Service) reject(ref, reason string) decided {
 		found.Status = StatusRejected
 		found.RejectReason = reason
 		found.DecidedAt = now
+		found.DecidedBy = by
 		doc.put(found)
 		rec = found
 		return nil

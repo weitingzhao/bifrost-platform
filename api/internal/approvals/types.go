@@ -56,7 +56,12 @@ type Approval struct {
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	DecidedAt time.Time `json:"decided_at,omitempty"`
-	Channel   string    `json:"channel,omitempty"`
+	// DecidedBy is who made the decision: "owner" (an admin token on the
+	// approve or reject route), the requester's session for a withdrawal,
+	// "platform" for a superseded or expired card. Empty on records decided
+	// before 2026-11-24 (Crew and the workshop count the Owner's steps here).
+	DecidedBy string `json:"decided_by,omitempty"`
+	Channel   string `json:"channel,omitempty"`
 	// ConfirmedNumber is the number the approver repeated (confirm_number),
 	// stored when it matched: what an executor reads back to know the
 	// number was checked (landing grants, coordinator v3 §5.6 item 4).
