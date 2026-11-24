@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ObservationReportView, type ObservationReport } from '@bifrost/ui/city/observationReport'
 import { runReport, runReportOptions } from '@/domains/delivery/observation-report/run'
 import { compareRunReports, engineRunReportOptions, reportSource, type ReportSource } from '@/domains/delivery/observation-report/engineRun'
+import { fetchSelfHealth } from '@/api/core'
 
 type Read = { report?: ObservationReport; failure?: Error; at: number }
 
@@ -50,10 +51,13 @@ function SourceRead({ pipeline, run, mode }: { pipeline: string; run: string; mo
 
 export function RunSourceReport({ pipeline, run }: { pipeline: string; run: string }) {
   const [open, setOpen] = useState(false)
-  const mode = reportSource()
+  // The environment as the platform says it (the same self-health read the frame's badge comes from).
+  const self = useQuery({ queryKey: ['platform', 'self-health'], queryFn: fetchSelfHealth, retry: false, staleTime: 30_000, enabled: open })
+  const mode = reportSource(self.data?.viewer_env)
   const from = mode === 'engine' ? 'the engine backend' : mode === 'compare' ? 'both the Console and the engine backend' : 'the current Platform host'
   return <div className="min-w-0 px-3 py-2 text-xs [overflow-wrap:anywhere]">
     <button type="button" className="min-h-11 underline" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide run source report' : 'Read run source report'}</button>
-    {open && <><p>{`Independent exact-run read from ${from}. Source times may differ from the retained history above. Logs are read separately.`}</p><SourceRead key={JSON.stringify([pipeline, run, mode])} pipeline={pipeline} run={run} mode={mode} /></>}
+    {open && self.isPending && <p>…</p>}
+    {open && !self.isPending && <><p>{`Independent exact-run read from ${from}. Source times may differ from the retained history above. Logs are read separately.`}</p><SourceRead key={JSON.stringify([pipeline, run, mode])} pipeline={pipeline} run={run} mode={mode} /></>}
   </div>
 }

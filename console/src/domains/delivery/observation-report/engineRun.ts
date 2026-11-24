@@ -6,23 +6,39 @@ import type { ReadEvidence } from '@bifrost/ui/city/observation'
 /*
  * CI's run source report read from the engine backend (engine plan step 6, /engine/v1/report?kind=run; 箭10
  * 2026-11-24): the engine reads the run's timings with the viewer's token and serves the same ObservationReport the
- * Console projected itself (run.ts). The Console's own read stays as the way back. Which one a viewer sees is a
- * per-viewer switch, off by default:
- *   platform (default)  the Console reads /api/v1/delivery/pipelines/{p}/timings and projects it (run.ts)
- *   engine              the engine's report
- *   compare             both, side by side with every difference listed (the check before the switch flips)
- * It lives in this browser only (localStorage), so turning it on in STG to compare touches no one else.
+ * Console projected itself (run.ts). The Console's own read stays as the way back.
+ *   platform  the Console reads /api/v1/delivery/pipelines/{p}/timings and projects it (run.ts)
+ *   engine    the engine's report
+ *   compare   both, side by side with every difference listed (the check before an environment's switch flips)
+ * Which one an environment uses is the table below (箭10 2026-11-24: the engine runs on STG; DEV and PROD stay on
+ * the Console's read, PROD has no engine yet). A viewer can override it in this browser (localStorage), e.g. to
+ * compare in STG; the override touches no one else.
  */
 export type ReportSource = 'platform' | 'engine' | 'compare'
 export const REPORT_SOURCE_KEY = 'bifrost.ledger.report-source'
+export const REPORT_SOURCE_BY_ENV: Readonly<Record<'dev' | 'stg' | 'prod', ReportSource>> = { dev: 'platform', stg: 'engine', prod: 'platform' }
 
-export function reportSource(): ReportSource {
+const isSource = (value: unknown): value is ReportSource => value === 'platform' || value === 'engine' || value === 'compare'
+
+/** This viewer's override, if any (a private window or blocked storage has none). */
+export function reportSourceOverride(): ReportSource | null {
   try {
     const value = globalThis.localStorage?.getItem(REPORT_SOURCE_KEY)
-    return value === 'engine' || value === 'compare' ? value : 'platform'
+    return isSource(value) ? value : null
   } catch {
-    return 'platform'
+    return null
   }
+}
+
+/**
+ * The source for an environment as the platform names it (self-health viewer_env). An environment the table does not
+ * know, or one not read yet, reads the Console's own way: the switch is never turned on by a guess.
+ */
+export function reportSource(viewerEnv?: string | null): ReportSource {
+  const override = reportSourceOverride()
+  if (override) return override
+  const env = (viewerEnv ?? '').trim().toLowerCase()
+  return env === 'dev' || env === 'stg' || env === 'prod' ? REPORT_SOURCE_BY_ENV[env] : 'platform'
 }
 
 /** The engine's answer (API v1): who read what, and the report or null when a read failed. */

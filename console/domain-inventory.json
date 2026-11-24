@@ -4904,6 +4904,7 @@
       "imports": [
         "console/src/api",
         "console/src/api/ciTimings.ts",
+        "console/src/api/core.ts",
         "console/src/api/delivery.ts",
         "console/src/api/readings.ts",
         "console/src/api/releasePolicy.ts",

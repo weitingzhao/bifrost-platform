@@ -3,13 +3,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PipelineTimings } from '@/api/ciTimings'
 import { runReport } from './run'
-import { compareRunReports, fetchEngineRunReport, REPORT_SOURCE_KEY, reportSource } from './engineRun'
+import { compareRunReports, fetchEngineRunReport, REPORT_SOURCE_BY_ENV, REPORT_SOURCE_KEY, reportSource } from './engineRun'
 import { RunSourceReport } from '@/pages/shell/ci/RunSourceReport'
 
 const wire = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('@/lib/platformAuth', () => ({ getPlatformOperatorToken: () => 'test-viewer' }))
 vi.mock('@/api/serverContact', () => ({ serverFetch: (...args: unknown[]) => wire.read(...args) }))
-afterEach(() => { cleanup(); wire.read.mockReset(); localStorage.clear() })
+afterEach(() => { cleanup(); wire.read.mockReset(); localStorage.clear(); viewerEnv = 'dev' })
 
 const raw: PipelineTimings = { as_of: '2026-11-24T04:00:00Z', retained: 1, limit: 60, runs: [{ name: 'run-one', pipeline: 'bifrost-ci-platform',
   revision: 'input-sha', status: 'Succeeded', created_at: '2026-11-24T03:50:00Z', params: {}, results: [{ name: 'commit', value: 'output-sha' }],
@@ -19,7 +19,8 @@ const raw: PipelineTimings = { as_of: '2026-11-24T04:00:00Z', retained: 1, limit
 const engineReport = () => runReport(raw, 'bifrost-ci-platform', 'run-one', '2026-11-24T04:00:05Z')
 const envelope = (data: unknown, evidence = [{ source: '/api/v1/delivery/pipelines/bifrost-ci-platform/timings', outcome: 'read', receivedAt: '2026-11-24T04:00:05Z' }]) =>
   ({ version: 1, model: 'report', capturedAt: '2026-11-24T04:00:05Z', provenance: 'live', evidence, data })
-const answer = (url: string) => Response.json(url.startsWith('/engine/') ? envelope(engineReport()) : raw)
+let viewerEnv = 'dev'
+const answer = (url: string) => Response.json(url.startsWith('/engine/') ? envelope(engineReport()) : url.startsWith('/api/v1/self-health') ? { viewer_env: viewerEnv } : raw)
 const show = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><RunSourceReport pipeline="bifrost-ci-platform" run="run-one" /></QueryClientProvider>)
@@ -44,8 +45,9 @@ it('reads the engine report with the viewer token when switched to engine', asyn
   show()
   await screen.findAllByText('input-sha')
   const urls = wire.read.mock.calls.map(call => String(call[0]))
-  expect(urls).toEqual(['/engine/v1/report?kind=run&pipeline=bifrost-ci-platform&run=run-one'])
-  expect(new Headers(wire.read.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer test-viewer')
+  const engineCalls = wire.read.mock.calls.filter(call => String(call[0]).startsWith('/engine/'))
+  expect(urls.filter(url => !url.startsWith('/api/v1/self-health'))).toEqual(['/engine/v1/report?kind=run&pipeline=bifrost-ci-platform&run=run-one'])
+  expect(new Headers(engineCalls[0][1].headers).get('Authorization')).toBe('Bearer test-viewer')
 })
 
 // Same task: the check before the switch flips — both reads, rows and evidence compared item by item.
@@ -70,4 +72,24 @@ it('turns an engine answer with no report into an error naming its evidence', as
   await expect(fetchEngineRunReport('p', 'r')).rejects.toThrow('/api/v1/delivery/pipelines/p/timings: error (viewer token required)')
   wire.read.mockResolvedValue(Response.json({ runs: [] }))
   await expect(fetchEngineRunReport('p', 'r')).rejects.toThrow('not an engine v1 report answer')
+})
+
+// 2026-11-24, 箭10: the engine runs on STG, so STG's cell is on; DEV and PROD stay on the Console's read (PROD has no
+// engine yet), and an environment not read or not known never turns the engine on by a guess.
+it('takes the source from the environment table, with the viewer override first', async () => {
+  expect(REPORT_SOURCE_BY_ENV).toEqual({ dev: 'platform', stg: 'engine', prod: 'platform' })
+  expect(reportSource('stg')).toBe('engine')
+  expect(reportSource('PROD')).toBe('platform')
+  expect(reportSource(undefined)).toBe('platform')
+  expect(reportSource('dev-local')).toBe('platform')
+  localStorage.setItem(REPORT_SOURCE_KEY, 'compare')
+  expect(reportSource('prod')).toBe('compare')
+  localStorage.clear()
+  viewerEnv = 'stg'
+  wire.read.mockImplementation(async (url: string) => answer(url))
+  show()
+  await screen.findAllByText('input-sha')
+  const urls = wire.read.mock.calls.map(call => String(call[0]))
+  expect(urls.some(url => url.startsWith('/engine/v1/report'))).toBe(true)
+  expect(urls.some(url => url.includes('/timings'))).toBe(false)
 })
