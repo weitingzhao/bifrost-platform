@@ -1,11 +1,11 @@
 // 2026-11-24 the Owner's phone showed a blank page on ops.bifrost.lan after a deploy. sw.js v1 fell back to the
 // cached old index.html on a network error after it had dropped the old hashed assets, handed a 502 page through,
 // and had no answer when an asset fetch threw. These run the real public/sw.js against a fake network and cache.
-// Control: against v1 sw.js five of the six fail; only the offline-after-deploy case passed there too.
+// Control: against v1 sw.js five of the first six fail; only the offline-after-deploy case passed there too.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const source = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../public/sw.js'), 'utf8')
 const ORIGIN = 'https://ops.bifrost.lan'
@@ -27,7 +27,7 @@ class FakeCaches {
 const html = (build: string) => `<!doctype html><script type="module" crossorigin src="/assets/index-${build}.js"></script><link rel="stylesheet" href="/assets/index-${build}.css">`
 
 /** The server: which build index.html names, which files exist, and whether the network is up. */
-let server: { build: string; files: Map<string, number>; down: boolean; indexStatus: number }
+let server: { build: string; files: Map<string, number>; down: boolean; hang: boolean; indexStatus: number }
 let caches: FakeCaches
 let onFetch: (e: { request: Request; respondWith: (p: Promise<Response>) => void }) => void
 
@@ -40,6 +40,7 @@ function deploy(build: string, keepOld = false) {
 
 const net = async (r: RequestInfo | URL) => {
   if (server.down) throw new TypeError('net::ERR_HTTP2_PROTOCOL_ERROR')
+  if (server.hang) return new Promise<Response>(() => {})
   const p = new URL(typeof r === 'string' ? r : r instanceof URL ? r.href : r.url, ORIGIN).pathname
   if (p === '/' || p === '/index.html') return new Response(server.indexStatus === 200 ? html(server.build) : 'Bad Gateway', { status: server.indexStatus })
   const s = server.files.get(p)
@@ -58,7 +59,7 @@ const open = () => request('/', 'navigate')
 const pageAssets = async () => Promise.all([request(`/assets/index-${server.build}.js`)])
 
 beforeEach(() => {
-  server = { build: '', files: new Map(), down: false, indexStatus: 200 }
+  server = { build: '', files: new Map(), down: false, hang: false, indexStatus: 200 }
   caches = new FakeCaches()
   const listeners: Record<string, (e: never) => void> = {}
   const self = { location: { origin: ORIGIN }, addEventListener: (t: string, f: (e: never) => void) => { listeners[t] = f }, skipWaiting() {}, clients: { claim: async () => {} } }
@@ -123,6 +124,58 @@ describe('sw.js: a shell is bound to its build', () => {
     await open()
     for (const k of await caches.keys()) if (k.startsWith('bifrost-ops-assets-v2-')) await caches.delete(k)
     server.down = true
-    expect(await (await open()).text()).toContain('Bifrost Ops failed to load')
+    expect(await (await open()).text()).toContain("Can't reach Bifrost Ops")
+  })
+
+  it('says it is the last good version when it answers instead of the server', async () => {
+    await open()
+    server.down = true
+    const text = await (await open()).text()
+    expect(text).toContain('Showing the last good version')
+    expect(text).toContain('Reload')
+    // The line sits outside #root, which React owns.
+    expect(text.indexOf('console-last-good')).toBeGreaterThan(-1)
+  })
+})
+
+// 2026-11-24 the Owner's phone was on a Wi-Fi that skipped the VPN and was not on 192.168.10.x: the page request
+// never answered and the screen stayed white with the progress bar stuck. A page waits 4 s, then the last good
+// version answers and says so; with nothing cached it says it cannot reach Bifrost Ops and which network to use.
+describe('sw.js: a page request that does not answer', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('answers with the last good version after 4 s, saying so and naming the network to check', async () => {
+    await open()
+    vi.useFakeTimers()
+    server.hang = true
+    const page = open()
+    await vi.advanceTimersByTimeAsync(4_000)
+    const text = await (await page).text()
+    expect(text).toContain('index-OLD.js')
+    expect(text).toContain('Showing the last good version')
+    expect(text).toMatch(/home Wi-Fi[\s\S]*VPN/)
+  })
+
+  it('with nothing cached, waits longer and then says it cannot reach Bifrost Ops, with Retry, never white', async () => {
+    vi.useFakeTimers()
+    server.hang = true
+    let settled = false
+    const page = open().then(r => { settled = true; return r })
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(11_000)
+    const r = await page
+    expect(r.status).toBe(503)
+    const text = await r.text()
+    expect(text).toContain("Can't reach Bifrost Ops")
+    expect(text).toMatch(/home Wi-Fi \(192\.168\.10\.x\)[\s\S]*VPN/)
+    expect(text).toContain('Retry')
+  })
+
+  it('answers at once when the server is quick', async () => {
+    vi.useFakeTimers()
+    const page = open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(await (await page).text()).not.toContain('Showing the last good version')
   })
 })
