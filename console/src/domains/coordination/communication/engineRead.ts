@@ -1,5 +1,5 @@
 import { exchangesOf, membersOf, type CommunicationFact, type CommunicationSnapshot, type Exchange, type Member } from '@bifrost/ui/communication'
-import { authedFetch } from '@/api/client'
+import { engineQueryKey, engineUnreachableText, readEngine, type EngineAnswer } from '@/api/engine'
 
 /**
  * Agents reading the engine (engine backend step 5, 箭10 2026-11-24): the communication snapshot comes from
@@ -28,15 +28,18 @@ export type EngineCommunication = {
   members: Member[]
   coverage: { state: 'ready' | 'error'; note: string; updatedAt: string; truncated: boolean; history: { hasOlder: boolean; note: string } }
 }
-type Envelope = { version: 1; model: string; capturedAt: string; data: EngineCommunication | null; evidence?: { route?: string; ok?: boolean; error?: string }[] }
+/** The query key of this read: under ['engine', …], so the shell drops it when the viewer's identity changes. */
+export const ENGINE_COMMUNICATION_KEY = engineQueryKey(ENGINE_COMMUNICATION_PATH)
 
-/** The envelope's data, or why it is not one (a failed read is said as failed, never as empty). */
-export function parseEngineCommunication(value: unknown): EngineCommunication {
-  const e = value as Envelope | null
-  if (!e || e.version !== 1 || typeof e.model !== 'string') throw new Error('engine communication: not an engine v1 envelope')
-  const d = e.data
+/**
+ * The read's data, or why there is none: the engine not reached (engineUnreachableText, never a quiet fall back to
+ * the platform), or reached with no data (the evidence says which platform read failed). Never said as empty.
+ */
+export function engineCommunicationOf(a: EngineAnswer<EngineCommunication>): EngineCommunication {
+  if (!a.reached) throw new Error(engineUnreachableText(a))
+  const d = a.data
   if (!d) {
-    const why = (e.evidence ?? []).filter(r => r.ok === false).map(r => (r.route ?? '') + (r.error ? ': ' + r.error : '')).join('; ')
+    const why = a.evidence.filter(e => e.outcome !== 'read').map(e => e.source + (e.detail ? ': ' + e.detail : '')).join('; ')
     throw new Error('engine communication: no data' + (why ? ' (' + why + ')' : ''))
   }
   if (!Array.isArray(d.exchanges) || !Array.isArray(d.members) || !d.coverage) throw new Error('engine communication: data is not a communication read')
@@ -44,8 +47,7 @@ export function parseEngineCommunication(value: unknown): EngineCommunication {
 }
 
 export async function fetchEngineCommunication(signal?: AbortSignal): Promise<EngineCommunication> {
-  const r = await authedFetch('engine communication', ENGINE_COMMUNICATION_PATH, signal ? { signal } : {})
-  return parseEngineCommunication(await r.json())
+  return engineCommunicationOf(await readEngine<EngineCommunication>(ENGINE_COMMUNICATION_PATH, signal ? { signal } : {}))
 }
 
 /**

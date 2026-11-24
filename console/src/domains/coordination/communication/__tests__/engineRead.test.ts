@@ -1,6 +1,6 @@
 // 2026-11-24 箭10: Agents prepares to read the engine (step 5) with the direct read kept as the way back, per environment, off by default.
 import { expect, it } from 'vitest'
-import { ENGINE_COMMUNICATION, engineCommunicationOn, engineSnapshot, parseEngineCommunication, type EngineCommunication } from '../engineRead'
+import { ENGINE_COMMUNICATION, engineCommunicationOn, engineSnapshot, engineCommunicationOf, ENGINE_COMMUNICATION_KEY, type EngineCommunication } from '../engineRead'
 const at='2026-11-24T04:00:00Z'
 const read: EngineCommunication = {
  exchanges:[{id:'m1',channel:'message',from:'thread:a',to:'thread:b',stages:{sent:{id:'1',source:'agentrt/events',at}},facts:[]} as never],
@@ -16,10 +16,15 @@ it('reads the engine on STG only and treats an unknown or unread environment as 
  for (const env of ['prod','dev',undefined,null,'','qa','constructor']) expect(engineCommunicationOn(env)).toBe(false)
 })
 
-it('takes the envelope data and says a failed engine read as failed, never as empty', () => {
- expect(parseEngineCommunication({version:1,model:'communication',capturedAt:at,data:read}).members).toHaveLength(2)
- expect(()=>parseEngineCommunication({version:1,model:'communication',capturedAt:at,data:null,evidence:[{route:'/api/v1/agentrt/events',ok:false,error:'HTTP 502'}]})).toThrow(/agentrt\/events: HTTP 502/)
- expect(()=>parseEngineCommunication({error:'x'})).toThrow(/not an engine v1 envelope/)
+// 2026-11-24 UI / Engine: every view reads the engine through api/engine.ts (readEngine, engineQueryKey). The first
+// version parsed the envelope itself and read evidence fields the engine does not send (route/ok/error).
+it('takes the data of a reached answer and says a failed or unreached read as failed, never as empty', () => {
+ const reached=(data:EngineCommunication|null, evidence:{source:string;outcome:'read'|'missing'|'error';receivedAt:string;detail?:string}[]=[])=>({reached:true as const,model:'communication',capturedAt:at,identity:null,evidence,data})
+ expect(engineCommunicationOf(reached(read)).members).toHaveLength(2)
+ expect(()=>engineCommunicationOf(reached(null,[{source:'/api/v1/agentrt/events',outcome:'error',receivedAt:at,detail:'HTTP 502'}]))).toThrow(/agentrt\/events: HTTP 502/)
+ expect(()=>engineCommunicationOf({reached:false,reason:'HTTP 404',status:404,lastReachedAt:null})).toThrow(/engine unreachable: HTTP 404/)
+ // The read sits under ['engine', …] so the shell drops it when the identity changes.
+ expect(ENGINE_COMMUNICATION_KEY[0]).toBe('engine')
 })
 
 it('keeps the event channel from the bus facts in engine mode and marks the source', () => {

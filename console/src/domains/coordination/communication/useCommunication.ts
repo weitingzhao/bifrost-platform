@@ -11,7 +11,7 @@ import { fetchSeatStatuses } from '@/api/seatStatus'
 import { fetchLineage } from '@/api/lineage'
 import { communicationSnapshot } from './adapter'
 import { shellSelfHealthQuery } from '@/domains/foundation/shell/useShellStatusLine'
-import { engineCommunicationOn, engineSnapshot, fetchEngineCommunication } from './engineRead'
+import { ENGINE_COMMUNICATION_KEY, engineCommunicationOn, engineSnapshot, fetchEngineCommunication } from './engineRead'
 
 const TYPES = ['message_posted', 'seat.mail.arrived', 'message_acked'] as const
 const CAP = 10000
@@ -42,7 +42,7 @@ export function useCommunicationObservation() {
       return { rows: rows.slice(0, CAP), cursor: page.next, truncated: Boolean((current?.hasOlder ?? page.events.length === 500) || rows.length >= CAP), hasOlder: current?.hasOlder ?? page.events.length === 500 }
     }, refetchInterval: 15000, enabled: !viaEngine,
   })
-  const engine = useQuery({ queryKey: ['communication', 'engine', generation], queryFn: ({ signal }) => fetchEngineCommunication(signal), refetchInterval: 15000, enabled: viaEngine, retry: false })
+  const engine = useQuery({ queryKey: ENGINE_COMMUNICATION_KEY, queryFn: ({ signal }) => fetchEngineCommunication(signal), refetchInterval: 15000, enabled: viaEngine, retry: false })
   const older = useMutation({
     mutationFn: async ({key}: {key: typeof queryKey}) => {
       // Stop the forward refresh before reading its state; history never overwrites the forward cursor.
