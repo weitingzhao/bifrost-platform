@@ -21,7 +21,9 @@ import (
 // 达到 is reached; 部分 and 没达到 are missed; 没核, or no conclusion, is
 // unmeasured.
 
-var judgementLine = regexp.MustCompile(`^\s*结论\s*(s[0-9A-Za-z_-]+)\s*[:：]\s*(达到|部分|没达到|没核)`)
+// A correction may sit between the standard and its grade:
+// 「结论 s2（更正，替换 02:10Z 那条）：达到」.
+var judgementLine = regexp.MustCompile(`^\s*结论\s*(s[0-9A-Za-z_-]+)\s*(?:（[^）]*）|\([^)]*\))?\s*[:：]\s*(达到|部分|没达到|没核)`)
 var versionRef = regexp.MustCompile(`标准版本\s*(appr_[0-9a-f]{16})`)
 
 func recordJudgement(ctx context.Context, tx pgx.Tx, root, step string, note int64, text string) error {

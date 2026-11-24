@@ -55,7 +55,9 @@ func TestLawsViewCountsConclusions(t *testing.T) {
 	}
 	post("a1", law.Steps[0].Node, "结论 s1：没达到｜标准版本 "+id+"｜读数：x @2026-11-24T02:10Z")
 	post("a2", law.Steps[0].Node, "结论 s1：达到｜标准版本 "+id+"｜读数：y @2026-11-24T05:00Z")
-	post("a3", law.Steps[1].Node, "结论 s2：部分｜标准版本 "+id)
+	post("a3", law.Steps[1].Node, "结论 s2：没核｜标准版本 "+id)
+	post("a3b", law.Steps[1].Node, "结论 s2（更正，替换 02:10Z 那条）：部分｜标准版本 "+id)
+	post("a3c", law.Steps[1].Node, "结论 s2（补读数，结论不变：部分）｜标准版本 "+id)
 	post("a4", law.Steps[2].Node, "结论 s3：没核｜标准版本 "+id)
 	post("a5", law.Steps[3].Node, "归因 s4：类别 工具｜原因 none｜去向 修")
 	view, err = planstore.LawsView(ctx, w.rt)
