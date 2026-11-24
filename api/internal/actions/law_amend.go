@@ -104,10 +104,88 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 	return la, nil
 }
 
-// CheckLawAmend is the create check: a card that does not read is refused.
-func CheckLawAmend(_ context.Context, params map[string]any) error {
-	_, err := ReadLawAmend(params)
-	return err
+// LawRegister reads the plan domain's register of laws (planstore). Current
+// gives law n as it stands; Next the number an added law takes ("" while the
+// register is empty).
+type LawRegister struct {
+	Current func(ctx context.Context, n string) (text, status string, ok bool, err error)
+	Next    func(ctx context.Context) (string, error)
+}
+
+var lawRegister *LawRegister
+
+// SetLawRegister installs the register reader; the assembly wires planstore.
+func SetLawRegister(r *LawRegister) {
+	actMu.Lock()
+	lawRegister = r
+	actMu.Unlock()
+}
+
+func currentLawRegister() *LawRegister {
+	actMu.RLock()
+	defer actMu.RUnlock()
+	return lawRegister
+}
+
+// lawRepealed is the register's status of a repealed law.
+const lawRepealed = "废止"
+
+// CheckLawAmend is the create check. Owner 2026-11-23: a ticket changes a real
+// record of the law, never stands alone. So a card is refused unless it
+// reads, the register answers, an amend or repeal names a law in force there
+// and quotes its text as it stands, and an add has a number to take. When
+// the register cannot be read the card is refused, not let through.
+func CheckLawAmend(ctx context.Context, params map[string]any) error {
+	la, err := ReadLawAmend(params)
+	if err != nil {
+		return err
+	}
+	reg := currentLawRegister()
+	if reg == nil || reg.Current == nil || reg.Next == nil {
+		return errors.New("law_amend: the register of laws is not available here; no card without it")
+	}
+	if la.Op == "add" {
+		next, err := reg.Next(ctx)
+		if err != nil {
+			return fmt.Errorf("law_amend: reading the register: %w", err)
+		}
+		if next == "" {
+			return errors.New("law_amend add: the register is empty (not transcribed yet), so the new law has no number")
+		}
+		if la.Law != "" && la.Law != next {
+			return fmt.Errorf("law_amend add: the new law will be number %s, not %s", next, la.Law)
+		}
+		return nil
+	}
+	text, status, ok, err := reg.Current(ctx, la.Law)
+	if err != nil {
+		return fmt.Errorf("law_amend: reading the register: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("law_amend %s: law %s is not in the register", la.Op, la.Law)
+	}
+	if status == lawRepealed {
+		return fmt.Errorf("law_amend %s: law %s is already repealed", la.Op, la.Law)
+	}
+	if strings.TrimSpace(text) != la.Before {
+		return fmt.Errorf("law_amend %s: before is not law %s as it stands; it reads: %s", la.Op, la.Law, strings.TrimSpace(text))
+	}
+	return nil
+}
+
+// lawAmendSummary is the card's line; an add names the number it will take.
+func lawAmendSummary(ctx context.Context, params map[string]any) string {
+	op, _ := params["op"].(string)
+	law, _ := params["law"].(string)
+	if op == "add" {
+		if reg := currentLawRegister(); reg != nil && reg.Next != nil {
+			if next, err := reg.Next(ctx); err == nil && next != "" {
+				return "Law add: will become law " + next
+			}
+		}
+		return "Law add"
+	}
+	return strings.TrimSpace("Law " + op + " " + law)
 }
 
 // ExecuteLawAmend records the approval; nothing else happens.

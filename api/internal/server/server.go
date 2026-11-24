@@ -30,6 +30,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalrules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
@@ -284,6 +286,30 @@ func New(cfg *config.Config) (*Server, error) {
 		srv.approvals.SetTicketKey([]byte(key))
 	}
 	actions.SetRuleChangeLookup(srv.ruleApproveChanges)
+	// law_amend cards are checked against the plan domain's register of laws.
+	lawDB := func() (eventlog.DB, error) {
+		if rt := srv.agentRuntime; rt != nil && rt.api != nil && rt.api.DB != nil {
+			return rt.api.DB, nil
+		}
+		return nil, errors.New("the agent runtime database is not wired")
+	}
+	actions.SetLawRegister(&actions.LawRegister{
+		Current: func(ctx context.Context, n string) (string, string, bool, error) {
+			db, err := lawDB()
+			if err != nil {
+				return "", "", false, err
+			}
+			l, ok, err := planstore.CurrentLaw(ctx, db, n)
+			return l.Text, l.Status, ok, err
+		},
+		Next: func(ctx context.Context) (string, error) {
+			db, err := lawDB()
+			if err != nil {
+				return "", err
+			}
+			return planstore.NextLawNumber(ctx, db)
+		},
+	})
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)

@@ -122,7 +122,7 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 	case "agentrt_rule_approve":
 		d.Env, d.Summary = p("env"), describeRuleApprove(ctx, params)
 	case LawAmendAction:
-		d.Env, d.Summary = "law", strings.TrimSpace(fmt.Sprintf("Law %s: %s", p("op"), p("law")))
+		d.Env, d.Summary = "law", lawAmendSummary(ctx, params)
 	case "trigger_cnpg_backup":
 		d.Env, d.Summary = "data", "On-demand CNPG backup"
 	case "repair_cnpg_wal_store":
