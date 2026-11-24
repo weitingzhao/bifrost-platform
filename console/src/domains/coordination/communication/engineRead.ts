@@ -10,7 +10,9 @@ import { authedFetch } from '@/api/client'
  * The switch is keyed by the environment the platform says this Console views (/health viewer_env), so one image
  * behaves per environment and turning one on is a change here (default, 箭10 may veto).
  */
-export const ENGINE_COMMUNICATION: Record<string, boolean> = { dev: false, stg: false, prod: false }
+// STG on 2026-11-24 (箭10): the engine runs there; the comparison against the direct read is done on STG. PROD stays off
+// until the engine is deployed there and STG compared equal.
+export const ENGINE_COMMUNICATION: Record<string, boolean> = { dev: false, stg: true, prod: false }
 
 /** Whether this environment reads communication from the engine; an environment not known yet reads directly. */
 export const engineCommunicationOn = (viewerEnv: string | null | undefined): boolean => {

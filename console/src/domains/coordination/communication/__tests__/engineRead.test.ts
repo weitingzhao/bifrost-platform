@@ -8,9 +8,12 @@ const read: EngineCommunication = {
  coverage:{state:'ready',note:'Engine note.',updatedAt:at,truncated:false,history:{hasOlder:true,note:'Earlier letters exist.'}},
 }
 
-it('starts off in every environment and treats an unknown or unread environment as direct', () => {
- expect(Object.values(ENGINE_COMMUNICATION).every(v=>v===false)).toBe(true)
- for (const env of ['stg','prod','dev','STG',undefined,null,'','qa','constructor']) expect(engineCommunicationOn(env)).toBe(false)
+it('reads the engine on STG only and treats an unknown or unread environment as direct', () => {
+ // 2026-11-24: STG on for the comparison; PROD has no engine yet.
+ expect(ENGINE_COMMUNICATION).toEqual({dev:false,stg:true,prod:false})
+ expect(engineCommunicationOn('stg')).toBe(true)
+ expect(engineCommunicationOn(' STG ')).toBe(true)
+ for (const env of ['prod','dev',undefined,null,'','qa','constructor']) expect(engineCommunicationOn(env)).toBe(false)
 })
 
 it('takes the envelope data and says a failed engine read as failed, never as empty', () => {
