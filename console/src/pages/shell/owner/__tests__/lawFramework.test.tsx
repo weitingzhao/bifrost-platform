@@ -47,7 +47,9 @@ describe('the framework model', () => {
     expect(frameworkLine(framework)).toBe('framework v1 · 5 levels · 现行 0 · 素材 2 · 废止 0')
     expect(frameworkLine(null)).toBe('framework not sent by this platform: unknown')
     // A state with no count is "?", never 0.
-    expect(stateCounts({ states: { 现行: 0 } })).toEqual([['现行', 0], ['素材', null], ['废止', null]])
+    expect(stateCounts({ states: { 现行: 0 } })).toEqual([['现行', 0], ['素材', null]])
+    // 2026-11-24 立法线: the repealed leave the register; with no 废止 key the page shows no 废止, not "废止 0" or unknown.
+    expect(frameworkLine({ ...framework, states: { 现行: 0, 素材: 69 } })).toBe('framework v1 · 5 levels · 现行 0 · 素材 69')
   })
   it('names the required fields by their labels', () => {
     expect(requiredLabels(framework.levels![1], framework.fields)).toEqual(['原文', '出处', '适用范围'])
@@ -56,6 +58,7 @@ describe('the framework model', () => {
   it('counts the register by state: only 现行 is a law', () => {
     const laws = [law('1', '素材'), law('2', '现行', 2), law('3', '废止'), law('4')]
     expect(stateTally(laws)).toBe('现行 1 · 素材 1 · 废止 1 · state unknown 1')
+    expect(stateTally([law('1', '素材')])).toBe('现行 0 · 素材 1')
     expect(inForceCount(laws)).toBe(1)
   })
   it('hangs only laws in force under their level; everything else is behind the switch', () => {

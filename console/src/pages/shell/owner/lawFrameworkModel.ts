@@ -23,10 +23,15 @@ export function frameworkLine(fw: LawFramework | null | undefined): string {
   return [`framework ${fw.version ?? UNKNOWN}`, levels, states].join(' · ')
 }
 
-/** Each state with its count, in the framework's order; a state with no count is null (shown "?"), never 0. */
+/**
+ * Each state with its count, in the framework's order; a state with no count is null (shown "?"), never 0. The repealed
+ * are not a state the register keeps any more (立法线 2026-11-24, after the Owner: "删掉..对于法律来说都是毒药"): 废止 is
+ * shown only while the platform still sends it, never as "废止 0" or unknown.
+ */
 export function stateCounts(fw: LawFramework | null | undefined): [string, number | null][] {
   const states = fw?.states
-  const known = STATE_ORDER.map(s => [s, states && typeof states[s] === 'number' ? states[s] : null] as [string, number | null])
+  const shown = STATE_ORDER.filter(s => s !== REPEALED || (states != null && Object.hasOwn(states, REPEALED)))
+  const known = shown.map(s => [s, states && typeof states[s] === 'number' ? states[s] : null] as [string, number | null])
   const more = Object.entries(states ?? {}).filter(([s]) => !(STATE_ORDER as readonly string[]).includes(s))
   return [...known, ...more]
 }
@@ -54,7 +59,8 @@ export const frameworkWord = (fw: LawFramework | null | undefined): 'ok' | 'unkn
 export function stateTally(laws: readonly RegisterLaw[]): string {
   const n = (s: string) => laws.filter(l => l.state === s).length
   const unknown = laws.filter(l => !l.state || !(STATE_ORDER as readonly string[]).includes(l.state)).length
-  return [...STATE_ORDER.map(s => `${s} ${n(s)}`), ...(unknown > 0 ? [`state unknown ${unknown}`] : [])].join(' · ')
+  const shown = STATE_ORDER.filter(s => s !== REPEALED || n(s) > 0)
+  return [...shown.map(s => `${s} ${n(s)}`), ...(unknown > 0 ? [`state unknown ${unknown}`] : [])].join(' · ')
 }
 export const inForceCount = (laws: readonly RegisterLaw[]): number => laws.filter(l => l.state === IN_FORCE).length
 
