@@ -76,3 +76,18 @@ describe('a district opens its domain in the Console', () => {
     expect(domainConsoleHref('a b')).toBe('#status?domain=a%20b')
   })
 })
+
+// 2026-11-24, PROD: while a district's buildings were still being read (20–50 s), the scene said "Nothing inside yet"
+// and the card "Inside 0", which read as no buildings. The engine's Place.inside (0.60.0) says it instead.
+describe('a district says when its buildings are still being read', () => {
+  it("marks a district reading until its read is back, or why it failed, and nothing once it is back", () => {
+    const status = { version: 1, at: '', commit: '', domains: [{ id: 'plan', overall: 'good' }, { id: 'lineage', overall: 'good' }, { id: 'audit', overall: 'good' }] } as never
+    const holdings = { lineage: { id: 'lineage', packages: [], groups: [], paths: [], workloads: [], buildings: [{ id: 'lineage', packages: ['p/lineage'] }] } }
+    const t = domainTree(status, null, '', holdings, undefined, '', { plan: 'reading', audit: { why: 'HTTP 502' }, lineage: 'reading' })
+    const by = (id: string) => t.children.find(c => c.id === id)!
+    expect(by('plan').inside).toBe('reading')
+    expect(by('audit').inside).toEqual({ why: 'HTTP 502' })
+    expect(by('lineage').inside).toBeUndefined()
+    expect(rulesBroken({ tree: t })).toEqual([])
+  })
+})

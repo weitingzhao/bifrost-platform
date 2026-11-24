@@ -1,7 +1,7 @@
 import type { CityContent } from '@bifrost/ui/city/content'
 import type { Place } from '@bifrost/ui/city/places'
 import { consoleFunctions } from './consolePlaces'
-import { domainTree } from './domainPlaces'
+import { domainTree, type InsideRead } from './domainPlaces'
 import { domainPanel, domainsPanel, type DomainsRead } from './domainsPanel'
 import { ownsPanel, type DomainHoldings, type ReadDomain } from './domainOwns'
 import { districtTechTree, domainTechTree, type GraphRead } from './techTree'
@@ -19,9 +19,9 @@ import { districtLinesPanel, linesPanel, type LinesRead, type RosterRead } from 
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
-export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }, routes?: Map<string, CounterRoute[]>, offContract?: OffContractRead, flowSource = ''): CityContent => {
+export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null = null, graph: GraphRead = {}, readDomain?: ReadDomain, traffic?: TrafficRead, alerts?: { raw?: PromAlert[]; error?: unknown; devices: DeviceKey[] }, holdings: Record<string, DomainHoldings> = {}, lines?: { read: LinesRead; roster: RosterRead; now: Date; focus?: string }, routes?: Map<string, CounterRoute[]>, offContract?: OffContractRead, flowSource = '', insideRead: InsideRead = {}): CityContent => {
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
-  const tree = domainTree(domains.data, hardware, why, holdings, routes, flowSource)
+  const tree = domainTree(domains.data, hardware, why, holdings, routes, flowSource, insideRead)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
   // A district whose buildings go past its ground (16 things): cut too fine, to decouple or merge (the Owner, 2026-11-22).
   const overflowPanel = (id: string) => {

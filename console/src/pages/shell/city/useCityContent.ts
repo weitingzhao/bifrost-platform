@@ -4,6 +4,7 @@ import { authedFetch } from '@/api/client'
 import { fetchCiDomains } from '@/api/ciDomains'
 import { fetchDomainPage, fetchDomainStatus } from '@/domains/foundation/catalog/api/domainStatus'
 import type { DomainHoldings, ReadDomain } from '@/domains/owner/city/gen2/content/domainOwns'
+import type { InsideRead } from '@/domains/owner/city/gen2/content/domainPlaces'
 import { consoleContent } from '@/domains/owner/city/gen2/content/console'
 import { hardwareDistrict, readHardware } from '@/domains/owner/city/gen2/content/hardware'
 import { readUnits } from '@/domains/owner/city/gen2/content/unitRooms'
@@ -62,7 +63,20 @@ export function useCityContent(focus?: string | null, at?: string | null): CityC
   const holdingQuery = (id: string, enabled: boolean) => ({ queryKey: ['city', 'gen2', 'holding', id], queryFn: () => readDomain(id), enabled, refetchInterval: 5 * 60_000, retry: false })
   const firstRead = useQuery(holdingQuery(first ?? '', first != null))
   const restReads = useQueries({ queries: ids.filter(id => id !== first).map(id => holdingQuery(id, first == null || firstRead.isFetched)) })
-  const holdingsKey = [firstRead.dataUpdatedAt, ...restReads.map(r => r.dataUpdatedAt)].join(',')
+  const holdingsKey = [firstRead.dataUpdatedAt, ...restReads.map(r => r.dataUpdatedAt), firstRead.status, ...restReads.map(r => r.status)].join(',')
+  // A district whose read has not come back says it is reading; one that failed says why (Place.inside, 0.60.0).
+  const insideRead = useMemo(() => {
+    const out: InsideRead = {}
+    const order = first ? [first, ...ids.filter(id => id !== first)] : ids
+    const reads = first ? [firstRead, ...restReads] : restReads
+    order.forEach((id, i) => {
+      const r = reads[i]
+      if (!r || r.data) return
+      out[id] = r.isError ? { why: r.error instanceof Error ? r.error.message : String(r.error) } : 'reading'
+    })
+    return out
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingsKey, ids.join(',')])
   const holdings = useMemo(() => {
     const out: Record<string, DomainHoldings> = {}
     for (const r of [firstRead, ...restReads]) if (r.data) out[(r.data as DomainHoldings).id] = r.data as DomainHoldings
@@ -100,6 +114,6 @@ export function useCityContent(focus?: string | null, at?: string | null): CityC
       : null
     return consoleContent({ data: domains.data, error: domains.error }, hw, { data: graph.data, error: graph.error }, readDomain, traffic,
       { raw: firing.data?.alerts as PromAlert[] | undefined, error: firing.error, devices: d ? deviceKeys(d.hardware) : [] }, holdings.data ?? {},
-      { read: { data: lineage.data, error: lineage.error }, roster: NO_ROSTER, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract, counterQ?.perMin ?? '')
-  }, [counterQ?.perMin, offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
+      { read: { data: lineage.data, error: lineage.error }, roster: NO_ROSTER, now: new Date(lineage.dataUpdatedAt || Date.now()), focus: focus ?? undefined }, routes, offContract, counterQ?.perMin ?? '', insideRead)
+  }, [insideRead, counterQ?.perMin, offContract, routes, focus, lineage.data, lineage.error, lineage.dataUpdatedAt, reads.data, rulers, domains.data, domains.error, graph.data, graph.error, traffic, firing.data, firing.error, holdings.data])
 }

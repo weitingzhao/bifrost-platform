@@ -42,11 +42,14 @@ type Named = { id: string; name?: string; overall?: string }
 const stateOf = (d: Named) => (d.overall && d.overall !== 'unknown' ? 'online' as const : 'unread' as const)
 const nameOf = (d: Named) => d.name || d.id
 
-export function domainTree(status: MapStatus | undefined, hardware: Place | null, why = '', holdings: Record<string, DomainHoldings> = {}, routes?: Map<string, CounterRoute[]>, flowSource = ''): Place {
+/** How far a district's own read is (the map's buildings for it): still reading, or not read and why. */
+export type InsideRead = Record<string, Place['inside']>
+
+export function domainTree(status: MapStatus | undefined, hardware: Place | null, why = '', holdings: Record<string, DomainHoldings> = {}, routes?: Map<string, CounterRoute[]>, flowSource = '', insideRead: InsideRead = {}): Place {
   const domains = (status?.domains ?? []) as Named[]
   const children: Place[] = domains.map(d => d.id === COMPUTE && hardware
     ? { ...hardware, id: d.id, label: nameOf(d) }
-    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: domainConsoleHref(d.id), children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined, routes && flowSource ? pkgs => buildingFlow(pkgs, routes, flowSource) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}) })
+    : { id: d.id, kind: 'district', shape: DISTRICT, label: nameOf(d), question: `The ${nameOf(d)} domain: what it holds and how it stands, as the map sees it.`, dashboard: domainConsoleHref(d.id), children: buildingsOf(holdings[d.id], stateOf(d), routes ? pkgs => counterRooms(pkgs, routes, stateOf(d)) : undefined, routes && flowSource ? pkgs => buildingFlow(pkgs, routes, flowSource) : undefined), state: stateOf(d), ...(styleOf(d.id) ? { style: styleOf(d.id) } : {}), ...(!holdings[d.id] && insideRead[d.id] ? { inside: insideRead[d.id] } : {}) })
   // The hardware was read even when the map was not: it stands on its own rather than vanish.
   if (hardware && !domains.some(d => d.id === COMPUTE)) children.unshift(hardware)
   return {
