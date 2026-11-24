@@ -177,14 +177,27 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// From here on the work does not follow the caller's request: the code
+	// is spent and the Owner has decided. #732 (2026-11-24): the phone's
+	// request was cancelled while Approve was in flight; the platform stored
+	// the approval, this process saw "context canceled" and stopped, and the
+	// approved card was never claimed. #677 was the same at the claim.
+	ctx, cancelWork := context.WithTimeout(context.WithoutCancel(ctx), claimBudget)
+	defer cancelWork()
+
 	if card.Status == "pending" {
 		if len(req.Approve) == 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "approve body is required for a pending card"})
 			return
 		}
 		if err = s.Platform.Approve(ctx, bearer, id, req.Approve); err != nil {
-			s.relay(w, id, "approve", err)
-			return
+			// The approval may have been stored though the reply was lost:
+			// read the card again and go on if it is approved now.
+			if again, rerr := s.Platform.Card(ctx, bearer, id); rerr != nil || again.Status != "approved" {
+				s.relay(w, id, "approve", err)
+				return
+			}
+			s.Logf("run %s: approve answered %v, but the card is approved; going on", id, err)
 		}
 		s.Logf("run %s: approved", id)
 	}
@@ -208,14 +221,9 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The claim must not follow the caller's request. #677 (2026-11-22): the
-	// phone's request was cancelled while the claim was in flight; the platform
-	// had already stored the lease, this process never saw the reply, so the
-	// command never ran and the card sat in running until the lease lapsed.
-	// Once Approve has gone through, finish the claim on our own clock.
-	claimCtx, cancelClaim := context.WithTimeout(context.WithoutCancel(ctx), claimBudget)
-	defer cancelClaim()
-	claim, err := s.Platform.Claim(claimCtx, bearer, id, s.ExecutorID)
+	// The claim runs on the same detached context (#677, 2026-11-22: the
+	// phone's request was cancelled while the claim was in flight).
+	claim, err := s.Platform.Claim(ctx, bearer, id, s.ExecutorID)
 	if err != nil {
 		s.relay(w, id, "claim", err)
 		return

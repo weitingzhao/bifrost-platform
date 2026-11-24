@@ -180,7 +180,10 @@ type fakePlatform struct {
 	result      *Result
 	approveBody string
 	onApprove   func() // runs after a successful approve
-	claimCtxErr error  // the claim context's error when claim was called
+	// beforeApprove runs as Approve starts; when it cancels the request, the
+	// approval is still stored and Approve answers the context's error (#732).
+	beforeApprove func()
+	claimCtxErr   error // the claim context's error when claim was called
 }
 
 func (f *fakePlatform) note(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -195,10 +198,19 @@ func (f *fakePlatform) Card(context.Context, string, string) (Card, error) {
 	defer f.mu.Unlock()
 	return f.card, nil
 }
-func (f *fakePlatform) Approve(_ context.Context, _, _ string, body json.RawMessage) error {
+func (f *fakePlatform) Approve(ctx context.Context, _, _ string, body json.RawMessage) error {
 	f.note("approve")
+	if f.beforeApprove != nil {
+		f.beforeApprove()
+	}
 	if f.approveErr != nil {
 		return f.approveErr
+	}
+	if err := ctx.Err(); err != nil {
+		f.mu.Lock()
+		f.card.Status = "approved" // the platform stored it; the reply was lost
+		f.mu.Unlock()
+		return err
 	}
 	f.mu.Lock()
 	f.card.Status = "approved"
@@ -352,6 +364,34 @@ func TestClaimOutlivesACancelledRequest(t *testing.T) {
 	}
 	if h.commandsRun() != 1 || h.fake.result == nil {
 		t.Fatalf("command not run after the request was cancelled: ran %q, result %+v", h.ran, h.fake.result)
+	}
+}
+
+// #732 (2026-11-24): the phone's request was cancelled while Approve was in
+// flight; the platform stored the approval and owner-exec stopped on
+// "context canceled", so the card was never claimed. Positive control:
+// without the detached context this test fails with no command run.
+func TestApproveOutlivesACancelledRequest(t *testing.T) {
+	h := newHarness(t, "pending")
+	raw, _ := json.Marshal(h.body(h.code()))
+	ctx, cancel := context.WithCancel(context.Background())
+	h.fake.beforeApprove = cancel
+	req := httptest.NewRequest(http.MethodPost, RunPath, bytes.NewReader(raw)).WithContext(ctx)
+	req.Header.Set("Authorization", "Bearer "+testBearer)
+	rec := httptest.NewRecorder()
+	h.srv.Handler().ServeHTTP(rec, req)
+	h.srv.Wait()
+	if h.commandsRun() != 1 || h.fake.result == nil {
+		t.Fatalf("approved card not run after the request was cancelled: %d %s, ran %q", rec.Code, rec.Body, h.ran)
+	}
+}
+
+// An approve the platform refused (the card stays pending) runs nothing.
+func TestARefusedApproveRunsNothing(t *testing.T) {
+	h := newHarness(t, "pending")
+	h.fake.approveErr = &StatusError{Status: 502, Body: map[string]any{"error": "gateway"}}
+	if rec := h.post(testBearer, h.body(h.code())); rec.Code == http.StatusAccepted || h.commandsRun() != 0 {
+		t.Fatalf("a refused approve ran the command: %d %s", rec.Code, rec.Body)
 	}
 }
 
