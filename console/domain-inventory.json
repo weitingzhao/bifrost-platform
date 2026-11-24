@@ -1692,16 +1692,20 @@
       "path": "console/src/domains/delivery/observation-report",
       "files": [
         "console/src/domains/delivery/observation-report/README.md",
+        "console/src/domains/delivery/observation-report/engineRun.test.tsx",
+        "console/src/domains/delivery/observation-report/engineRun.ts",
         "console/src/domains/delivery/observation-report/index.ts",
         "console/src/domains/delivery/observation-report/run.test.tsx",
         "console/src/domains/delivery/observation-report/run.ts"
       ],
       "imports": [
         "console/src/api/ciTimings.ts",
+        "console/src/api/client.ts",
         "console/src/domains/delivery/api"
       ],
       "test_imports": [
-        "console/src/api/ciTimings.ts"
+        "console/src/api/ciTimings.ts",
+        "console/src/pages/shell/ci"
       ],
       "external_imports": [
         "@bifrost/ui/city/cards",

@@ -44,6 +44,8 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      // The engine backend, when one is running locally (ENGINE_TARGET=http://127.0.0.1:8790); in a cluster it is served at /engine.
+      ...(process.env.ENGINE_TARGET ? { '/engine': { target: process.env.ENGINE_TARGET, changeOrigin: true } } : {}),
       '/health': {
         target: apiTarget,
         changeOrigin: true,
