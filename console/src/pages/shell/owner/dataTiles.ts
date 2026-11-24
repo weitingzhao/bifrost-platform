@@ -32,11 +32,11 @@ export function pluginsTile(probes: { name: string; reach: ProbeReach; loading: 
   const bad = probes.filter(p => p.reach === 'fail')
   const degraded = probes.filter(p => p.reach === 'degraded')
   const unread = probes.filter(p => p.reach === 'unknown')
-  const ok = probes.filter(p => p.reach === 'ok').map(p => `${p.name} OK`)
+  const ok = probes.filter(p => p.reach === 'ok').map(p => `${p.name} ok`)
   const tone: Tone = bad.length ? 'fail' : degraded.length ? 'warn' : unread.length ? 'unknown' : 'ok'
   const state = bad.length ? 'Failing' : degraded.length ? 'Degraded' : unread.length ? 'Unknown' : 'OK'
   const figure = [...bad.map(p => `${p.name} down`), ...degraded.map(p => `${p.name} degraded`), ...unread.map(p => `${p.name} unknown`)][0]
-    ?? `All ${probes.length} OK`
+    ?? `all ${probes.length} ok`
   const rest = [...bad.slice(1).map(p => `${p.name} down`), ...degraded.slice(bad.length ? 0 : 1).map(p => `${p.name} degraded`), ...ok]
   return { name: 'Plugins', tone, state, figure, detail: rest.join(' · '), href: '#data?section=plugins' }
 }
@@ -76,8 +76,9 @@ export function copiesTile(read: Read<DataFreshnessResponse>): DataTile {
   if (unread.length) return unknown('Test copies', '#infrastructure', `${unread.join(' and ')} not read${d.detail ? ` · ${d.detail}` : ''}`)
   const worst = Math.max(...copies.map(db => db.lag_vs_prod_days as number))
   // Stale is older than its declared freshness: fail (design system; 箭10 2026-11-23, the city aligns).
-  const tone: Tone = worst >= d.stale_threshold_days ? 'fail' : worst >= d.fresh_threshold_days ? 'info' : 'ok'
-  const state = tone === 'fail' ? 'Stale' : tone === 'info' ? 'Aging' : 'OK'
+  // Aging is near its deadline but not past the declared freshness: warn (箭10 2026-11-23, the city's rule).
+  const tone: Tone = worst >= d.stale_threshold_days ? 'fail' : worst >= d.fresh_threshold_days ? 'warn' : 'ok'
+  const state = tone === 'fail' ? 'Stale' : tone === 'warn' ? 'Aging' : 'OK'
   const names = copies.map(db => db.environment || db.name).join(' and ')
   return { name: 'Test copies', tone, state, figure: `${Math.round(worst)} days`, detail: `${names} copies of PROD, oldest`, href: '#infrastructure' }
 }

@@ -1,3 +1,4 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { fetchBusNextgen, generationSegments, movedWithoutEvidence, problemProofText, type BusNextgen, type NextgenReader, type NextgenStep } from './busNextgen'
@@ -117,7 +118,7 @@ export function BusGenerationSection() {
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-sm">
             {d.baselines.map(b => (
               <li key={b.key} title={b.note}>
-                {b.label}: {b.value != null ? <span className="font-mono-tabular">{Math.round(b.value)}</span> : <span className="text-amber-600">not measured ({b.unmeasured})</span>}
+                {b.label}: {b.value != null ? <span className="font-mono-tabular">{Math.round(b.value)}</span> : <span style={{ color: STATUS.unknown.ink }}>not measured ({b.unmeasured})</span>}
                 <span className="text-muted-foreground"> at {new Date(b.at).toLocaleString()}</span>
               </li>
             ))}
@@ -141,7 +142,7 @@ function ReaderEvidence({ readers }: { readers: NextgenReader[] }) {
   return (
     <div className="text-xs text-muted-foreground">
       <span title={running.map(r => `${r.id}: ${new Date(r.evidence?.last_seen ?? '').toLocaleString()}`).join('\n')}>{running.length} seen running here</span>
-      {missing.length > 0 && <span className="text-amber-600"> · no recent run: {missing.map(r => r.id).join(', ')}</span>}
+      {missing.length > 0 && <span style={{ color: STATUS.warn.ink }}> · no recent run: {missing.map(r => r.id).join(', ')}</span>}
     </div>
   )
 }
@@ -160,7 +161,7 @@ function StepTable({ steps }: { steps: NextgenStep[] }) {
             <td className="text-right">{s.total}</td>
             <td className="text-right">{s.cut}</td>
             <td className="text-right" title={s.unproven?.length ? `no recent run: ${s.unproven.join(', ')}` : undefined}>
-              {s.proven}{s.unproven?.length ? <span className="text-amber-600"> ({s.unproven.length} not)</span> : null}
+              {s.proven}{s.unproven?.length ? <span style={{ color: STATUS.warn.ink }}> ({s.unproven.length} not)</span> : null}
             </td>
             <td className="text-right">{s.retired}</td>
           </tr>

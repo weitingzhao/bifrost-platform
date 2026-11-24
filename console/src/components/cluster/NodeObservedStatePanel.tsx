@@ -1,4 +1,6 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import type { ClusterNode, NodePowerResponse } from '@/api/clusterTypes'
+import { WORD_OF_REACH } from '@/lib/shell/stateWords'
 import { buildNodeObservedStateRows, type ObservedStateLamp } from '@/lib/cluster/nodeObservedState'
 
 export type NodeObservedStateLayout = 'row' | 'column'
@@ -10,31 +12,8 @@ interface NodeObservedStatePanelProps {
   layout?: NodeObservedStateLayout
 }
 
-function gaugeColor(lamp: ObservedStateLamp): string {
-  switch (lamp) {
-    case 'ok':
-      return 'bg-emerald-500'
-    case 'degraded':
-      return 'bg-amber-500'
-    case 'fail':
-      return 'bg-red-500'
-    default:
-      return 'bg-zinc-400'
-  }
-}
-
-function gaugeTextColor(lamp: ObservedStateLamp): string {
-  switch (lamp) {
-    case 'ok':
-      return 'text-emerald-400'
-    case 'degraded':
-      return 'text-amber-400'
-    case 'fail':
-      return 'text-red-400'
-    default:
-      return 'text-zinc-500'
-  }
-}
+/** The lamp's colour is the engine's (STATUS, 2026-11-23): the dot takes its fill, the value its ink. */
+const statusOf = (lamp: ObservedStateLamp) => STATUS[WORD_OF_REACH[lamp]]
 
 function StateGauge({
   label,
@@ -47,10 +26,10 @@ function StateGauge({
 }) {
   return (
     <div className="flex items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5">
-      <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${gaugeColor(lamp)}`} />
+      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: statusOf(lamp).fill }} title={WORD_OF_REACH[lamp]} />
       <div className="min-w-0 flex-1">
         <p className="m-0 truncate text-dense-caption text-[var(--muted-foreground)]">{label}</p>
-        <p className={`m-0 truncate font-mono-tabular text-dense-body font-semibold ${gaugeTextColor(lamp)}`}>
+        <p className="m-0 truncate font-mono-tabular text-dense-body font-semibold" style={{ color: statusOf(lamp).ink }}>
           {value}
         </p>
       </div>

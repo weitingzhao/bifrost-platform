@@ -1,3 +1,4 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import { useQuery } from '@tanstack/react-query'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { fetchBusEffect, type BusEffectRow } from './busEffect'
@@ -8,7 +9,7 @@ function EffectRow({ row }: { row: BusEffectRow }) {
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
         <span className="text-sm font-medium">{row.label}</span>
         {row.unmeasured ? (
-          <span className="text-sm text-amber-600">Not measured: {row.unmeasured}</span>
+          <span className="text-sm" style={{ color: STATUS.unknown.ink }}>Not measured: {row.unmeasured}</span>
         ) : (
           <span className="font-mono-tabular text-sm">{row.value}</span>
         )}

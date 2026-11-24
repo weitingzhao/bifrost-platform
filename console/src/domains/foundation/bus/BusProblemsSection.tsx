@@ -1,3 +1,4 @@
+import { STATUS } from '@bifrost/ui/city/world'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag, type DenseTagVariant } from '@bifrost/ui'
@@ -41,7 +42,7 @@ export function BusProblemsSection() {
         {help && <Help />}
         <p className="m-0 text-xs font-mono-tabular" data-testid="bus-problem-counts">{countsLine(d.counts)}</p>
         {d.invalid.length > 0 && (
-          <p className="m-0 text-xs text-amber-600" data-testid="bus-problem-invalid">
+          <p className="m-0 text-xs" style={{ color: STATUS.warn.ink }} data-testid="bus-problem-invalid">
             Not counted: {d.invalid.map(i => `${i.sender} (${i.problem})`).join('; ')}
           </p>
         )}

@@ -211,7 +211,7 @@ describe('data tiles', () => {
   })
   it('names the degraded plugin first', () => {
     const tile = pluginsTile([{ name: 'IB', reach: 'degraded', loading: false }, { name: 'Massive', reach: 'ok', loading: false }, { name: 'IB Flex', reach: 'ok', loading: false }])
-    expect(tile).toMatchObject({ figure: 'IB degraded', state: 'Degraded', detail: 'Massive OK · IB Flex OK' })
+    expect(tile).toMatchObject({ figure: 'IB degraded', state: 'Degraded', detail: 'Massive ok · IB Flex ok' })
   })
   it('reads the research batch and the backups', () => {
     expect(researchTile({ data: { verdict: 'healthy', job_name: 'trading_day', overdue: false, detail: '', schedules_total: 39, schedules_running: 39,

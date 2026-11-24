@@ -19,13 +19,13 @@ const ARCH_META: Record<
     label: 'arm64',
     hint: 'ARM64 — edge / agent nodes',
     Icon: Cpu,
-    iconClass: 'text-amber-500',
+    iconClass: 'text-muted-foreground',
   },
   amd64: {
     label: 'amd64',
     hint: 'AMD64 — CI builds and general runtime',
     Icon: Server,
-    iconClass: 'text-sky-500',
+    iconClass: 'text-muted-foreground',
   },
 }
 

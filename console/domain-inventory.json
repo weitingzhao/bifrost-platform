@@ -1067,6 +1067,7 @@
       ],
       "external_imports": [
         "@bifrost/ui",
+        "@bifrost/ui/city/world",
         "@tanstack/react-query",
         "lucide-react",
         "react",
@@ -1193,6 +1194,7 @@
         "console/src/components/layout/PageToolbar.tsx",
         "console/src/components/layout/SectionRefreshButton.tsx",
         "console/src/components/layout/__tests__/denseTableHeadOrder.test.ts",
+        "console/src/components/layout/__tests__/noRawStatePalette.test.ts",
         "console/src/components/layout/collapseExpandAria.ts"
       ],
       "imports": [],
