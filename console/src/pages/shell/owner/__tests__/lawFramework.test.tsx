@@ -85,7 +85,7 @@ describe('the framework on the page', () => {
 })
 
 describe('Command → Laws reads', () => {
-  const body = { framework, laws: [law('83', '素材'), law('85', '素材')] }
+  const body = { framework, laws: [law('83', '素材'), law('85', '素材'), law('11', '废止')] }
   const mount = () => render(<QueryClientProvider client={new QueryClient()}><LawRegister /></QueryClientProvider>)
 
   it('through the engine on STG only', () => {
@@ -105,8 +105,9 @@ describe('Command → Laws reads', () => {
     expect(document.body.textContent).not.toMatch(/\d+ laws/)
     fireEvent.click(screen.getByLabelText('Show material (素材): 2, not laws'))
     await waitFor(() => expect(screen.getByText('law 83')).toBeTruthy())
-    // 2026-11-24 the Owner: "被废止的怎么还在？" Repealed rows are history, on their own switch, off by default.
-    expect((screen.getByLabelText('Show repealed (废止): 0, history only') as HTMLInputElement).checked).toBe(false)
+    expect(screen.queryByText('law 11')).toBeNull()
+    // 2026-11-24 the Owner on the repealed: "我觉得没必要...删掉..对于法律来说都是毒药": no repealed row, no switch for them.
+    expect(screen.queryByLabelText(/Show repealed/)).toBeNull()
   })
   it('says engine unreachable on STG and does not read the platform instead', async () => {
     wire.env = 'stg'

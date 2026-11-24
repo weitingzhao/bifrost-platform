@@ -34,14 +34,11 @@ export function LawRegister() {
   const laws = answer?.laws ?? null
   const unread = q.isError || q.isPaused
   const picked = useHashParam('law') ?? ''
-  // Owner 2026-11-24 "被废止的怎么还在？": repealed rows are history, on their own switch; the material on another. Both off.
-  const pickedRow = (laws ?? []).find(l => l.law === picked)
-  const [showMaterial, setShowMaterial] = useState(picked !== '' && pickedRow?.state !== REPEALED)
-  const [showRepealed, setShowRepealed] = useState(pickedRow?.state === REPEALED)
-  const behind = useMemo(() => materialOrder(behindSwitch(laws ?? [])), [laws])
-  const material = useMemo(() => behind.filter(l => l.state !== REPEALED), [behind])
-  const repealed = useMemo(() => behind.filter(l => l.state === REPEALED), [behind])
-  const hidden = useMemo(() => [...(showMaterial ? material : []), ...(showRepealed ? repealed : [])], [material, repealed, showMaterial, showRepealed])
+  // Owner 2026-11-24 on the repealed: "我觉得没必要...删掉..对于法律来说都是毒药". The page draws no repealed row; the
+  // register's own removal is the legislation line's. The material stays behind its switch, off by default.
+  const [showMaterial, setShowMaterial] = useState(picked !== '')
+  const material = useMemo(() => materialOrder(behindSwitch(laws ?? []).filter(l => l.state !== REPEALED)), [laws])
+  const hidden = useMemo(() => (showMaterial ? material : []), [material, showMaterial])
   const table = useMemo(() => lawRegisterTable(hidden), [hidden])
   const byLaw = useMemo(() => new Map((laws ?? []).map(l => [l.law, l])), [laws])
   const loading = q.isLoading || health.isLoading
@@ -68,16 +65,12 @@ export function LawRegister() {
             <input type="checkbox" checked={showMaterial} onChange={e => setShowMaterial(e.target.checked)} />
             {`Show material (素材): ${material.length}, not laws`}
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={showRepealed} onChange={e => setShowRepealed(e.target.checked)} />
-            {`Show repealed (废止): ${repealed.length}, history only`}
-          </label>
           {hidden.length > 0 ? (
             <LedgerGrid
               table={table}
               selected={picked}
               onSelect={key => { window.location.hash = lawHref(key) }}
-              scope="material (素材) and repealed (废止), as switched on: not laws; material no law absorbs first (GET /api/v1/agentrt/laws)"
+              scope="material (素材): not laws; what no law absorbs first (GET /api/v1/agentrt/laws)"
               detail={key => lawDetail(byLaw.get(key))}
             />
           ) : null}
