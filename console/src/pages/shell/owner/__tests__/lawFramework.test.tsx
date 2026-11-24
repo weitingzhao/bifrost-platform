@@ -103,8 +103,10 @@ describe('Command → Laws reads', () => {
     expect(screen.queryByText('law 83')).toBeNull()
     // 2026-11-24 立法线: the Owner read "85 laws" as 85 laws in the framework. The head counts by state; no "N laws".
     expect(document.body.textContent).not.toMatch(/\d+ laws/)
-    fireEvent.click(screen.getByLabelText('Show material (素材) and repealed (废止): 2, not laws'))
+    fireEvent.click(screen.getByLabelText('Show material (素材): 2, not laws'))
     await waitFor(() => expect(screen.getByText('law 83')).toBeTruthy())
+    // 2026-11-24 the Owner: "被废止的怎么还在？" Repealed rows are history, on their own switch, off by default.
+    expect((screen.getByLabelText('Show repealed (废止): 0, history only') as HTMLInputElement).checked).toBe(false)
   })
   it('says engine unreachable on STG and does not read the platform instead', async () => {
     wire.env = 'stg'

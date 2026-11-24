@@ -8,7 +8,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { LawFrameworkView } from './LawFramework'
-import { behindSwitch, frameworkLine, frameworkWord, materialOrder } from './lawFrameworkModel'
+import { behindSwitch, frameworkLine, frameworkWord, materialOrder, REPEALED } from './lawFrameworkModel'
 import { lawDetail, lawHref, lawRegisterTable } from './lawRegisterModel'
 
 const LAMP = { ok: 'ok', unknown: 'unknown', pending: 'unknown' } as const
@@ -34,8 +34,14 @@ export function LawRegister() {
   const laws = answer?.laws ?? null
   const unread = q.isError || q.isPaused
   const picked = useHashParam('law') ?? ''
-  const [showHidden, setShowHidden] = useState(picked !== '')
-  const hidden = useMemo(() => materialOrder(behindSwitch(laws ?? [])), [laws])
+  // Owner 2026-11-24 "被废止的怎么还在？": repealed rows are history, on their own switch; the material on another. Both off.
+  const pickedRow = (laws ?? []).find(l => l.law === picked)
+  const [showMaterial, setShowMaterial] = useState(picked !== '' && pickedRow?.state !== REPEALED)
+  const [showRepealed, setShowRepealed] = useState(pickedRow?.state === REPEALED)
+  const behind = useMemo(() => materialOrder(behindSwitch(laws ?? [])), [laws])
+  const material = useMemo(() => behind.filter(l => l.state !== REPEALED), [behind])
+  const repealed = useMemo(() => behind.filter(l => l.state === REPEALED), [behind])
+  const hidden = useMemo(() => [...(showMaterial ? material : []), ...(showRepealed ? repealed : [])], [material, repealed, showMaterial, showRepealed])
   const table = useMemo(() => lawRegisterTable(hidden), [hidden])
   const byLaw = useMemo(() => new Map((laws ?? []).map(l => [l.law, l])), [laws])
   const loading = q.isLoading || health.isLoading
@@ -59,15 +65,19 @@ export function LawRegister() {
       {laws ? (
         <section className="flex min-w-0 flex-col gap-2" data-laws-hidden>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} />
-            {`Show material (素材) and repealed (废止): ${hidden.length}, not laws`}
+            <input type="checkbox" checked={showMaterial} onChange={e => setShowMaterial(e.target.checked)} />
+            {`Show material (素材): ${material.length}, not laws`}
           </label>
-          {showHidden && hidden.length > 0 ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={showRepealed} onChange={e => setShowRepealed(e.target.checked)} />
+            {`Show repealed (废止): ${repealed.length}, history only`}
+          </label>
+          {hidden.length > 0 ? (
             <LedgerGrid
               table={table}
               selected={picked}
               onSelect={key => { window.location.hash = lawHref(key) }}
-              scope="material (素材) and repealed (废止): not laws; material no law absorbs yet first (GET /api/v1/agentrt/laws)"
+              scope="material (素材) and repealed (废止), as switched on: not laws; material no law absorbs first (GET /api/v1/agentrt/laws)"
               detail={key => lawDetail(byLaw.get(key))}
             />
           ) : null}
