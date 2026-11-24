@@ -21,12 +21,7 @@ parent run and TaskRun name; duplicate/missing names fail rather than collide.
 Results, input revision, output commit, statuses, timestamps, empty results and
 step exit code zero are preserved. No dependency edges or status judgment.
 
-`runLogOptions` uses existing `['ci-timing-logs', run]`, fixed cicd scope, only after
-an explicit click. `runLogReport` validates response run/namespace and supplies its
-own cluster identity, generated_at, receivedAt and last_log_at. Logs are independent
-of the timings snapshot, can contain per-container failures and are retained tails,
-not complete history. Original log transport has no AbortSignal parameter; this
-slice does not claim it can abort that transport. No new endpoint or cache is added.
+A run's log tail is read from the engine (`engineReportOptions({kind:'logs', run})`, engineRun.ts; /engine/v1/report?kind=logs), the projection moved there (bifrost-engine src/report.ts runLogReport). 2026-11-24 STG check: three runs' text and last log time equal to the direct read; only each read's generated_at differs. The Console's own log projection is gone; revert that commit to bring it back.
 
 `console/fixtures/observation-access/Reports.tsx` exposes Single run as a usable
 opt-in consumer. Changing the submitted target remounts local selection/log opt-in;

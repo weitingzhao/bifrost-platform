@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { runReport, runReportOptions, runLogOptions, runLogReport } from './run'
+import { runReport, runReportOptions } from './run'
+import { engineReportOptions } from './engineRun'
 import { RunReportPreview } from '../../../../fixtures/observation-access/RunReport'
 import type { PipelineTimings } from '@/api/ciTimings'
 const wire=vi.hoisted(()=>({read:vi.fn()}))
@@ -9,7 +10,11 @@ vi.mock('@/lib/platformAuth',()=>({getPlatformOperatorToken:()=> 'test-viewer'})
 vi.mock('@/api/serverContact',()=>({serverFetch:(...args:unknown[])=>wire.read(...args)}))
 afterEach(()=>{cleanup();wire.read.mockReset()})
 const raw:PipelineTimings={as_of:'2026-11-23T06:00:00Z',retained:1,limit:60,runs:[{name:'run-one',pipeline:'bifrost-ci-platform',revision:'input-sha',status:'VendorWaiting',created_at:'2026-11-23T05:50:00Z',params:{},results:[{name:'commit',value:'output-sha'}],skipped:['build'],tasks:[{name:'task-one',task:'check',status:'unknown',results:[{name:'count',value:'0'}],steps:[{name:'check',status:'terminated',exit_code:0}]}]}]}
-const log={cluster_id:'host-cluster',namespace:'cicd',run_name:'run-one',logs:'(unavailable: source denied)',generated_at:'2026-11-23T06:01:00Z'}
+// The engine's log report (bifrost-engine runLogReport), as /engine/v1/report?kind=logs answers it.
+const logReport={version:1,id:'["run-logs","host-cluster","cicd","run-one"]',capturedAt:'2026-11-23T06:01:05Z',scope:'host-cluster / cicd / run-one / log tail',objects:{},
+  evidence:[{source:'/api/v1/delivery/runs/run-one/logs?ns=cicd',receivedAt:'2026-11-23T06:01:05Z',evaluatedAt:'2026-11-23T06:01:00Z',outcome:'read'}],
+  panels:[{id:'logs',label:'Run log evidence',blocks:[{kind:'facts',rows:[{label:'Run',value:'run-one'},{label:'Last log at',value:'Not recorded'}]},{kind:'note',text:'(unavailable: source denied)'}]}]}
+const logEnvelope={version:1,model:'report',capturedAt:'2026-11-23T06:01:05Z',provenance:'live',evidence:logReport.evidence,data:logReport}
 // 2026-11-23 real workflow audit: preserve separate input/output revisions, missing steps and independent log timestamps.
 it('keeps exact task identities, source values and independent log evidence',()=>{
   const report=runReport(raw,'bifrost-ci-platform','run-one','2026-11-23T06:00:10Z')
@@ -23,10 +28,6 @@ it('keeps exact task identities, source values and independent log evidence',()=
   expect(()=>runReport(raw,'other','run-one',raw.as_of)).toThrow('identity')
   expect(()=>runReport({...raw,runs:[raw.runs[0],raw.runs[0]]},'bifrost-ci-platform','run-one',raw.as_of)).toThrow('identity')
   expect(()=>runReport({...raw,runs:[{...raw.runs[0],tasks:[raw.runs[0].tasks[0],raw.runs[0].tasks[0]]}]},'bifrost-ci-platform','run-one',raw.as_of)).toThrow('identity')
-  const logs=runLogReport(log,'run-one','2026-11-23T06:02:00Z')
-  expect(logs.evidence[0].evaluatedAt).toBe(log.generated_at)
-  expect(JSON.stringify(logs)).toContain('unavailable: source denied')
-  expect(()=>runLogReport({...log,namespace:'other'},'run-one',raw.as_of)).toThrow('identity')
 })
 it('shares existing exact-run cache and rejects cancelled late reads without fetching logs',async()=>{
   const client=new QueryClient()
@@ -36,8 +37,9 @@ it('shares existing exact-run cache and rejects cancelled late reads without fet
   expect(client.getQueryData(['ci-timing-run','bifrost-ci-platform','run-one'])).toEqual(raw)
   expect(wire.read.mock.calls[0][0]).toContain('run=run-one')
   expect(new Headers(wire.read.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer test-viewer')
-  expect(runLogOptions('run-one',false).enabled).toBe(false)
-  expect(runLogOptions('run-one',true).queryKey).toEqual(['ci-timing-logs','run-one'])
+  // 2026-11-24: the log tail is the engine's; read only on request, under the shell's engine key.
+  expect(engineReportOptions({kind:'logs',run:'run-one'},false).enabled).toBe(false)
+  expect(engineReportOptions({kind:'logs',run:'run-one'}).queryKey).toEqual(['engine','/engine/v1/report',{kind:'logs',run:'run-one'}])
   let finish!:(r:Response)=>void
   wire.read.mockImplementation(()=>new Promise(resolve=>{finish=resolve}))
   const pending=client.fetchQuery(runReportOptions('bifrost-ci-platform','run-two')).catch(e=>e)
@@ -48,7 +50,7 @@ it('shares existing exact-run cache and rejects cancelled late reads without fet
   client.clear()
 })
 it('consumer reads nothing until submit, selects a task and loads only requested logs',async()=>{
-  wire.read.mockImplementation(async(url:string)=>Response.json(url.includes('/logs')?log:raw))
+  wire.read.mockImplementation(async(url:string)=>Response.json(url.includes('kind=logs')?logEnvelope:raw))
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
   render(<QueryClientProvider client={client}><RunReportPreview/></QueryClientProvider>)
   expect(wire.read).not.toHaveBeenCalled()

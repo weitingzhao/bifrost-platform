@@ -1,7 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
 import { fetchCITimings, type PipelineTimings, type TimingResult } from '@/api/ciTimings'
-import { fetchPipelineRunLogs } from '../api/delivery'
-import type { DeliveryRunLogsResponse } from '../api/deliveryTypes'
 import type { ObservationReport } from '@bifrost/ui/city/observationReport'
 import type { Block } from '@bifrost/ui/city/cards'
 import type { ReadEvidence } from '@bifrost/ui/city/observation'
@@ -13,11 +11,6 @@ export function runReportOptions(pipeline: string, run: string) {
     staleTime:30_000,refetchInterval:30_000,retry:false})
 }
 
-/** Existing log readers are scoped to this host's cicd namespace. No eager log fan-out. */
-export function runLogOptions(run: string, enabled: boolean) {
-  return queryOptions({queryKey:['ci-timing-logs',run] as const,
-    queryFn:()=>fetchPipelineRunLogs(run,'cicd'),enabled:enabled && !!run,staleTime:60_000,retry:false})
-}
 const missing = 'Not recorded'
 const resultsBlock = (results: TimingResult[]): Block => ({kind:'table',head:[{label:'Result'},{label:'Value'}],
   rows:results.map((r,i)=>({key:String(i),cells:[r.name,r.value === '' ? '(empty)' : r.value]})),empty:'No results retained.'})
@@ -50,15 +43,4 @@ export function runReport(data: PipelineTimings, pipeline: string, name: string,
     {kind:'facts',rows:[{label:'Parent run',value:name},{label:'Task',value:t.task},{label:'Status',value:t.status}]},
     {kind:'table',head:['Step','Status','Started at','Finished at','Exit code'].map(label=>({label})),rows:t.steps.map((s,i)=>({key:String(i),cells:[s.name,s.status,s.started_at??missing,s.finished_at??missing,s.exit_code??missing]})),empty:'No step timestamps retained.'},resultsBlock(t.results),
   ]}]))}
-}
-
-/** Logs are a separate read with separate source times, never part of the timings snapshot. */
-export function runLogReport(data: DeliveryRunLogsResponse, name: string, receivedAt: string): ObservationReport {
-  if(data.run_name!==name || data.namespace!=='cicd') throw new Error('Run logs: source identity does not match the requested run')
-  const evidence:ReadEvidence[]=[{source:`/api/v1/delivery/runs/${encodeURIComponent(name)}/logs?ns=cicd`,receivedAt,evaluatedAt:data.generated_at,outcome:'read',detail:'Independent log-tail read. Per-container failures may appear in the text. No expiry or full-history guarantee.'}]
-  return {version:1,id:JSON.stringify(['run-logs',data.cluster_id,'cicd',name,data.generated_at,receivedAt]),capturedAt:receivedAt,
-    scope:`${data.cluster_id} / cicd / ${name} / log tail`,evidence,objects:{},panels:[{id:'logs',label:'Run log evidence',blocks:[
-      {kind:'facts',rows:[{label:'Run',value:name},{label:'Last log at',value:data.last_log_at??missing}]},
-      {kind:'note',text:data.logs || 'No log text supplied; not proof that the run never executed.'},
-    ]}]}
 }

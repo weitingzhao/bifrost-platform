@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ObservationReportView, type ObservationReport } from '@bifrost/ui/city/observationReport'
-import { runReportOptions, runReport, runLogOptions, runLogReport } from '@/domains/delivery/observation-report/run'
+import { runReportOptions, runReport } from '@/domains/delivery/observation-report/run'
+import { engineReportOptions } from '@/domains/delivery/observation-report/engineRun'
 
 function Report({make,error,source,receivedAt}:{make:()=>ObservationReport|undefined;error:Error|null;source:string;receivedAt:number}) {
   const [selected,onSelect]=useState('')
@@ -13,11 +14,12 @@ function Report({make,error,source,receivedAt}:{make:()=>ObservationReport|undef
 function SelectedRun({pipeline,run}:{pipeline:string;run:string}) {
   const timings=useQuery(runReportOptions(pipeline,run))
   const [readLogs,setReadLogs]=useState(false)
-  const logs=useQuery(runLogOptions(run,readLogs))
+  // The log tail is the engine's (engine step 6, kind=logs; 2026-11-24 STG check: text and last log time equal to the direct read).
+  const logs=useQuery(engineReportOptions({kind:'logs',run},readLogs))
   return <>
     <Report make={()=>timings.data?runReport(timings.data,pipeline,run,new Date(timings.dataUpdatedAt).toISOString()):undefined} error={timings.error} source="Selected run timings" receivedAt={timings.errorUpdatedAt || timings.dataUpdatedAt}/>
     <button onClick={()=>{if(readLogs)void logs.refetch();else setReadLogs(true)}} disabled={logs.isFetching}>{readLogs ? 'Refresh run log tail' : "Read this run's log tail"}</button>
-    {readLogs && <Report make={()=>logs.data?runLogReport(logs.data,run,new Date(logs.dataUpdatedAt).toISOString()):undefined} error={logs.error} source="Selected run logs" receivedAt={logs.errorUpdatedAt || logs.dataUpdatedAt}/>}
+    {readLogs && <Report make={()=>logs.data} error={logs.error} source="Engine run log report" receivedAt={logs.errorUpdatedAt || logs.dataUpdatedAt}/>}
   </>
 }
 export function RunReportPreview() {
