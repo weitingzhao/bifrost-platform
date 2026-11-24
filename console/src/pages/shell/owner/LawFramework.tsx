@@ -1,5 +1,5 @@
 import type { LawFramework as Framework, RegisterLaw } from '@/api/lawRegister'
-import { inForceAt, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
+import { coverageLine, inForceAt, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
 
 const Unknown = ({ what }: { what: string }) => (
   <span className="text-muted-foreground" title={`${what}: not sent by this platform`}>{UNKNOWN}</span>
@@ -44,7 +44,12 @@ export function LawFrameworkView({ framework: fw, laws }: { framework: Framework
                   <p className="m-0 text-sm">{level.meaning || <Unknown what="meaning" />}</p>
                   <p className="m-0 text-xs text-muted-foreground">Required: {level.required ? requiredLabels(level, fw.fields).join(' · ') : UNKNOWN}</p>
                   {here.length > 0 ? (
-                    <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">{here.map(l => <li key={l.law}>{`Law ${l.law}: ${l.text}`}</li>)}</ul>
+                    <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">{here.map(l => (
+                      <li key={l.law} data-in-force-law={l.law}>
+                        {`Law ${l.law}: ${l.text}`}
+                        {l.frame?.absorbs && l.frame.absorbs.length > 0 ? <span className="block text-xs text-muted-foreground">{`Absorbs material ${l.frame.absorbs.join(', ')}`}</span> : null}
+                      </li>
+                    ))}</ul>
                   ) : null}
                 </li>
               )
@@ -91,6 +96,8 @@ export function LawFrameworkView({ framework: fw, laws }: { framework: Framework
             <li key={s} data-state={s}><span className="text-muted-foreground">{s}</span> {n ?? <Unknown what={s} />}</li>
           ))}
         </ul>
+        {/* Step two (Owner 2026-11-24): the material distilled into laws one by one, then repealed once all is covered. */}
+        <p className="m-0 text-sm" data-coverage>{coverageLine(fw)}</p>
       </Block>
 
       {fw.source ? <p className="m-0 text-xs text-muted-foreground">Source: {fw.source}</p> : null}

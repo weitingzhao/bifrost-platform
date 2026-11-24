@@ -57,3 +57,20 @@ export function stateTally(laws: readonly RegisterLaw[]): string {
   return [...STATE_ORDER.map(s => `${s} ${n(s)}`), ...(unknown > 0 ? [`state unknown ${unknown}`] : [])].join(' · ')
 }
 export const inForceCount = (laws: readonly RegisterLaw[]): number => laws.filter(l => l.state === IN_FORCE).length
+
+/**
+ * Step two (Owner 2026-11-24): the material is distilled into laws in force one by one; once every piece is absorbed
+ * the material is repealed in one go. The platform counts it (framework.coverage); this only says it.
+ */
+export function coverageLine(fw: LawFramework | null | undefined): string {
+  const c = fw?.coverage
+  if (!c) return `material covered: ${UNKNOWN}`
+  return `material covered ${c.covered} / ${c.material}` + (c.material > 0 && c.covered === c.material ? ' · all covered: ready to repeal the material' : '')
+}
+
+/** The material rows first those no law absorbs yet, then the absorbed; each group by number. */
+export function materialOrder(laws: readonly RegisterLaw[]): RegisterLaw[] {
+  const num = (l: RegisterLaw) => Number(l.law) || 0
+  const open = (l: RegisterLaw) => (l.state === MATERIAL && !(l.absorbed_by && l.absorbed_by.length > 0) ? 0 : 1)
+  return [...laws].sort((a, b) => open(a) - open(b) || num(a) - num(b))
+}

@@ -8,7 +8,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { LawFrameworkView } from './LawFramework'
-import { behindSwitch, frameworkLine, frameworkWord } from './lawFrameworkModel'
+import { behindSwitch, frameworkLine, frameworkWord, materialOrder } from './lawFrameworkModel'
 import { lawDetail, lawHref, lawRegisterTable } from './lawRegisterModel'
 
 const LAMP = { ok: 'ok', unknown: 'unknown', pending: 'unknown' } as const
@@ -35,7 +35,7 @@ export function LawRegister() {
   const unread = q.isError || q.isPaused
   const picked = useHashParam('law') ?? ''
   const [showHidden, setShowHidden] = useState(picked !== '')
-  const hidden = useMemo(() => behindSwitch(laws ?? []), [laws])
+  const hidden = useMemo(() => materialOrder(behindSwitch(laws ?? [])), [laws])
   const table = useMemo(() => lawRegisterTable(hidden), [hidden])
   const byLaw = useMemo(() => new Map((laws ?? []).map(l => [l.law, l])), [laws])
   const loading = q.isLoading || health.isLoading
@@ -67,7 +67,7 @@ export function LawRegister() {
               table={table}
               selected={picked}
               onSelect={key => { window.location.hash = lawHref(key) }}
-              scope="material (素材) and repealed (废止): not laws (GET /api/v1/agentrt/laws)"
+              scope="material (素材) and repealed (废止): not laws; material no law absorbs yet first (GET /api/v1/agentrt/laws)"
               detail={key => lawDetail(byLaw.get(key))}
             />
           ) : null}

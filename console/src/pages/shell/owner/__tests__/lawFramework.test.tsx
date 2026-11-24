@@ -15,7 +15,8 @@ vi.mock('@/api/core', () => ({ fetchSelfHealth: async () => ({ viewer_env: wire.
 import { engineLawsOn } from '@/api/lawRegister'
 import { LawRegister } from '@/pages/shell/owner/LawRegister'
 import { LawFrameworkView } from '@/pages/shell/owner/LawFramework'
-import { behindSwitch, frameworkLine, inForceAt, inForceCount, requiredLabels, stateCounts, stateTally } from '@/pages/shell/owner/lawFrameworkModel'
+import { behindSwitch, coverageLine, frameworkLine, inForceAt, inForceCount, materialOrder, requiredLabels, stateCounts, stateTally } from '@/pages/shell/owner/lawFrameworkModel'
+import { lawRegisterTable } from '@/pages/shell/owner/lawRegisterModel'
 
 const framework: LawFramework = {
   version: 'v1', source: '法的框架 v1, approved by the Owner',
@@ -117,5 +118,30 @@ describe('Command → Laws reads', () => {
     mount()
     await waitFor(() => expect(screen.getByText('This platform does not send the framework yet: unknown.')).toBeTruthy())
     expect(String(wire.read.mock.calls[0][0])).toBe('/api/v1/agentrt/laws')
+  })
+})
+
+// 2026-11-24 the Owner, step two: "我们一条条提炼，然后一条条放，最后一次性确认新法涵盖老的85条吐槽后，就可以把85条删掉".
+// The platform counts the coverage (立法线 44065b1c: framework.coverage, absorbed_by, frame.absorbs); the page says it.
+describe('step two: the material covered by laws in force', () => {
+  it('says covered / material, and when all is covered that the material can be repealed', () => {
+    expect(coverageLine({ coverage: { material: 69, covered: 0, uncovered: [] } })).toBe('material covered 0 / 69')
+    expect(coverageLine({ coverage: { material: 69, covered: 69, uncovered: [] } })).toBe('material covered 69 / 69 · all covered: ready to repeal the material')
+    expect(coverageLine({})).toBe('material covered: unknown')
+  })
+  it('lists the material no law absorbs yet first, and says which law absorbs the rest', () => {
+    const rows = [{ ...law('3', '素材'), absorbed_by: ['90'] }, law('7', '素材'), law('5', '废止'), law('1', '素材')]
+    expect(materialOrder(rows).map(l => l.law)).toEqual(['1', '7', '3', '5'])
+    const t = lawRegisterTable(materialOrder(rows))
+    const absorbed = (key: string) => t.rows.find(r => r.key === key)!.cells.at(-1)
+    expect(absorbed('3')).toBe('Law 90')
+    expect(absorbed('1')).toMatchObject({ text: 'none' })
+    expect(absorbed('5')).toBe('—')
+  })
+  it('shows under its level what a law in force absorbs', () => {
+    const inForce: RegisterLaw = { ...law('90', '现行', 2), frame: { level: 2, absorbs: ['3', '12'] } }
+    render(<LawFrameworkView framework={{ ...framework, coverage: { material: 69, covered: 2, uncovered: [] } }} laws={[inForce]} />)
+    expect(document.querySelector('[data-in-force-law="90"]')?.textContent).toContain('Absorbs material 3, 12')
+    expect(document.querySelector('[data-coverage]')?.textContent).toBe('material covered 2 / 69')
   })
 })

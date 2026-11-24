@@ -37,7 +37,9 @@ export type RegisterLaw = {
   /** 现行, 素材 or 废止 under the framework (planstore lawsview.go); absent from an older platform. */
   state?: string
   /** Where the law sits in the framework (level, scope, subject, modality, parent, enforcement…); absent until a card frames it. */
-  frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; [more: string]: unknown }
+  frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; absorbs?: string[]; [more: string]: unknown }
+  /** On a material row: the laws in force that absorb it (立法线 44065b1c); absent when none does. */
+  absorbed_by?: string[]
 }
 
 /**
@@ -60,6 +62,8 @@ export type LawFramework = {
   between?: string[]
   integrity?: string[]
   stage_note?: string
+  /** How much of the material the laws in force absorb (立法线 44065b1c): absent from an older platform. */
+  coverage?: { material: number; covered: number; uncovered: string[] }
 }
 
 /** GET /api/v1/agentrt/laws as a whole: the framework (null when the platform does not send it yet) and the laws. */

@@ -67,7 +67,7 @@ export function lawRegisterTable(laws: readonly RegisterLaw[]): Extract<Block, {
     kind: 'table',
     head: [
       { label: 'Law', num: true }, { label: 'Text' }, { label: 'Status' }, { label: 'Said on' }, { label: 'Enforced by' },
-      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true }, { label: 'State' },
+      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true }, { label: 'State' }, { label: 'Absorbed by' },
     ],
     rows: laws.map(l => {
       const has = l.counts != null
@@ -81,6 +81,9 @@ export function lawRegisterTable(laws: readonly RegisterLaw[]): Extract<Block, {
         count(l.counts?.missed, 'warn', has),
         count(l.counts?.unmeasured, 'unknown', has),
         l.state ?? { text: 'unknown', title: 'The platform did not say this law\'s state' },
+        // Step two (Owner 2026-11-24): which law in force absorbs this material; "none" until one does.
+        l.absorbed_by && l.absorbed_by.length > 0 ? l.absorbed_by.map(n => `Law ${n}`).join(', ')
+          : l.state === '素材' ? { text: 'none', title: 'No law in force absorbs this material' } : '—',
       ]
       return { key: l.law, cells }
     }),
