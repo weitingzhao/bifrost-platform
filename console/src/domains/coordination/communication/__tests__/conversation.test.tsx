@@ -50,3 +50,12 @@ it('says a letter older than the loaded history is out of reach, never with its 
   world({})
   expect(screen.queryByText(/older than the history/)).toBeNull()
 })
+
+// 2026-11-24: with the platform's letter summaries, a card says what the letter says (control: no summary → its kind).
+it('puts the letter’s own line on its card when the source has one', () => {
+  const withSummary={...snapshot,exchanges:exchangesOf([...facts,{ id:'s4', communication:'m_said', channel:'message', stage:'sent', from:'thread:b', to:'thread:a', label:'ask', summary:'Who owns counter.windows?', evidence:ev('4','2026-11-23T21:50:00Z') }])}
+  const {container}=render(<AgentWorld snapshot={withSummary} stationImage="" cityHref="#city" consoleHref="#console"/>)
+  const spans=[...container.querySelectorAll('.agent-time-events button span')].map(s=>s.textContent)
+  expect(spans).toContain('Who owns counter.windows?')
+  expect(spans).toContain('ask')
+})

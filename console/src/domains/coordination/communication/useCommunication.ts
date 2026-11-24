@@ -83,7 +83,8 @@ export function useCommunicationObservation() {
     const busNote = 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '.'
     return { snapshot: engineSnapshot(engine.data, engine.error, facts, busNote), history: {
       loadOlder: () => {}, loading: false, hasOlder: false,
-      note: (engine.data?.coverage.history.note ?? 'Reading through the engine; history coverage is not known yet.') + ' Loading earlier history is not switched to the engine yet.',
+      // The engine's history note is written for programs ("read again with before=…"); the page says it plainly.
+      note: !engine.data ? 'Reading letters; how far back they go is not known yet.' : engine.data.coverage.history.hasOlder ? 'Earlier letters exist; loading them on this page is not available yet.' : 'This is as far back as the letters are kept.',
     } }
   }
   return { snapshot, history: {

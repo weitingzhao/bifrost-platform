@@ -14,7 +14,7 @@ export function messageFacts(events: readonly RuntimeEventRow[]): CommunicationF
     if (!id || !['message_posted', 'seat.mail.arrived', 'message_acked'].includes(e.event_type)) return []
     return [{ id: 'agentrt:' + e.event_id, communication: id, channel: 'message' as const,
       stage: e.event_type === 'message_posted' ? 'sent' as const : e.event_type === 'seat.mail.arrived' ? 'delivered' as const : 'acknowledged' as const,
-      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to) ?? mailbox(e.event_stream_id), label: string(e.body.kind), replyTo: string(e.body.reply_to) } : { to: mailbox(e.event_stream_id) ?? string(e.body.to) }),
+      ...(e.event_type === 'message_posted' ? { from: e.actor_id, to: string(e.body.to) ?? mailbox(e.event_stream_id), label: string(e.body.kind), replyTo: string(e.body.reply_to), summary: string(e.body.summary) } : { to: mailbox(e.event_stream_id) ?? string(e.body.to) }),
       evidence: { id: String(e.event_id), source: 'agentrt/events', at: e.at, actor: e.actor_id } }]
   })
 }

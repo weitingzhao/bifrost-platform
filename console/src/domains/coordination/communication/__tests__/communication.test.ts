@@ -84,3 +84,15 @@ it('names the recipient of an ACK-only letter from its mailbox stream and leaves
   const [y] = exchangesOf(messageFacts([{ ...ack, event_id: 10, event_stream_id: 'mission:x', body: { message_id: 'm_3' } }]))
   expect(y.to).toBeUndefined()
 })
+
+// 2026-11-24 the Owner's phone review: cards could only say "Sent / note", the letter's words were not in the events.
+// The platform now puts the sender's one-line summary on message_posted (body.summary, typed letters only).
+it('carries the sender’s summary of a letter, and keeps the kind when a letter has none', () => {
+  const posted = (id: number, body: Record<string, unknown>) => ({ event_id: id, event_stream_id: 'mbox:thread:local_b', event_type: 'message_posted', actor_id: 'thread:local_a', body: { message_id: 'm_' + id, to: 'thread:local_b', kind: 'note', ...body }, at: '2026-11-24T07:30:00Z' }) as RuntimeEventRow
+  const [withSummary, without] = exchangesOf(messageFacts([posted(1, { summary: 'Who owns counter.windows?' }), posted(2, {})]))
+  expect(withSummary.summary).toBe('Who owns counter.windows?')
+  expect(withSummary.label).toBe('note')
+  // Control: an untyped or older letter has no summary and nothing is made up.
+  expect(without.summary).toBeUndefined()
+  expect(without.label).toBe('note')
+})
