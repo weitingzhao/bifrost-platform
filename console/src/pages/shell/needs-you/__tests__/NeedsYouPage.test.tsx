@@ -206,7 +206,9 @@ describe('NeedsYouPage', () => {
     expect(within(actions).getAllByRole('link')).toHaveLength(2)
     expect(laws.querySelector(':scope > h3')?.textContent).toBe('Laws · 1')
     await waitFor(() => expect(actions.querySelector(':scope > h3')?.textContent).toBe('Actions · 2'))
-    await waitFor(() => expect(document.querySelector('[data-kind-summary]')?.textContent).toBe('1 law · 2 actions waiting'))
+    await waitFor(() => expect(document.querySelector('[data-kind-summary]')?.textContent).toBe('1 law · 2 actions · ? sign-offs waiting'))
+    // Sign-offs stand in their own section (箭10 2026-11-24); the plan read fails in this stub, so its count is "?".
+    expect(document.querySelector('[data-ticket-kind="signoff"] > h3')?.textContent).toBe('Sign-offs · ?')
   })
 
   it('lists pending requests as links with waited and remaining time, and no approve button', async () => {

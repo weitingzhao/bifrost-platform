@@ -23,6 +23,9 @@ describe('ticket kind', () => {
     expect(kindSummary(2, 5)).toBe('2 laws · 5 actions waiting')
     expect(kindSummary(1, 1)).toBe('1 law · 1 action waiting')
     expect(kindSummary(null, 3)).toBe('? laws · 3 actions waiting')
+    // 2026-11-24 箭10: sign-offs are their own kind, said apart; unread is "?".
+    expect(kindSummary(0, 0, 6)).toBe('0 laws · 0 actions · 6 sign-offs waiting')
+    expect(kindSummary(1, 0, null)).toBe('1 law · 0 actions · ? sign-offs waiting')
   })
 })
 

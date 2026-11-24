@@ -12,9 +12,9 @@ describe('frame waiting', () => {
   })
   it('reads what the shell published, and follows a new count', () => {
     const { result } = renderHook(() => useFrameWaiting())
-    act(() => publishFrameWaiting({ laws: 2, actions: 5, href: '#command?section=waiting' }))
-    expect(result.current).toEqual({ laws: 2, actions: 5, href: '#command?section=waiting' })
-    act(() => publishFrameWaiting({ laws: null, actions: 5, href: '#command?section=waiting', why: 'questions not read' }))
+    act(() => publishFrameWaiting({ laws: 2, actions: 5, signoffs: 6, href: '#command?section=waiting' }))
+    expect(result.current).toEqual({ laws: 2, actions: 5, signoffs: 6, href: '#command?section=waiting' })
+    act(() => publishFrameWaiting({ laws: null, actions: 5, signoffs: 6, href: '#command?section=waiting', why: 'questions not read' }))
     expect(result.current?.laws).toBeNull()
   })
 })

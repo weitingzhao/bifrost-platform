@@ -3629,6 +3629,7 @@
         "console/src/api/clusterTypes.ts",
         "console/src/lib/control-room",
         "console/src/lib/control-room/fleetSnapshot.ts",
+        "console/src/pages/shell/agents",
         "console/src/pages/shell/needs-you",
         "console/src/pwa"
       ],

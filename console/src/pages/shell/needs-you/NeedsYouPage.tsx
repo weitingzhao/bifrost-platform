@@ -218,6 +218,8 @@ export function NeedsYouPage() {
   const dr = useMemo(() => splitApprovals(drills), [drills])
   const q = useMemo(() => splitQuestions(openQuestions), [openQuestions])
   const qAll = useMemo(() => splitQuestions(questions), [questions])
+  const signoffRead = useSignoffWaits()
+  const signoffCount = signoffRead.read === 'ok' ? signoffRead.waits.length : null
   const { laws: lawCount, actions: actionCount } = waitingKinds({
     approvalsKnown: openCount.state === 'known',
     questionsKnown: !questionsLoading && !questionsUnreadable && !questionsStale,
@@ -277,7 +279,7 @@ export function NeedsYouPage() {
         <p className="m-0 text-sm text-muted-foreground">{EARLIER_NOTIFICATIONS}</p>
       ) : null}
       {openBody}
-      <p className="m-0 text-sm font-medium" data-kind-summary>{kindSummary(lawCount, actionCount)}</p>
+      <p className="m-0 text-sm font-medium" data-kind-summary>{kindSummary(lawCount, actionCount, signoffCount)}</p>
       {questionsLoading ? (
         <p className="m-0 text-sm text-muted-foreground" data-questions-state="loading">
           Loading…
@@ -326,7 +328,11 @@ export function NeedsYouPage() {
         <Note>Claude sessions that went quiet.</Note>
         {stalled}
       </Group>
-      <SignoffGroup />
+      <section aria-label="Sign-offs" data-ticket-kind="signoff" className="flex w-full min-w-0 flex-col gap-3">
+        <h3 className="m-0 text-sm font-semibold">Sign-offs · {signoffCount ?? '?'}</h3>
+        <p className="m-0 text-xs text-muted-foreground">Accepting what others delivered: plan steps that wait on your sign-off.</p>
+        <SignoffGroup />
+      </section>
       <Note>
         Closed requests, audit, and patrol runs are in{' '}
         <a href="#records?tab=closed" className="underline">

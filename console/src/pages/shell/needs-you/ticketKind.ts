@@ -46,10 +46,15 @@ export function splitQuestions<T extends Pick<Question, 'owner_duty'>>(items: re
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
-/** "2 laws · 5 actions waiting"; a count that could not be read says "?", never 0. */
-export function kindSummary(laws: number | null, actions: number | null): string {
+/**
+ * "2 laws · 5 actions · 6 sign-offs waiting"; a count that could not be read says "?", never 0. Sign-offs are their own
+ * kind (箭10 2026-11-24): the Owner accepting what others delivered is neither a change of law nor executive work.
+ */
+export function kindSummary(laws: number | null, actions: number | null, signoffs?: number | null): string {
   const part = (n: number | null, one: string) => (n == null ? `? ${one}s` : plural(n, one))
-  return `${part(laws, 'law')} · ${part(actions, 'action')} waiting`
+  const parts = [part(laws, 'law'), part(actions, 'action')]
+  if (signoffs !== undefined) parts.push(part(signoffs, 'sign-off'))
+  return `${parts.join(' · ')} waiting`
 }
 
 /**
