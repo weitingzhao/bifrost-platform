@@ -81,7 +81,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		src.Approval = approvalfacts.ByNumber(ap.Lookup)
 		// The executed law_amend cards the store holds, as the plan's law
 		// cards, their params read by the approvals' own reader
-		// (actions.ReadLawAmend); a card that does not read is skipped, since
+		// (planstore.ReadLawAmend, legislation's); a card that does not read is skipped, since
 		// the store refused it at creation.
 		src.Laws = func(context.Context) ([]planstore.LawCard, bool) {
 			all, err := ap.Observations()
@@ -93,7 +93,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 				if a.Action != actions.LawAmendAction || a.Status != approvals.StatusExecuted {
 					continue
 				}
-				la, err := actions.ReadLawAmend(a.Params)
+				la, err := planstore.ReadLawAmend(a.Params)
 				if err != nil {
 					continue
 				}
@@ -101,9 +101,7 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 				if !a.DecidedAt.IsZero() {
 					c.DecidedOn = a.DecidedAt.UTC().Format("2006-01-02")
 				}
-				for _, st := range la.Standards {
-					c.Standards = append(c.Standards, planstore.LawStandard{ID: st.ID, Standard: st.Standard, Measure: st.Measure})
-				}
+				c.Standards = la.Standards
 				out = append(out, c)
 			}
 			return out, true

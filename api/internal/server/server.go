@@ -293,22 +293,11 @@ func New(cfg *config.Config) (*Server, error) {
 		}
 		return nil, errors.New("the agent runtime database is not wired")
 	}
-	actions.SetLawRegister(&actions.LawRegister{
-		Current: func(ctx context.Context, n string) (string, string, bool, error) {
-			db, err := lawDB()
-			if err != nil {
-				return "", "", false, err
-			}
-			l, ok, err := planstore.CurrentLaw(ctx, db, n)
-			return l.Text, l.Status, ok, err
-		},
-		Next: func(ctx context.Context) (string, error) {
-			db, err := lawDB()
-			if err != nil {
-				return "", err
-			}
-			return planstore.NextLawNumber(ctx, db)
-		},
+	lawLookup := planstore.DBLawLookup(lawDB)
+	actions.SetLawCard(&actions.LawCard{
+		Check:   func(ctx context.Context, p map[string]any) error { return planstore.CheckLawCard(ctx, lawLookup, p) },
+		Summary: func(ctx context.Context, p map[string]any) string { return planstore.LawCardSummary(ctx, lawLookup, p) },
+		Read:    func(p map[string]any) (any, error) { return planstore.ReadLawAmend(p) },
 	})
 	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())

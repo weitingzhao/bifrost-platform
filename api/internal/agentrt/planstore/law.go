@@ -27,7 +27,9 @@ import (
 
 // LawStandard is one measurable standard of the law, as the card states it.
 type LawStandard struct {
-	ID, Standard, Measure string
+	ID       string `json:"id"`
+	Standard string `json:"standard"`
+	Measure  string `json:"measure"`
 }
 
 // LawCard is an executed law_amend card, as the approval store holds it.
