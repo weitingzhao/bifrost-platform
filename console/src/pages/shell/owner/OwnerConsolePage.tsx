@@ -1,4 +1,5 @@
 import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
+import { LawRegister } from './LawRegister'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
 import { ServiceVersions } from '../services/ServiceVersions'
@@ -68,6 +69,8 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <OwnerGpuPower nodes={data.nodes} openApprovals={current(data.needsYou.query)} recentApprovals={current(data.needsYou.handledQuery)} now={data.now} />}
     {blocks.you && <OwnerYou data={data} />}
     {blocks.you && <OwnerWaiting />}
+    {/* The register of laws (箭10 2026-11-24): its own entry on Command, beside what waits on him; a law card links here. */}
+    {blocks.you && <DomainSection id="laws" label="Laws"><LawRegister /></DomainSection>}
     {(blocks.work || blocks.system) && <RuntimeHealthNotice progress={data.runtime} now={data.now} />}
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <><OwnerSystem data={data} /><OwnerData data={data} infrastructure /></>}

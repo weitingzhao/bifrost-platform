@@ -10,6 +10,14 @@ import { approvalHref, formatShellHash } from '@/lib/shell/consoleRoutes'
 import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
 import { partOfLine, type ProgressPart } from '@/pages/shell/progress/progressPart'
 import { ApprovalRowPlanSteps } from '@/pages/shell/needs-you/ApprovalPlanSteps'
+import { lawHref } from '@/pages/shell/owner/lawRegisterModel'
+import { LAW_ACTIONS } from '@/pages/shell/needs-you/ticketKind'
+
+/** The law a law card changes (params.law), or null for any other card. */
+function lawOf(item: { action: string; params: Record<string, unknown> }): string | null {
+  const law = item.params?.law
+  return LAW_ACTIONS.has(item.action) && typeof law === 'string' && law.trim() !== '' ? law.trim() : null
+}
 
 /**
  * One request as a link to its page. No buttons here: approve and reject live on
@@ -78,6 +86,12 @@ export function ApprovalRow({
           className="mt-1 block max-h-5 min-w-0 max-w-full truncate text-sm text-muted-foreground underline pointer-coarse:max-h-none pointer-coarse:py-3"
         >
           {partOfLine(partOf)}
+        </a>
+      ) : null}
+      {lawOf(item) ? (
+        // A law card leads to the law it changes in the register (Command → Laws, 箭10 2026-11-24).
+        <a href={lawHref(lawOf(item)!)} data-law-link className="mt-1 block min-w-0 text-sm text-muted-foreground underline pointer-coarse:py-3">
+          {`Law ${lawOf(item)} in the register`}
         </a>
       ) : null}
       {planSteps ? <ApprovalRowPlanSteps number={item.number} /> : null}

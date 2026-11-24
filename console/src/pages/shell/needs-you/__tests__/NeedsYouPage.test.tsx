@@ -192,7 +192,7 @@ describe('NeedsYouPage', () => {
     stubFetch(() =>
       json(
         buildApprovalListResponse([
-          buildPlatformApproval({ id: 'law-1', action: 'law_amend', created_at: created }),
+          buildPlatformApproval({ id: 'law-1', action: 'law_amend', params: { law: '73' }, created_at: created }),
           buildPlatformApproval({ id: 'act-1', action: 'drain_node', tier: 'D', created_at: created }),
           buildPlatformApproval({ id: 'act-2', created_at: created }),
         ]),
@@ -202,7 +202,9 @@ describe('NeedsYouPage', () => {
     await waitFor(() => expect(document.querySelector('[data-needs-you-count="3"]')).toBeTruthy())
     const laws = document.querySelector('[data-ticket-kind="law"]') as HTMLElement
     const actions = document.querySelector('[data-ticket-kind="action"]') as HTMLElement
-    expect(within(laws).getAllByRole('link')).toHaveLength(1)
+    // The law card also links to its law in the register (Command → Laws, 箭10 2026-11-24).
+    expect(laws.querySelector('[data-law-link]')?.getAttribute('href')).toBe('#command?section=laws&law=73')
+    expect(within(laws).getAllByRole('link')).toHaveLength(2)
     expect(within(actions).getAllByRole('link')).toHaveLength(2)
     expect(laws.querySelector(':scope > h3')?.textContent).toBe('Laws · 1')
     await waitFor(() => expect(actions.querySelector(':scope > h3')?.textContent).toBe('Actions · 2'))
