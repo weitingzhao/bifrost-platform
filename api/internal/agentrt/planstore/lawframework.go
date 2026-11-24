@@ -246,6 +246,17 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 		l, ok := by[n]
 		return l, ok && LawState(l, now) == StateInForce
 	}
+	// A repealed law cannot be cited: not as a parent, a dependency, a law
+	// superseded or material absorbed (Owner 2026-11-24: a repealed law must
+	// not linger as poison). This refuses the card.
+	cited := map[string][]string{"parent": {f.Parent}, "depends_on": f.DependsOn, "supersedes": f.Supersedes, "absorbs": f.Absorbs}
+	for field, ns := range cited {
+		for _, n := range ns {
+			if l, ok := by[n]; ok && n != "" && LawState(l, now) == StateRepealed {
+				return nil, fmt.Errorf("law_amend: law %s is repealed and cannot be cited (%s)", n, field)
+			}
+		}
+	}
 	if f.Parent != "" {
 		if p, ok := inForce(f.Parent); !ok {
 			notes = append(notes, fmt.Sprintf("上位法第 %s 条不是现行法", f.Parent))
@@ -362,7 +373,7 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			{"condition", "适用条件", "在什么情况下适用（假定）"},
 			{"parent", "上位法", "它落实或细化的是哪一条"},
 			{"depends_on", "依存", "要先有哪几条成立"},
-			{"supersedes", "取代", "它取代哪几条；被取代的随之废止"},
+			{"supersedes", "取代", "它取代哪几条；被取代的随之废止并移出名录"},
 			{"absorbs", "吸收的素材", "它从哪几条素材提炼而来；素材全被吸收后可一次废止"},
 			{"executor", "执行者", "哪条线负责执行"},
 			{"enforcement", "强制方式", "哪道机器检查强制，或写明靠自觉"},
@@ -376,7 +387,7 @@ func TheFramework(laws []Law, now time.Time) Framework {
 		Subjects:   LawSubjects,
 		ScopeForms: []string{"全系统", "域:Trade|Research|Ops", "领域:<领域 id>", "环境:PROD|STG|DEV", "动作:<一类动作>"},
 		Modalities: lawModalities,
-		States:     map[string]int{StateInForce: 0, StateMaterial: 0, StateRepealed: 0},
+		States:     map[string]int{StateInForce: 0, StateMaterial: 0},
 		Enforce:    []string{EnforceOff, EnforceOn},
 		Between: []string{
 			"上位优先：下位法和上位法抵触的那一处不执行",
@@ -384,11 +395,13 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			"冲突：同范围同主题规定方式相反的，应在同一张票里改或废对方",
 			"重复：同范围同主题同方式的，应写明取代或差别",
 			"依存：依存的法必须现行；被依存的要废止时一并处理",
+			"废止即移出名录：不再被读、引用、执行或量，只在账本里留底供追溯；引用废止的法的卡被拒",
 		},
 		Integrity: []string{
 			"法只经 Owner 批准的修法票增、改、废",
 			"修法票的改前原文必须和名录对得上",
 			"不能放松根本法（与现行第 1 层法冲突的卡被拒）",
+			"不能引用已废止的法（作上位法、依存、取代或吸收）",
 		},
 		StageNote: "现阶段框架的发现只在卡面提示、不拦；执法一条一条开，力度随项目阶段定",
 	}
@@ -396,6 +409,9 @@ func TheFramework(laws []Law, now time.Time) Framework {
 	fw.Coverage.Uncovered = []string{}
 	for _, l := range laws {
 		st := LawState(l, now)
+		if st == StateRepealed {
+			continue
+		}
 		fw.States[st]++
 		if st == StateInForce && l.Frame != nil && l.Frame.Level != nil {
 			fw.Levels[*l.Frame.Level].InForce++

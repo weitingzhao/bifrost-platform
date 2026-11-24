@@ -175,7 +175,6 @@ func TestLawCardFramework(t *testing.T) {
 		"unknown subject":        {card(with(2, "subject", "心情")), "主题表"},
 		"bad scope":              {card(with(2, "scope", "everywhere")), "格式"},
 		"fundamental by 自觉":      {card(with(1, "enforcement", "自觉")), "机器强制"},
-		"depends on repealed":    {card(with(2, "depends_on", []any{"5"})), "依存"},
 		"duplicate":              {card(with(2, "subject", "审批")), "重复"},
 		"not enforced":           {card(frame(2)), "未执行"},
 		"enforced":               {card(with(2, "enforce", "执行中")), "开始执法"},
@@ -246,7 +245,7 @@ func TestTheFramework(t *testing.T) {
 	if empty.Levels[3].Name != "领域法" || !slices.Contains(empty.Levels[3].Required, "parent") || slices.Contains(empty.Levels[0].Required, "standards") {
 		t.Fatalf("levels = %+v", empty.Levels)
 	}
-	if len(empty.Integrity) != 3 || len(empty.Fields) == 0 || len(empty.Subjects) == 0 {
+	if len(empty.Integrity) != 4 || len(empty.Fields) == 0 || len(empty.Subjects) == 0 {
 		t.Fatalf("framework = %+v", empty)
 	}
 	lv := 2
@@ -255,7 +254,7 @@ func TestTheFramework(t *testing.T) {
 		{Law: "2", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv}},
 		{Law: "3", Op: "repeal", Status: planstore.RepealedStatus},
 	}, now)
-	if one.States[planstore.StateInForce] != 1 || one.States[planstore.StateRepealed] != 1 || one.Levels[2].InForce != 1 {
+	if _, has := one.States[planstore.StateRepealed]; has || one.States[planstore.StateInForce] != 1 || one.Levels[2].InForce != 1 {
 		t.Fatalf("counts = %+v, level 2 = %d", one.States, one.Levels[2].InForce)
 	}
 }

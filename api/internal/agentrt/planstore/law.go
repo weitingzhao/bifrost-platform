@@ -109,6 +109,13 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 				c.Law = law
 			}
 		}
+		// A repealed law leaves the plan too: the steps of its items that are
+		// not done are dropped, so it is no longer measured or enforced.
+		if c.Op == "repeal" || c.Op == "repeal_many" {
+			if err := dropRepealedSteps(ctx, db, c); err != nil {
+				errs = append(errs, fmt.Errorf("law_amend %s: plan: %w", c.ApprovalID, err))
+			}
+		}
 		// Only an enforced law goes into the plan to be measured: a framed
 		// law enacted but not enforced, and a batch repeal, do not. A card
 		// from before the framework (no frame) keeps its item.
@@ -217,4 +224,69 @@ func refuseLawStandardEdits(ctx context.Context, tx pgx.Tx, changes []PlanChange
 		}
 	}
 	return nil
+}
+
+// dropRepealedSteps drops the steps not done of the plan items of the laws a
+// card repeals (Owner 2026-11-24: a repealed law must not linger as poison).
+// A law's items are the ones the laws pass made for its versions, found by
+// the approval ids recorded on its stream; the drop is noted as the card's,
+// so it passes the lock on a law's standards (refuseLawStandardEdits).
+func dropRepealedSteps(ctx context.Context, db eventlog.DB, c LawCard) error {
+	var laws []string
+	if c.Op == "repeal" {
+		laws = []string{c.Law}
+	}
+	for _, rp := range c.Repeals {
+		laws = append(laws, rp.Law)
+	}
+	return eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		executed, ok, err := eventlog.LatestWithField(ctx, tx, "approval.card.executed", "id", c.ApprovalID, time.Time{})
+		if err != nil || !ok {
+			return err
+		}
+		versions, err := eventlog.LatestByKey(ctx, tx, "law_recorded", "approval_id", time.Time{})
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for _, v := range versions {
+			for _, n := range laws {
+				if v.Stream == LawStream(n) {
+					if a, _ := v.Body["approval_id"].(string); a != "" && a != c.ApprovalID {
+						ids = append(ids, a)
+					}
+				}
+			}
+		}
+		for _, id := range ids {
+			rows, err := tx.Query(ctx, `SELECT s.plan_node_id, i.parent_plan_node_id FROM agentrt.plan_node s
+			  JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
+			  WHERE i.node_kind = 'item' AND strpos(i.title, $1) > 0 AND s.node_kind = 'step' AND s.state IN ('planned', 'active')`, id)
+			if err != nil {
+				return err
+			}
+			byRoot := map[string][]PlanChange{}
+			for rows.Next() {
+				var step, root string
+				if err := rows.Scan(&step, &root); err != nil {
+					rows.Close()
+					return err
+				}
+				byRoot[root] = append(byRoot[root], PlanChange{Op: "drop_step", Node: step})
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			for root, changes := range byRoot {
+				if err := LockTree(ctx, tx, root); err != nil {
+					return err
+				}
+				if _, err := applyChangesNoted(ctx, tx, "controller", root, executed.ID, lawNote(c.ApprovalID)+" repeal", changes); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }

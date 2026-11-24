@@ -195,7 +195,9 @@ func TestLawFrameRecorded(t *testing.T) {
 	for _, v := range view {
 		state[v.Law.Law] = v.State
 	}
-	if state["1"] != planstore.StateRepealed || state["2"] != planstore.StateMaterial || state["3"] != planstore.StateInForce {
+	// The superseded law 1 is repealed and gone from the view (Owner
+	// 2026-11-24: a repealed law must not linger as poison).
+	if _, seen := state["1"]; seen || state["2"] != planstore.StateMaterial || state["3"] != planstore.StateInForce {
 		t.Fatalf("states = %v", state)
 	}
 	w.chainHolds(t, "law:1")
@@ -254,4 +256,54 @@ func TestLawRecordsCannotBeDeleted(t *testing.T) {
 		t.Fatalf("law 1 after the attempts = %+v, %v", l, have)
 	}
 	w.chainHolds(t, "law:1")
+}
+
+// 2026-11-24, Owner: a repealed law must not linger in the system as poison.
+// Repealing a law drops the steps not done of its plan item, so it is no
+// longer measured; the view does not show it; a card citing it is refused.
+func TestRepealedLawLeavesThePlan(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	announce := func(id string, n int) {
+		ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: "card:" + id, Type: "approval.card.executed", Actor: "controller",
+				Body: map[string]any{"id": id, "card": fmt.Sprintf("#%d", n), "subject": fmt.Sprintf("#%d", n), "key": fmt.Sprintf("#%d", n), "number": n,
+					"action": "law_amend", "status": "executed", "ref": "/api/v1/approvals/" + id, "change": "executed"}})
+			return err
+		}))
+	}
+	lv := 2
+	add := planstore.LawCard{ApprovalID: "appr_00000000000000f1", Number: 501, Op: "add", After: "an enforced law",
+		Standards: []planstore.LawStandard{{ID: "s1", Standard: "x", Measure: "y"}, {ID: "s2", Standard: "x2", Measure: "y2"}},
+		Frame:     &planstore.LawFrame{Level: &lv, Enforce: planstore.EnforceOn}}
+	announce(add.ApprovalID, 501)
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{add})
+	ok(t, err)
+	live := `SELECT count(*) FROM agentrt.plan_node s JOIN agentrt.plan_node i ON i.plan_node_id = s.parent_plan_node_id
+	  WHERE strpos(i.title, $1) > 0 AND s.node_kind = 'step' AND s.state IN ('planned', 'active')`
+	if n := w.count(t, live, add.ApprovalID); n != 2 {
+		t.Fatalf("an enforced law has %d live steps, want 2", n)
+	}
+	rep := planstore.LawCard{ApprovalID: "appr_00000000000000f2", Number: 502, Op: "repeal_many",
+		Repeals: []planstore.LawRepeal{{Law: "3", Before: "an enforced law", Reason: "test"}}}
+	announce(rep.ApprovalID, 502)
+	for range 2 {
+		_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{rep})
+		ok(t, err)
+	}
+	if n := w.count(t, live, add.ApprovalID); n != 0 {
+		t.Fatalf("a repealed law has %d live steps, want 0", n)
+	}
+	view, err := planstore.LawsView(ctx, w.rt)
+	ok(t, err)
+	for _, v := range view {
+		if v.Law.Law == "3" {
+			t.Fatalf("the repealed law 3 is in the view: %+v", v)
+		}
+	}
+	w.chainHolds(t, planstore.PlanStream(root))
 }
