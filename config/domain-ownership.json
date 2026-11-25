@@ -587,7 +587,7 @@
       "id": "station",
       "name": "Workshop",
       "tier": 1,
-      "source": "domains/win2-workshop/charter.md",
+      "source": "domains/11-station/charter.md",
       "contracts": {}
     },
     {
