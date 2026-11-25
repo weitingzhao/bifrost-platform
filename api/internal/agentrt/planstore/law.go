@@ -12,8 +12,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// A change of law in the plan (closed loop, Owner 2026-11-23: "only a change
-// of law opens a ticket"; the plan domain owns the loop). The Owner approves a
+// A change of law in the plan (closed loop: only a change of law opens a
+// ticket, LAW-6; the plan domain owns the loop). The Owner approves a
 // law_amend card (the approvals domain's): that card is the version of the
 // law, and its id is the version of the law's standards. The plan records it
 // as one item of the newest round, with one step per standard, so the work
@@ -235,7 +235,7 @@ func refuseLawStandardEdits(ctx context.Context, tx pgx.Tx, changes []PlanChange
 }
 
 // dropRepealedSteps drops the steps not done of the plan items of the laws a
-// card repeals (Owner 2026-11-24: a repealed law must not linger as poison).
+// card repeals: a repealed law does not linger (ISSUE-24).
 // A law's items are the ones the laws pass made for its versions, found by
 // the approval ids recorded on its stream; the drop is noted as the card's,
 // so it passes the lock on a law's standards (refuseLawStandardEdits).

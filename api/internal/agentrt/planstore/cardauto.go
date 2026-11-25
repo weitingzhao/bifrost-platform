@@ -12,10 +12,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seenfacts"
 )
 
-// Answering cards by rule (TD-390, the Owner 2026-10-20 「STG 用 A」; TD-393,
-// the Owner 2026-10-20 「STG 的规则等待按秒、设 5 秒，循环每 5 秒；STG 上所有种类
-// 的运行时卡都归规则管；给不出推荐或规则和 AI 评估不一致时，STG 上选不改变任何东西的
-// 那项…PROD 不变」). While a signed card-auto-answer rule is in force (STG only:
+// Answering cards by rule (TD-390, TD-393; ISSUE-4): on STG the rule waits in
+// seconds (5), the loop runs every 5 seconds, every kind of runtime card is the
+// rule's, and where no recommendation can be given or the rule and the AI
+// assessment disagree, STG picks the option that changes nothing; PROD is
+// unchanged. While a signed card-auto-answer rule is in force (STG only:
 // PROD's rules have no such file, its platform does not wire the loop, and
 // without the rule nothing is answered), a pass answers a card the runtime
 // asked:

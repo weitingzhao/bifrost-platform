@@ -13,13 +13,13 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// What the Owner says in the threads (Owner 2026-11-25 in the legislation
-// thread, choosing automatic collection: 「我觉得B好，需要自动收集」). A session
+// What the Owner says in the threads, collected automatically (ISSUE-104). A
+// session
 // hook reads his own messages from the transcript and posts them; each is
 // recorded once, as owner_said on owner-said:<transcript>, so the legislation
 // line can classify them and count, round by round, whether the same pain
-// comes back (LAW-1 s7, and the standards that waited on 「Owner 的吐槽进系统
-// 的记录」). The text is his, kept in the platform's database, never in a
+// comes back (LAW-1 s7, and the standards that waited on the Owner's
+// complaints being recorded in the system). The text is his, kept in the platform's database, never in a
 // repository.
 
 // OwnerSaidMax is the most of one message kept; a longer one is cut there and

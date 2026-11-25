@@ -10,8 +10,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// The law_amend card's content rules (legislation, Owner 2026-11-23: law
-// tickets apart from the tickets administration executes). The approvals
+// The law_amend card's content rules (legislation: law tickets apart from the
+// tickets administration executes, LAW-1). The approvals
 // domain keeps the gate the card goes through (its catalog entry, the
 // Owner's approval, expiry, audit, the law track and the executed event) and
 // calls these through the hooks the assembly installs (actions.SetLawCard):
@@ -76,9 +76,9 @@ type LawRepeal struct {
 
 const lawCardMaxRepeals = 30
 
-// The bounds of a batch (2026-11-24, Owner: the laws distilled from the
-// material go into the framework as one batch, and the material is archived
-// once the laws cover it). The approvals store is one ConfigMap (about 900
+// The bounds of a batch (the laws distilled from the material go into the
+// framework as one batch, and the material is archived once the laws cover
+// it, LAW-1). The approvals store is one ConfigMap (about 900
 // KiB), so an archive card names numbers and reasons only: whether each is
 // covered is the register's to say, not a quoted text's.
 const (
@@ -332,8 +332,8 @@ func DBLawLookup(db func() (eventlog.DB, error)) LawLookup {
 	}
 }
 
-// CheckLawCard is the create check. Owner 2026-11-23: a ticket changes a real
-// record of the law, never stands alone. So a card is refused unless it
+// CheckLawCard is the create check. A ticket changes a real record of the law,
+// never stands alone (LAW-1). So a card is refused unless it
 // reads, the register answers, an amend or repeal names a law in force there
 // and quotes its text as it stands, and an add has a number to take. When
 // the register cannot be read the card is refused, not let through.

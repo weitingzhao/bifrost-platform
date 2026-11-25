@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Origin: 2026-11-25, the Owner: 「确保代码里是干净的，不要把吐槽和法混在一起」.
+// Origin: 2026-11-25, ISSUE-17: the code keeps complaints and laws apart.
 // The register of laws holds laws only; the Owner's words (owner_said) and the
 // issues drawn from them (owner_issue) are their own records. An issue names
 // the laws that answer it; no law code names an issue or reads what he said.

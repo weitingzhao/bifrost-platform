@@ -134,8 +134,8 @@ type signoffBody struct {
 	Ref      string   `json:"ref"`
 }
 
-// HandleSignOffStep is POST /plan/{id}/signoff: the Owner signs a step off (the
-// Owner 2026-10-21), the owner_signoff event its done rule's owner_signoff
+// HandleSignOffStep is POST /plan/{id}/signoff: the Owner signs a step off
+// (ISSUE-3), the owner_signoff event its done rule's owner_signoff
 // atom waits for; the controller's next rules pass moves the step. The admin
 // role only (the "signoff" ability): the tokens agents hold (agentd, reporter,
 // operator, viewer) are refused before this runs, and no MCP tool calls it.

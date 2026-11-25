@@ -16,8 +16,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
 )
 
-// The Owner signs a step off (W-31 2.5, the Owner 2026-10-21 「加一个只给我
-// 用的「签收这一步」路由和 Console 按钮」): POST /plan/{id}/signoff records the
+// The Owner signs a step off (W-31 2.5; a route and a Console button for the
+// Owner alone, ISSUE-3): POST /plan/{id}/signoff records the
 // owner_signoff event an owner_signoff atom of the step's done rule waits for
 // (SignOff). Only the Owner signs: the route takes the admin role and no other,
 // and no MCP tool writes it. The step moves on the controller's next rules

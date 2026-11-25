@@ -4,8 +4,8 @@ import (
 	_ "time/tzdata" // the Owner's zone, whatever the image carries
 )
 
-// The chief of staff speaks first (W-31 2.4 slice ④; Owner 2026-10-18
-// 「简报 8:00 和 21:00 只发 Chief 页」). Twice a day, and when something is
+// The chief of staff speaks first (W-31 2.4 slice ④; the briefs at 8:00 and
+// 21:00 go to the Chief page only, ISSUE-41). Twice a day, and when something is
 // stuck, the controller leaves the seat a note; the intake pass makes it a
 // brief like any message (brief.go), and the seat's answer to a note of the
 // controller's goes to the Owner, as a note on his Chief page. A note's body

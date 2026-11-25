@@ -8,8 +8,8 @@ import (
 )
 
 // When the Owner is next needed (SPEC §2.6 owner_next; v4 §20.2 the top line,
-// §20.3 rule 6, §20.5 scenario 8; W-31 2.5 gap 1, Owner 2026-10-21 「缺口 1、2
-// 照推荐加」): after what waits for him now (Needs you lists that: approvals,
+// §20.3 rule 6, §20.5 scenario 8; W-31 2.5 gap 1, 决定 2026-10-21): after what
+// waits for him now (Needs you lists that: approvals,
 // questions, cards), the open goal whose next step not started is the Owner's
 // and is due first. A goal is due when its unfinished tasks are done (its
 // eta, progresseta.go); one whose tasks wait on tasks of other goals is due at

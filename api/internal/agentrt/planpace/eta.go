@@ -9,7 +9,7 @@ import (
 )
 
 // When a mission should be done (SPEC §2.2 eta; 2.5 G8,
-// CUT-round2-2.5-interface-2026-10-19.md §2; Owner 2026-10-19 「2.5 八条照建议」):
+// CUT-round2-2.5-interface-2026-10-19.md §2; 决定 2026-10-19):
 // its unfinished tasks done one after another, each in its usual time (the
 // median of the accepted attempts of its role and task class over 30 days,
 // usual times) — from the median to 1.5 times it — less what a running

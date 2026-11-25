@@ -15,8 +15,8 @@ import (
 // load on PROD failed on the actor key; the write registers its thread).
 var issuer = actor.Writer{Actor: "thread:7274b722-9792-4ba2-bd5c-2dd8aff76cb5", Token: "reporter"}
 
-// Origin: 2026-11-25, the Owner: 「你第三轮扫出来的那些吐槽需要有一个去处」. An
-// issue is recorded as a new version only when it changes, so the legislation
+// Origin: 2026-11-25, ISSUE-104: the complaints a scan turned up need a place.
+// An issue is recorded as a new version only when it changes, so the legislation
 // line may post the whole list again; and once a law answers it, the reading
 // counts what he said about it after the law went in force.
 func TestOwnerIssueVersionsAndSaidAfterLaw(t *testing.T) {
@@ -86,9 +86,8 @@ func TestOwnerIssueRefusals(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-25, the Owner: a place apart from the laws and the complaints
-// that says whether the complaints under a law eased (「提供一个新的法下吐槽是否
-// 可以缓解和解决的地方」). The verdict compares the rate before the law with
+// Origin: 2026-11-25, ISSUE-104: a place apart from the laws and the complaints
+// that says whether the complaints under a law eased or ended. The verdict compares the rate before the law with
 // the rate after; a law none of whose issues names a law time says so.
 func TestLawEffects(t *testing.T) {
 	t.Parallel()

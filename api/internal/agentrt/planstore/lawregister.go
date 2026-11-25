@@ -16,9 +16,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// The register of laws (closed loop, Owner 2026-11-23: a ticket for a law
-// changes a real record of the law in the system; a ticket on its own means
-// nothing). Each law is a stream, law:<n>, of law_recorded events; its last
+// The register of laws (closed loop: a ticket for a law changes a real record
+// of the law in the system; a ticket on its own means nothing, LAW-6). Each law is a stream, law:<n>, of law_recorded events; its last
 // event is the law as it stands. Two writers:
 //
 //   - the transcription of OWNER_LAW.md (the coordinator's table, which until
@@ -533,7 +532,7 @@ func allCodes(ctx context.Context, tx pgx.Tx) ([]string, error) {
 
 // levelKept refuses an amend that moves a coded law to another level: the
 // code says the level, so a law that changes level is repealed and added
-// again with a new code (Owner 2026-11-25).
+// again with a new code (LAW-1).
 func levelKept(prev Law, f *LawFrame) error {
 	if prev.Code == "" || prev.Frame == nil || prev.Frame.Level == nil || f == nil || f.Level == nil {
 		return nil

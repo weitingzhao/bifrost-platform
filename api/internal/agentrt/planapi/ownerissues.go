@@ -12,8 +12,8 @@ type ownerIssuesBody struct {
 }
 
 // HandlePostOwnerIssues is POST /owner-issues {issues}: the legislation line
-// records the issues it drew from what the Owner said (Owner 2026-11-25: his
-// complaints, pains and needs go here); an issue that did not change records
+// records the issues it drew from what the Owner said: his complaints, pains
+// and needs go here (ISSUE-104); an issue that did not change records
 // nothing, so the whole list may be posted again. Answers {recorded}.
 func (rt Routes) HandlePostOwnerIssues(w http.ResponseWriter, r *http.Request) {
 	var b ownerIssuesBody
@@ -37,8 +37,8 @@ func (rt Routes) HandlePostOwnerIssues(w http.ResponseWriter, r *http.Request) {
 // issue as it stands, the most often said first, with how many go each way and
 // how many a law answers whose pain came back, and by_law: for each law, its
 // issues and whether they eased after it; with to, only the issues routed
-// to that line or domain (Owner 2026-11-25: every agent reads the complaints in
-// its own business). Read-only.
+// to that line or domain: every agent reads the complaints in its own
+// business (ISSUE-104). Read-only.
 func (rt Routes) HandleGetOwnerIssues(w http.ResponseWriter, r *http.Request) {
 	issues, err := planstore.OwnerIssues(r.Context(), rt.Host.DB())
 	if err != nil {

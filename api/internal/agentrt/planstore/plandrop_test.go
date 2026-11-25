@@ -9,7 +9,7 @@ import (
 )
 
 // The two plan changes added for the plan import (CUT-plan-import-2026-10-19.md
-// §10 ⑥, Owner 2026-10-19 「三件照建议」): dropping a step and setting its
+// §10 ⑥, 决定 2026-10-19): dropping a step and setting its
 // marks. Both are outside the standing authorization: the Owner decides them
 // on a card.
 

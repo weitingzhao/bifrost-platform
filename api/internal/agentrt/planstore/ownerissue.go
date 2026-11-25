@@ -17,10 +17,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Where the Owner's complaints, pains and needs go (Owner 2026-11-25 in the
-// legislation thread: 「很多失望，痛点，谩骂，抱怨，归根结底都是系统设计没有实现
-// 业务目标，所以才需要做这个法律框架和真正的可执行的法……需要有一个地方放用户的吐
-// 槽，痛点，需求就应该放在这里」; and 「你第三轮扫出来的那些吐槽需要有一个去处」).
+// Where the Owner's complaints, pains and needs go: they come from a system
+// design that has not met its business goals, which is what the framework of
+// laws is for, and they need a place of their own, including the complaints a
+// scan of the code turned up (ISSUE-104).
 //
 // An issue is one thing he keeps saying, drawn from what he said (owner_said):
 // his words, how often, when first and last, the messages, and where it goes
@@ -53,8 +53,7 @@ type OwnerIssue struct {
 	LastAt   time.Time `json:"last_at"`
 	// Laws are the codes of the laws in force that answer the issue (LAW-6,
 	// ZONE-1, …): the issue names its laws; a law never names an issue, so
-	// the register of laws holds laws only (Owner 2026-11-25: 「不要把吐槽和
-	// 法混在一起」).
+	// the register of laws holds laws only (ISSUE-104).
 	Laws []string `json:"laws,omitempty"`
 	// LawInForceAt is when the law that answers the issue went in force.
 	LawInForceAt *time.Time `json:"law_in_force_at,omitempty"`
@@ -337,8 +336,8 @@ func countSaidAfterLaw(ctx context.Context, db eventlog.DB, issues []OwnerIssueR
 }
 
 // LawEffect is whether the issues a law answers eased after it went in force
-// (Owner 2026-11-25: a place, apart from the laws and from the complaints,
-// that says whether the complaints under a new law eased or ended).
+// (ISSUE-104: a place, apart from the laws and from the complaints, that says
+// whether the complaints under a new law eased or ended).
 type LawEffect struct {
 	Law    string   `json:"law"`
 	Issues []string `json:"issues"`

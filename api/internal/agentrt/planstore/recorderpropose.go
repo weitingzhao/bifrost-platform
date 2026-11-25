@@ -14,7 +14,7 @@ import (
 )
 
 // Proposing a recorder import (v5 §5.3 T32 「经导入」, the recorder's half;
-// CUT-gate-b-2026-10-19.md §2 item 3 A, Owner 2026-10-19 「都照建议」): the
+// CUT-gate-b-2026-10-19.md §2 item 3 A, 决定 2026-10-19): the
 // infra event recorder's hash-chained log of one work becomes the stream
 // legacy:recorder:<work>, so lane.py and rec.py can retire. It takes the plan
 // import's shape (planimportcard.go): POST /plan/imports with a request of
@@ -35,7 +35,7 @@ import (
 const opRecorderImport = "recorder_import"
 
 // RecorderRecommendWhy is why a recorder import's card recommends importing
-// (the Owner 2026-10-21 「2.3 的四条都照推荐 A」, CUT-round2-2.3-rest §3 第 4 条:
+// (决定 2026-10-21, CUT-round2-2.3-rest §3 第 4 条:
 // STG's card rule answers these cards, PROD's Owner reads it; as a plan
 // change's card recommends applying, TD-397): the trial import has checked the
 // log whole, and the log is history.

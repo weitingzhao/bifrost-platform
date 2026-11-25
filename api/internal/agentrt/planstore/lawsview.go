@@ -148,8 +148,8 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 		for _, l := range laws {
 			v := LawView{Law: l, State: LawState(l, time.Now())}
 			// A repealed law is not in the register's view: it is not read,
-			// cited, enforced or measured (Owner 2026-11-24: a repealed law
-			// must not linger as poison); it stays only in the ledger.
+			// cited, enforced or measured: a repealed law does not linger
+			// (LAW-1); it stays only in the ledger.
 			if v.State == StateRepealed {
 				continue
 			}

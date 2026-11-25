@@ -13,8 +13,8 @@ type ownerSaidBody struct {
 }
 
 // HandlePostOwnerSaid is POST /owner-said {messages}: the session hook posts
-// the Owner's own messages from a transcript (Owner 2026-11-25, automatic
-// collection); each is recorded once by its message_id, so posting the same
+// the Owner's own messages from a transcript (automatic collection,
+// ISSUE-104); each is recorded once by its message_id, so posting the same
 // message again changes nothing. Answers {added}.
 func (rt Routes) HandlePostOwnerSaid(w http.ResponseWriter, r *http.Request) {
 	var b ownerSaidBody

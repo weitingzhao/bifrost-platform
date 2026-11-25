@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// The laws' own numbering (Owner 2026-11-25: 「以后法条统一叫LAW 开始，不用
-// 简写」). Rows 1 to 85 of the register were what had been said, transcribed
+// The laws' own numbering: every law is coded from LAW, never abbreviated
+// (LAW-1). Rows 1 to 85 of the register were what had been said, transcribed
 // from OWNER_LAW.md and archived as material in round 1 of the inventory
 // (#751); the laws the framework holds start at 86. A law is written LAW-k,
 // where k counts from that first law: LAW-1 is number 86. The register's
@@ -19,10 +19,9 @@ const lawCodeBase = 85
 
 var lawCodePattern = regexp.MustCompile(`^LAW-([1-9][0-9]*)$`)
 
-// The words of the levels (Owner 2026-11-25: 「每一层都用特定的单词表示，同时
-// 采用特定的编号体系」): 0 道 DAO, 1 根本法 CORE, 2 基本法 LAW, 3 领域法
-// ZONE; each word at most four letters (Owner 2026-11-25: 「constitution 太长了，
-// 搞一个短点的..最多四个」). Each level counts from 1 on its own, a code is never given twice,
+// The words of the levels: each level has its own word and its own numbering
+// (LAW-1): 0 道 DAO, 1 根本法 CORE, 2 基本法 LAW, 3 领域法 ZONE; each word at
+// most four letters (LAW-1). Each level counts from 1 on its own, a code is never given twice,
 // and a law that changes level is repealed and added again with a new code.
 // A law added from round 2 on keeps its code in its record; the laws before
 // (86 to 98) keep the codes they had (LAW-k, k = number - 85), except 89, the

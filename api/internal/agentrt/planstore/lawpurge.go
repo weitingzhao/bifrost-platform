@@ -12,9 +12,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Physical deletion of repealed laws (legislation, Owner 2026-11-24: a
-// repealed law must not linger as poison; "满七天或者我直接要求删..都可以物理
-// 删除"). A law repealed seven days ago is deleted by the laws pass
+// Physical deletion of repealed laws (legislation: a repealed law does not
+// linger; after seven days, or at once when the Owner asks, it may be deleted
+// physically, LAW-1). A law repealed seven days ago is deleted by the laws pass
 // (PurgeRepealedLaws); one the Owner wants gone at once is deleted by an
 // approved law_amend card with op purge. The database does the deletion and
 // its checks (eventlog.PurgeRepealedLaw, migration 0047).
@@ -132,7 +132,7 @@ func purgedLaws(ctx context.Context, tx pgx.Tx) (numbers []int, approvals map[st
 }
 
 // PurgeQueue is what waits to be deleted, as numbers and times only: a
-// repealed law is not in the register's view (Owner 2026-11-24), but LAW-1
+// repealed law is not in the register's view (LAW-1), but LAW-1
 // s5 measures that none outlives LawPurgeAfter, so the laws route says how
 // many wait, how many are overdue and when the oldest was repealed.
 type PurgeQueue struct {

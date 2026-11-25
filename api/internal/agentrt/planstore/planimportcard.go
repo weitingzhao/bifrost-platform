@@ -17,7 +17,7 @@ import (
 )
 
 // The first import of a plan through the interface (POST /plan/imports;
-// CUT-plan-import-2026-10-19.md §4 A, Owner 2026-10-19 「三件照建议」). A
+// CUT-plan-import-2026-10-19.md §4 A, 决定 2026-10-19). A
 // thread proposes a request; it is tried whole and rolled back, so a request
 // the database would refuse is refused now; the request is kept as an
 // artifact and the Owner gets one decision card. The proposal is a

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The framework of laws (法的框架 v1, Owner 2026-11-24: 「挺好的，就按这个来」;
+// The framework of laws (法的框架 v1, LAW-1;
 // https://claude.ai/artifact/TR91x7uM1feLXMPrJ639T6). Written as code so it
 // does not drift: a law is in force only when it was approved by a law_amend
 // card and carries what its level requires; a card that would bring in a
@@ -22,16 +22,15 @@ import (
 // (the six hard boundaries, enforced by a machine), 2 基本法 (system-wide), 3
 // 领域法 (one domain or line). The details a domain owner sets within a law
 // (once level 4, 细则与判例) are RULE, not LAW (LAW-1 二 and 九, version 3,
-// #754, Owner 2026-11-25: 「以后要区分LAW和RULE」): a card that still says
+// #754): a card that still says
 // level 4 is noted, not refused. Three states: 现行 (in force), 素材 (raw material:
 // what was said, kept with its source, not executed: every transcribed row
 // starts here), 废止.
 //
-// Step by step (Owner 2026-11-24: first a framework that can hold good laws,
-// in the product; then the laws put into it with how each is enforced and
-// judged, not enforced yet; then enforcement law by law): the framework's
-// checks are notes on the card the Owner reads when he approves it, not
-// refusals. Only three things refuse a card, the register's integrity: a
+// Step by step (LAW-1): first a framework that can hold good laws, in the
+// product; then the laws put into it with how each is enforced and judged,
+// not enforced yet; then enforcement law by law. The framework's checks are
+// notes on the card the Owner reads when he approves it, not refusals. Only three things refuse a card, the register's integrity: a
 // law changes only by a card (law_amend itself), its text before matches
 // the register (CheckLawCard), and nothing loosens a fundamental law (a
 // conflict with a level 1 law in force). How hard each rule is enforced
@@ -69,8 +68,7 @@ var LawSubjects = []string{
 	"审批", "发布", "合入", "数据", "合约", "归属", "算力", "观测", "计划", "审计",
 	"立法", "沟通", "安全", "交易", "工坊", "结构", "评估", "执行口",
 	// 方法: how to judge and in what order to act, the laws every other law
-	// leans on (2026-11-24: first principles and the five steps, Owner
-	// 「五步法按照马斯克的原话写两段」).
+	// leans on (first principles and the five steps, LAW-1).
 	"方法",
 }
 
@@ -98,9 +96,9 @@ type LawFrame struct {
 	DependsOn  []string `json:"depends_on,omitempty"`
 	Supersedes []string `json:"supersedes,omitempty"`
 	// Absorbs names the material (素材) this law distils: the numbers of the
-	// transcribed rows it takes in (Owner 2026-11-24, step two: distil the
-	// material law by law, then confirm once that the new laws cover all of
-	// it before the material is repealed).
+	// transcribed rows it takes in (step two: distil the material law by law,
+	// then confirm once that the new laws cover all of it before the material
+	// is repealed, LAW-1).
 	Absorbs      []string `json:"absorbs,omitempty"`
 	DistinctFrom string   `json:"distinct_from,omitempty"`
 	Executor     string   `json:"executor,omitempty"`
@@ -110,8 +108,8 @@ type LawFrame struct {
 	// Enforce is whether the law is being enforced: 未执行 (the default:
 	// enacted, how it is enforced and judged is set, nothing is enforced yet)
 	// or 执行中 (it is in the plan, the audit line measures it, its checks
-	// run). It turns on one law at a time, by a card (Owner 2026-11-24:
-	// frame first, then the laws, then enforcement law by law).
+	// run). It turns on one law at a time, by a card (frame first, then the
+	// laws, then enforcement law by law, LAW-1).
 	Enforce string     `json:"enforce,omitempty"`
 	Review  *LawReview `json:"review,omitempty"`
 }
@@ -269,8 +267,8 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 		return l, ok && LawState(l, now) == StateInForce
 	}
 	// A repealed law cannot be cited: not as a parent, a dependency, a law
-	// superseded or material absorbed (Owner 2026-11-24: a repealed law must
-	// not linger as poison). This refuses the card.
+	// superseded or material absorbed: a repealed law does not linger (LAW-1).
+	// This refuses the card.
 	// absorbs is not a citation but a law's provenance: once the material it
 	// absorbed is archived (repealed, round 1, #751) the record stays, and a
 	// later amend of the law carries it (2026-11-25, the first amend of LAW-1
@@ -356,7 +354,7 @@ type FrameworkField struct {
 
 // Framework is the framework of laws as the system holds it (法的框架 v1),
 // read with the register so a page shows the frame even when no law is in
-// it yet (Owner 2026-11-24: step one is a framework, empty, seen on Ops).
+// it yet (step one is a framework, empty, seen on Ops, LAW-1).
 type Framework struct {
 	Version    string           `json:"version"`
 	Source     string           `json:"source"`
