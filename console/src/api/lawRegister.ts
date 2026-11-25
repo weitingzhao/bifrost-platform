@@ -38,6 +38,8 @@ export type RegisterLaw = {
   state?: string
   /** Where the law sits in the framework (level, scope, subject, modality, parent, enforcement…); absent until a card frames it. */
   frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; absorbs?: string[]; [more: string]: unknown }
+  /** A law's name (Owner 2026-11-25: "以后法条统一叫LAW 开始，不用简写"): LAW-1… for the laws in force; absent on material and repealed rows. */
+  code?: string
   /** On a material row: the laws in force that absorb it (立法线 44065b1c); absent when none does. */
   absorbed_by?: string[]
 }

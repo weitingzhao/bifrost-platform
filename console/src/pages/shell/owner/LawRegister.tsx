@@ -39,7 +39,9 @@ export function LawRegister() {
   const [showMaterial, setShowMaterial] = useState(picked !== '')
   const material = useMemo(() => materialOrder(behindSwitch(laws ?? []).filter(l => l.state !== REPEALED)), [laws])
   const hidden = useMemo(() => (showMaterial ? material : []), [material, showMaterial])
-  const table = useMemo(() => lawRegisterTable(hidden), [hidden])
+  // absorbed_by names laws by register number; the page says their code (LAW-k).
+  const codeOf = useMemo(() => new Map((laws ?? []).flatMap(l => (l.code ? [[l.law, l.code] as [string, string]] : []))), [laws])
+  const table = useMemo(() => lawRegisterTable(hidden, codeOf), [hidden, codeOf])
   const byLaw = useMemo(() => new Map((laws ?? []).map(l => [l.law, l])), [laws])
   const loading = q.isLoading || health.isLoading
   const word = loading ? 'pending' : unread ? 'unknown' : frameworkWord(answer?.framework)

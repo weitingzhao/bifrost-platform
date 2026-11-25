@@ -138,16 +138,20 @@ describe('step two: the material covered by laws in force', () => {
   it('lists the material no law absorbs yet first, and says which law absorbs the rest', () => {
     const rows = [{ ...law('3', '素材'), absorbed_by: ['90'] }, law('7', '素材'), law('5', '废止'), law('1', '素材')]
     expect(materialOrder(rows).map(l => l.law)).toEqual(['1', '7', '3', '5'])
-    const t = lawRegisterTable(materialOrder(rows))
+    // 2026-11-25 the Owner: "以后法条统一叫LAW 开始，不用简写": the absorbing law is named by its code.
+    const t = lawRegisterTable(materialOrder(rows), new Map([['90', 'LAW-5']]))
     const absorbed = (key: string) => t.rows.find(r => r.key === key)!.cells.at(-1)
-    expect(absorbed('3')).toBe('Law 90')
+    expect(absorbed('3')).toBe('LAW-5')
+    // A material row keeps its register number, written "#n" so it is never read as a law.
+    expect(t.rows.find(r => r.key === '7')!.cells[0]).toBe('#7')
     expect(absorbed('1')).toMatchObject({ text: 'none' })
     expect(absorbed('5')).toBe('—')
   })
   it('shows under its level what a law in force absorbs', () => {
-    const inForce: RegisterLaw = { ...law('90', '现行', 2), frame: { level: 2, absorbs: ['3', '12'] } }
+    const inForce: RegisterLaw = { ...law('90', '现行', 2), code: 'LAW-5', frame: { level: 2, absorbs: ['3', '12'] } }
     render(<LawFrameworkView framework={{ ...framework, coverage: { material: 69, covered: 2, uncovered: [] } }} laws={[inForce]} />)
     expect(document.querySelector('[data-in-force-law="90"]')?.textContent).toContain('Absorbs material 3, 12')
+    expect(document.querySelector('[data-in-force-law="90"]')?.textContent).toMatch(/^LAW-5: law 90/)
     expect(document.querySelector('[data-coverage]')?.textContent).toBe('material covered 2 / 69')
   })
 })

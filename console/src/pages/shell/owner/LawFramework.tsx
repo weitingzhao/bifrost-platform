@@ -1,5 +1,6 @@
 import type { LawFramework as Framework, RegisterLaw } from '@/api/lawRegister'
 import { coverageLine, inForceAt, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
+import { lawName } from './lawRegisterModel'
 
 const Unknown = ({ what }: { what: string }) => (
   <span className="text-muted-foreground" title={`${what}: not sent by this platform`}>{UNKNOWN}</span>
@@ -46,7 +47,7 @@ export function LawFrameworkView({ framework: fw, laws }: { framework: Framework
                   {here.length > 0 ? (
                     <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">{here.map(l => (
                       <li key={l.law} data-in-force-law={l.law}>
-                        {`Law ${l.law}: ${l.text}`}
+                        {`${lawName(l)}: ${l.text}`}
                         {l.frame?.absorbs && l.frame.absorbs.length > 0 ? <span className="block text-xs text-muted-foreground">{`Absorbs material ${l.frame.absorbs.join(', ')}`}</span> : null}
                       </li>
                     ))}</ul>
