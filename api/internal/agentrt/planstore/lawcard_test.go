@@ -20,9 +20,9 @@ func fakeLookup(next string) planstore.LawLookup {
 	laws := []planstore.Law{
 		{Law: "5", Text: "old", Status: planstore.RepealedStatus, Op: "repeal"},
 		{Law: "79", Text: "a\n", Status: "已落", Op: "transcribed"},
-		{Law: "90", Text: "approvals go by law", Status: "已批", Op: "add",
+		{Law: "90", Code: "LAW-5", Text: "approvals go by law", Status: "已批", Op: "add",
 			Frame: &planstore.LawFrame{Level: lv(2), Scope: "全系统", Subject: "审批", Modality: "必须"}},
-		{Law: "91", Text: "the six boundaries", Status: "已批", Op: "add",
+		{Law: "91", Code: "LAW-6", Text: "the six boundaries", Status: "已批", Op: "add",
 			Frame: &planstore.LawFrame{Level: lv(1), Scope: "全系统", Subject: "安全", Modality: "禁止"}},
 	}
 	return planstore.LawLookup{
@@ -96,7 +96,7 @@ func TestLawCardMustMatchTheRegister(t *testing.T) {
 		}
 	}
 	add := map[string]any{"op": "add", "after": "x", "standards": std, "revert": "r", "frame": frame(2)}
-	if got := planstore.LawCardSummary(context.Background(), reg, add); !strings.HasPrefix(got, "Law add: will become 第 80 条") {
+	if got := planstore.LawCardSummary(context.Background(), reg, add); !strings.HasPrefix(got, "Law add: will become LAW-7") {
 		t.Fatalf("add summary = %q", got)
 	}
 	if err := planstore.CheckLawCard(context.Background(), fakeLookup(""), add); err == nil {

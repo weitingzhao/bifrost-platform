@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -357,6 +356,13 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 		if _, err := FrameNotes(ctx, reg, self, la.Frame, len(la.Standards)); err != nil {
 			return err
 		}
+		if la.Op == "amend" {
+			if cur, ok, err := reg.Current(ctx, la.Law); err == nil && ok {
+				if err := levelKept(cur, la.Frame); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	if la.Op == "add_many" {
 		for i, a := range la.Adds {
@@ -380,6 +386,11 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 		for i, a := range la.Amends {
 			if _, err := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); err != nil {
 				return fmt.Errorf("amends[%d]: %w", i, err)
+			}
+			if cur, ok, err := reg.Current(ctx, a.Law); err == nil && ok {
+				if err := levelKept(cur, a.Frame); err != nil {
+					return fmt.Errorf("amends[%d]: %w", i, err)
+				}
 			}
 			if err := checkInForce(ctx, reg, "amend", a.Law, a.Before); err != nil {
 				return fmt.Errorf("amends[%d]: %w", i, err)
@@ -493,12 +504,16 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 	op, _ := params["op"].(string)
 	law, _ := params["law"].(string)
 	if op == "add" || op == "amend" {
-		line := strings.TrimSpace("Law " + op + " " + lawName(LawNumberOf(law)))
+		line := strings.TrimSpace("Law " + op + " " + regName(ctx, reg, LawNumberOf(law)))
 		if op == "add" {
 			line = "Law add"
-			if reg.Next != nil {
+			if la, err := ReadLawAmend(params); err == nil && reg.Next != nil {
 				if next, err := reg.Next(ctx); err == nil && next != "" {
-					line = "Law add: will become " + lawName(next)
+					var level *int
+					if la.Frame != nil {
+						level = la.Frame.Level
+					}
+					line = "Law add: will become " + nextCode(regCodes(ctx, reg), level)
 				}
 			}
 		}
@@ -512,9 +527,9 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		ns := make([]string, 0, len(la.Amends))
 		var notes []string
 		for _, a := range la.Amends {
-			ns = append(ns, lawName(a.Law))
+			ns = append(ns, regName(ctx, reg, a.Law))
 			if fn, _ := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); len(fn) > 0 {
-				notes = append(notes, fmt.Sprintf("%s：%s", lawName(a.Law), strings.Join(fn, "，")))
+				notes = append(notes, fmt.Sprintf("%s：%s", regName(ctx, reg, a.Law), strings.Join(fn, "，")))
 			}
 		}
 		line := fmt.Sprintf("Law amend ×%d: %s", len(ns), strings.Join(ns, ", "))
@@ -531,8 +546,18 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		line := fmt.Sprintf("Law add ×%d", len(la.Adds))
 		if reg.Next != nil {
 			if next, err := reg.Next(ctx); err == nil && next != "" {
-				first := lawNumber(next)
-				line += fmt.Sprintf(": will become %s–%s", lawName(next), lawName(strconv.Itoa(first+len(la.Adds)-1)))
+				codes := regCodes(ctx, reg)
+				var got []string
+				for _, a := range la.Adds {
+					var level *int
+					if a.Frame != nil {
+						level = a.Frame.Level
+					}
+					c := nextCode(codes, level)
+					codes = append(codes, c)
+					got = append(got, c)
+				}
+				line += ": will become " + strings.Join(got, ", ")
 			}
 		}
 		var notes []string
@@ -550,13 +575,41 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		if la, err := ReadLawAmend(params); err == nil {
 			ns := make([]string, 0, len(la.Repeals))
 			for _, rp := range la.Repeals {
-				ns = append(ns, lawName(rp.Law))
+				ns = append(ns, regName(ctx, reg, rp.Law))
 			}
 			return fmt.Sprintf("Law %s ×%d: %s", verb, len(ns), strings.Join(ns, ", "))
 		}
 		return "Law " + verb + " (several)"
 	}
-	return strings.TrimSpace("Law " + op + " " + lawName(LawNumberOf(law)))
+	return strings.TrimSpace("Law " + op + " " + regName(ctx, reg, LawNumberOf(law)))
+}
+
+// regName names law n by its code in the register, or as lawName does.
+func regName(ctx context.Context, reg LawLookup, n string) string {
+	if reg.Current != nil {
+		if l, ok, err := reg.Current(ctx, n); err == nil && ok && l.Code != "" {
+			return l.Code
+		}
+	}
+	return lawName(n)
+}
+
+// regCodes are the codes the register's laws carry.
+func regCodes(ctx context.Context, reg LawLookup) []string {
+	var out []string
+	if reg.All == nil {
+		return out
+	}
+	laws, err := reg.All(ctx)
+	if err != nil {
+		return out
+	}
+	for _, l := range laws {
+		if l.Code != "" {
+			out = append(out, l.Code)
+		}
+	}
+	return out
 }
 
 // LawCardNotes is what the framework finds about a card (FrameNotes), for

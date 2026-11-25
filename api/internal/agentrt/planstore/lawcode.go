@@ -19,29 +19,75 @@ const lawCodeBase = 85
 
 var lawCodePattern = regexp.MustCompile(`^LAW-([1-9][0-9]*)$`)
 
-// LawCode is law n's code, LAW-k; "" for a row of material (n at most 85) or
-// a number that does not read.
+// The words of the levels (Owner 2026-11-25: 「每一层都用特定的单词表示，同时
+// 采用特定的编号体系」): 0 道 DAO, 1 根本法 CONSTITUTION, 2 基本法 LAW, 3 领域法
+// BYLAW. Each level counts from 1 on its own, a code is never given twice,
+// and a law that changes level is repealed and added again with a new code.
+// A law added from round 2 on keeps its code in its record; the laws before
+// (86 to 98) keep the codes they had (LAW-k, k = number - 85), except 89, the
+// fundamental law, which is CONSTITUTION-1 (LAW-4 stays unused).
+var levelWords = map[int]string{LevelDao: "DAO", LevelFundamental: "CONSTITUTION", LevelBasic: "LAW", LevelDomain: "BYLAW", LevelDetail: "BYLAW"}
+
+var anyCodePattern = regexp.MustCompile(`^(DAO|CONSTITUTION|LAW|BYLAW)-([1-9][0-9]*)$`)
+
+// levelWord is the word a law of the given level is coded with; LAW when the
+// level is not given.
+func levelWord(level *int) string {
+	if level != nil {
+		if w, ok := levelWords[*level]; ok {
+			return w
+		}
+	}
+	return "LAW"
+}
+
+// nextCode is the code a new law of the given level takes: one past the
+// largest number its word has, among the codes given (laws and tombstones).
+func nextCode(codes []string, level *int) string {
+	w := levelWord(level)
+	top := 0
+	for _, c := range codes {
+		if m := anyCodePattern.FindStringSubmatch(c); m != nil && m[1] == w {
+			k, _ := strconv.Atoi(m[2])
+			top = max(top, k)
+		}
+	}
+	return fmt.Sprintf("%s-%d", w, top+1)
+}
+
+// LawCode is law n's code as the laws before round 2 had it, derived from the
+// number: LAW-k, k = n - 85, and CONSTITUTION-1 for 89; "" for material. A
+// law added later carries its code in its record (Law.Code).
 func LawCode(n string) string {
 	v, err := strconv.Atoi(n)
 	if err != nil || v <= lawCodeBase {
 		return ""
 	}
+	if v == lawCodeBase+4 {
+		return "CONSTITUTION-1"
+	}
 	return fmt.Sprintf("LAW-%d", v-lawCodeBase)
 }
 
-// LawNumberOf reads a reference to a law, its code (LAW-k) or its number,
-// as the register's number. Anything else is returned as it was given.
+// LawNumberOf reads a reference to one of the laws before round 2 by its
+// code (LAW-1 … LAW-13, CONSTITUTION-1) or a number as the register's number.
+// A later code is returned as given; a card names those by number.
 func LawNumberOf(ref string) string {
 	ref = strings.TrimSpace(ref)
+	if ref == "CONSTITUTION-1" {
+		return strconv.Itoa(lawCodeBase + 4)
+	}
 	if m := lawCodePattern.FindStringSubmatch(ref); m != nil {
 		k, _ := strconv.Atoi(m[1])
-		return strconv.Itoa(lawCodeBase + k)
+		if k <= 13 {
+			return strconv.Itoa(lawCodeBase + k)
+		}
 	}
 	return ref
 }
 
-// lawName is how a card or a note names law n: its code, or 「第 n 条」 for
-// material.
+// lawName is how a card or a note names law n when only its number is at
+// hand: its code before round 2, or 「第 n 条」.
 func lawName(n string) string {
 	if c := LawCode(n); c != "" {
 		return c

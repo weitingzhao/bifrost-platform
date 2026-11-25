@@ -32,7 +32,7 @@ func TestLawCardAddManyAndArchiveRead(t *testing.T) {
 	if err := planstore.CheckLawCard(ctx, reg, good); err != nil {
 		t.Fatalf("good batch refused: %v", err)
 	}
-	if got := planstore.LawCardSummary(ctx, reg, good); !strings.HasPrefix(got, "Law add ×2: will become LAW-7–LAW-8") {
+	if got := planstore.LawCardSummary(ctx, reg, good); !strings.HasPrefix(got, "Law add ×2: will become LAW-7, LAW-8") {
 		t.Fatalf("summary = %q", got)
 	}
 	enforced := batchFrame()
@@ -180,7 +180,7 @@ func TestLawAmendMany(t *testing.T) {
 		map[string]any{"law": "3", "before": "law three", "after": "law three, amended", "standards": stdAny},
 		map[string]any{"law": "4", "before": "law four", "after": "law four, amended", "standards": stdAny}}}
 	ok(t, planstore.CheckLawCard(ctx, reg, good))
-	if got := planstore.LawCardSummary(ctx, reg, good); !strings.HasPrefix(got, "Law amend ×2: 第 3 条, 第 4 条") {
+	if got := planstore.LawCardSummary(ctx, reg, good); !strings.HasPrefix(got, "Law amend ×2: LAW-1, LAW-2") {
 		t.Fatalf("summary = %q", got)
 	}
 	bad := map[string]map[string]any{

@@ -47,6 +47,9 @@ func purgeLaw(ctx context.Context, tx pgx.Tx, n, reason string, cardID string, f
 		ids = append(ids, cardID)
 	}
 	body := map[string]any{"law": n, "events": deleted, "reason": reason, "repealed_at": law.At.UTC().Format(time.RFC3339)}
+	if law.Code != "" {
+		body["code"] = law.Code
+	}
 	if len(ids) > 0 {
 		list := make([]any, len(ids))
 		for i, id := range ids {

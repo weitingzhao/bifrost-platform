@@ -12,12 +12,12 @@ import (
 // framework holds (86 on) are LAW-1, LAW-2, …; rows 1 to 85 were material and
 // have no code. A card may name a law by its code or its number.
 func TestLawCode(t *testing.T) {
-	for n, want := range map[string]string{"86": "LAW-1", "98": "LAW-13", "99": "LAW-14", "85": "", "1": "", "x": ""} {
+	for n, want := range map[string]string{"86": "LAW-1", "89": "CONSTITUTION-1", "98": "LAW-13", "85": "", "1": "", "x": ""} {
 		if got := planstore.LawCode(n); got != want {
 			t.Fatalf("LawCode(%s) = %q, want %q", n, got, want)
 		}
 	}
-	for ref, want := range map[string]string{"LAW-1": "86", "LAW-13": "98", " LAW-2 ": "87", "90": "90", "LAW-0": "LAW-0", "law-1": "law-1", "L5": "L5"} {
+	for ref, want := range map[string]string{"LAW-1": "86", "LAW-13": "98", " LAW-2 ": "87", "CONSTITUTION-1": "89", "90": "90", "LAW-14": "LAW-14", "DAO-1": "DAO-1", "LAW-0": "LAW-0", "law-1": "law-1", "L5": "L5"} {
 		if got := planstore.LawNumberOf(ref); got != want {
 			t.Fatalf("LawNumberOf(%q) = %q, want %q", ref, got, want)
 		}
@@ -47,7 +47,7 @@ func TestLawCardTakesCodes(t *testing.T) {
 	if la.Frame.Parent != "90" {
 		t.Fatalf("parent read as %q, want 90", la.Frame.Parent)
 	}
-	if got := planstore.LawCardSummary(ctx, reg, add); !strings.HasPrefix(got, "Law add: will become LAW-14") {
+	if got := planstore.LawCardSummary(ctx, reg, add); !strings.HasPrefix(got, "Law add: will become BYLAW-1") {
 		t.Fatalf("summary = %q", got)
 	}
 }
@@ -70,5 +70,49 @@ func TestAbsorbedArchivedMaterialIsNotACitation(t *testing.T) {
 		"frame": map[string]any{"level": 3, "parent": "5"}}
 	if err := planstore.CheckLawCard(ctx, reg, parent); err == nil {
 		t.Fatal("a repealed law as parent was accepted")
+	}
+}
+
+// Origin: 2026-11-25, Owner: 「每一层都用特定的单词表示，同时采用特定的编号体系」.
+// A new law is coded by its level, each level counting on its own (DAO,
+// CONSTITUTION, LAW, BYLAW), the code kept in its record; an amend keeps the
+// code and may not change the level; the codes before (LAW-1…13) stay.
+func TestLevelCodes(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	rows, err := planstore.ParseLawTable(lawTable)
+	ok(t, err)
+	_, err = planstore.TranscribeLaws(ctx, w.rt, rows, "OWNER_LAW.md@a")
+	ok(t, err)
+	lv := func(n int) *int { return &n }
+	std := []planstore.LawStandard{{ID: "s1", Standard: "x", Measure: "y"}}
+	batch := planstore.LawCard{ApprovalID: "appr_00000000000000a1", Number: 911, Op: "add_many", Adds: []planstore.LawCard{
+		{Op: "add", After: "a belief", Standards: std, Frame: &planstore.LawFrame{Level: lv(0)}},
+		{Op: "add", After: "a basic law", Standards: std, Frame: &planstore.LawFrame{Level: lv(2)}},
+		{Op: "add", After: "a domain law", Standards: std, Frame: &planstore.LawFrame{Level: lv(3), Parent: "4"}},
+		{Op: "add", After: "another belief", Standards: std, Frame: &planstore.LawFrame{Level: lv(0)}}}}
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{batch})
+	ok(t, err)
+	for n, want := range map[string]string{"3": "DAO-1", "4": "LAW-1", "5": "BYLAW-1", "6": "DAO-2"} {
+		l, _, _ := planstore.CurrentLaw(ctx, w.rt, n)
+		if l.Code != want {
+			t.Fatalf("law %s code = %q, want %q", n, l.Code, want)
+		}
+	}
+	// An amend keeps the code; one that changes the level is refused.
+	keep := planstore.LawCard{ApprovalID: "appr_00000000000000a2", Number: 912, Op: "amend", Law: "4", Before: "a basic law", After: "a basic law, amended",
+		Standards: std, Frame: &planstore.LawFrame{Level: lv(2)}}
+	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{keep})
+	ok(t, err)
+	if l, _, _ := planstore.CurrentLaw(ctx, w.rt, "4"); l.Code != "LAW-1" || l.Version != 2 {
+		t.Fatalf("law 4 after the amend = %+v", l)
+	}
+	move := planstore.LawCard{ApprovalID: "appr_00000000000000a3", Number: 913, Op: "amend", Law: "4", Before: "a basic law, amended", After: "now a domain law",
+		Standards: std, Frame: &planstore.LawFrame{Level: lv(3)}}
+	if _, err := planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{move}); err == nil {
+		t.Fatal("an amend that changes the level was written")
+	}
+	if l, _, _ := planstore.CurrentLaw(ctx, w.rt, "4"); l.Version != 2 {
+		t.Fatalf("law 4 moved level: %+v", l)
 	}
 }

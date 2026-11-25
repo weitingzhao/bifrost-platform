@@ -127,7 +127,11 @@ func lockRegister(ctx context.Context, tx pgx.Tx) error {
 func lawOf(r eventlog.Row) Law {
 	s := func(k string) string { v, _ := r.Body[k].(string); return v }
 	v, _ := r.Body["version"].(float64)
-	return Law{Law: s("law"), Code: LawCode(s("law")), Version: int(v), Op: s("op"), SaidOn: s("said_on"), Text: s("text"), Where: s("where"),
+	code := s("code")
+	if code == "" {
+		code = LawCode(s("law"))
+	}
+	return Law{Law: s("law"), Code: code, Version: int(v), Op: s("op"), SaidOn: s("said_on"), Text: s("text"), Where: s("where"),
 		EnforcedBy: s("enforced_by"), Status: s("status"), OldWording: s("old_wording"), Source: s("source"),
 		ApprovalID: s("approval_id"), Standards: r.Body["standards"], Frame: frameOf(r.Body["frame"]), At: r.At}
 }
@@ -261,7 +265,7 @@ func appendLaw(ctx context.Context, tx pgx.Tx, prev Law, have bool, l Law) error
 		l.Version = prev.Version + 1
 	}
 	body := map[string]any{"law": l.Law, "version": l.Version, "op": l.Op, "text": l.Text, "status": l.Status, "source": l.Source}
-	for k, v := range map[string]string{"said_on": l.SaidOn, "where": l.Where, "enforced_by": l.EnforcedBy, "old_wording": l.OldWording, "approval_id": l.ApprovalID} {
+	for k, v := range map[string]string{"said_on": l.SaidOn, "where": l.Where, "enforced_by": l.EnforcedBy, "old_wording": l.OldWording, "approval_id": l.ApprovalID, "code": l.Code} {
 		if v != "" {
 			body[k] = v
 		}
@@ -451,7 +455,20 @@ func registerOne(ctx context.Context, tx pgx.Tx, c LawCard, n string) (string, e
 		standards = append(standards, map[string]any{"id": s.ID, "standard": s.Standard, "measure": s.Measure})
 	}
 	l := Law{Law: n, Op: c.Op, Text: c.After, Status: "已批（law_amend " + c.ApprovalID + "）", Source: "law_amend " + c.ApprovalID, ApprovalID: c.ApprovalID,
-		SaidOn: prev.SaidOn, Where: prev.Where, EnforcedBy: prev.EnforcedBy, OldWording: prev.OldWording}
+		SaidOn: prev.SaidOn, Where: prev.Where, EnforcedBy: prev.EnforcedBy, OldWording: prev.OldWording, Code: prev.Code}
+	if c.Op == "add" {
+		codes, err := allCodes(ctx, tx)
+		if err != nil {
+			return "", err
+		}
+		var level *int
+		if c.Frame != nil {
+			level = c.Frame.Level
+		}
+		l.Code = nextCode(codes, level)
+	} else if err := levelKept(prev, c.Frame); err != nil {
+		return "", err
+	}
 	if c.Op != "repeal" {
 		l.Frame = c.Frame
 	}
@@ -485,4 +502,44 @@ func registerOne(ctx context.Context, tx pgx.Tx, c LawCard, n string) (string, e
 		}
 	}
 	return n, nil
+}
+
+// allCodes are the codes given so far: the register's laws and the purged
+// laws' tombstones, so no code is given twice.
+func allCodes(ctx context.Context, tx pgx.Tx) ([]string, error) {
+	laws, err := currentLaws(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, l := range laws {
+		if l.Code != "" {
+			out = append(out, l.Code)
+		}
+	}
+	tomb, err := eventlog.LatestOfStreams(ctx, tx, "law_purged", "law-purged:", time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range tomb {
+		if c, _ := r.Body["code"].(string); c != "" {
+			out = append(out, c)
+		} else if n, _ := r.Body["law"].(string); LawCode(n) != "" {
+			out = append(out, LawCode(n))
+		}
+	}
+	return out, nil
+}
+
+// levelKept refuses an amend that moves a coded law to another level: the
+// code says the level, so a law that changes level is repealed and added
+// again with a new code (Owner 2026-11-25).
+func levelKept(prev Law, f *LawFrame) error {
+	if prev.Code == "" || prev.Frame == nil || prev.Frame.Level == nil || f == nil || f.Level == nil {
+		return nil
+	}
+	if *prev.Frame.Level != *f.Level {
+		return eventlog.Invalid("law_amend: %s is at level %d; a law that changes level is repealed and added again with a new code, not amended", prev.Code, *prev.Frame.Level)
+	}
+	return nil
 }
