@@ -19,9 +19,10 @@ import (
 
 // PlanRule is the plan-standing rule in force.
 type PlanRule struct {
-	ID        string
-	Version   int
-	DoneRules bool
+	ID                string
+	Version           int
+	DoneRules         bool
+	DoneRulesReadings bool
 }
 
 // PlanRuleInForce is the plan-standing rule in force in tx; nil when none.
@@ -30,7 +31,7 @@ func PlanRuleInForce(ctx context.Context, tx pgx.Tx) (*PlanRule, error) {
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules}, nil
+	return &PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.Plan.DoneRules, DoneRulesReadings: r.Plan.DoneRulesReadings}, nil
 }
 
 // CardAutoKindsInForce are the card kinds the card-auto-answer rule in force

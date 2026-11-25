@@ -30,13 +30,22 @@ const OwnerKeyFingerprint = "SHA256:HQBmsFUm1mh0JHKwiG/AOJesGSRNNZF+waMq4BI1M7k"
 // withdraw it, set it to empty and release: a policy it signed stops
 // verifying, and the Owner signs again with the first key.
 //
-// The agent runtime's rules do not accept it: they verify against
-// OwnerKeyFingerprint alone.
+// The agent runtime's rules accept it too (Owner 2026-11-25: 「任何需要重签的话，
+// 可以通过 Ops 里验证码的那种 ticket 的形式来去签，不要我非要回到电脑上才能签」):
+// RuleAnchors.
 const ClusterSignerFingerprint = "SHA256:KWzT2m89T/mfDAFBmzOJvyDSu/lPwzhx8alEntAXz9Q"
 
 // PolicyAnchors is what a release policy and a freeze lift verify against:
 // the fingerprints that may sign them, separated by a space.
 func PolicyAnchors() string {
+	return joinAnchors(OwnerKeyFingerprint, ClusterSignerFingerprint)
+}
+
+// RuleAnchors is what an agent runtime rule verifies against: the same two
+// keys as a release policy, so a rule is re-signed on a code-approved card
+// as a policy is (OWNER_EXEC.md). Withdrawing the cluster key (empty
+// ClusterSignerFingerprint) withdraws it here too.
+func RuleAnchors() string {
 	return joinAnchors(OwnerKeyFingerprint, ClusterSignerFingerprint)
 }
 

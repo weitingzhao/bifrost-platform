@@ -27,8 +27,8 @@ import (
 type Host interface {
 	// DB is the agent runtime's database.
 	DB() eventlog.DB
-	// Anchor is the fingerprint of the Owner's signing key a signed rule must
-	// verify against; empty refuses every signed rule.
+	// Anchor is the fingerprints (space separated) of the keys a signed rule
+	// may verify against; empty refuses every signed rule.
 	Anchor() string
 	// Writer is who a request's write is recorded as.
 	Writer(*http.Request) (actor.Writer, error)

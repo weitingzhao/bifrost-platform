@@ -72,7 +72,7 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtAPI{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.Ask(), Anchor: releasepolicy.OwnerKeyFingerprint,
+	}, Ask: s.questionRuntime.Ask(), Anchor: releasepolicy.RuleAnchors(),
 		DiskFloor: deliveryview.DiskFloorFromEnv(), MailWake: s.mailWake}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	rt.evidenceCI = s.wireEvidenceGate()

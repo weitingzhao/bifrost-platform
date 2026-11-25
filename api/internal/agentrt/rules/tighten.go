@@ -23,7 +23,8 @@ func Tightens(prev, next Rule) error {
 	switch next.Kind {
 	case KindPlan:
 		// Each grant only goes from true to false.
-		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease {
+		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease ||
+			next.Plan.DoneRulesReadings && !prev.Plan.DoneRulesReadings {
 			return errors.New("the plan's standing authorization grants more")
 		}
 	case KindCardAuto:

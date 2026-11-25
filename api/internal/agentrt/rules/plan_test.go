@@ -66,3 +66,34 @@ func TestPlanStandingTightens(t *testing.T) {
 		}
 	}
 }
+
+// Origin: 2026-11-25, the reading atom (plan/reading.go): the Owner's grant for
+// rules that read a kept number is its own optional field, absent in every
+// rule signed before it, and adding it loosens.
+func TestPlanStandingReadingsGrant(t *testing.T) {
+	v1, err := rules.Parse([]byte(planText(1, "initial", "true", "true")))
+	if err != nil || v1.Plan.DoneRulesReadings {
+		t.Fatalf("a rule without the field: %v %+v", err, v1.Plan)
+	}
+	if body, _ := v1.BodyJSON(); strings.Contains(string(body), "done_rules_readings") {
+		t.Fatalf("absent field written back: %s", body)
+	}
+	v2, err := rules.Parse([]byte(planText(2, "loosen", "true", "true") + "done_rules_readings: true\n"))
+	if err != nil || !v2.Plan.DoneRulesReadings {
+		t.Fatalf("the grant: %v %+v", err, v2.Plan)
+	}
+	if body, _ := v2.BodyJSON(); !strings.Contains(string(body), `"done_rules_readings":true`) {
+		t.Fatalf("body = %s", body)
+	}
+	if err := rules.Tightens(v1, v2); err == nil {
+		t.Fatal("adding the readings grant counted as tightening")
+	}
+	// Positive control of the case above: dropping it again tightens.
+	back, _ := rules.Parse([]byte(planText(2, "tighten", "true", "true")))
+	if err := rules.Tightens(v2, back); err != nil {
+		t.Fatalf("dropping the readings grant: %v", err)
+	}
+	if _, err := rules.Parse([]byte(planText(2, "loosen", "true", "true") + "done_rules_readings: yes\n")); err == nil {
+		t.Fatal("a string parsed as the readings grant")
+	}
+}

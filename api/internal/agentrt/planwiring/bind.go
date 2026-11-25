@@ -73,7 +73,7 @@ func rulePorts() planstore.RulePorts {
 			if err != nil || r == nil {
 				return nil, err
 			}
-			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.DoneRules}, nil
+			return &planstore.PlanRule{ID: r.ID, Version: r.Version, DoneRules: r.DoneRules, DoneRulesReadings: r.DoneRulesReadings}, nil
 		},
 		CardAutoKindsInForce: verificationports.CardAutoKindsInForce,
 	}

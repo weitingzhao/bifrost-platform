@@ -72,8 +72,12 @@ type Header struct {
 // step not yet done that has none, when the rule names no manual atom;
 // ActiveOnLease lets the controller move a planned step to active once a
 // task on it has been leased (CUT-plan-import-2026-10-19.md §7).
+// DoneRulesReadings (optional, false when absent; 2026-11-25) lets such a
+// first rule also name the reading atom (plan/reading.go), still only when it
+// does not hold already.
 type PlanStanding struct {
 	DoneRules, ActiveOnLease bool
+	DoneRulesReadings        bool
 }
 
 // CardAuto lets the platform answer a card the runtime asked, once it has
@@ -234,6 +238,14 @@ func (r *Rule) plan(o *object) error {
 		}
 		*at = b
 	}
+	if n, err := o.node("done_rules_readings", true); err != nil {
+		return err
+	} else if n != nil {
+		if n.Tag != "!!bool" || (n.Value != "true" && n.Value != "false") {
+			return fmt.Errorf("%s.done_rules_readings is true or false", o.where)
+		}
+		p.DoneRulesReadings = n.Value == "true"
+	}
 	r.Plan = p
 	return nil
 }
@@ -255,6 +267,9 @@ func (r Rule) Doc() map[string]any {
 	switch r.Kind {
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
+		if r.Plan.DoneRulesReadings {
+			doc["done_rules_readings"] = true
+		}
 	case KindCardAuto:
 		if r.CardAuto.minutes {
 			doc["after_minutes"] = r.CardAuto.AfterSeconds / 60

@@ -186,14 +186,17 @@ func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *PlanRule) 
 	if err != nil || parsed.Empty() {
 		return false, nil
 	}
-	// The reading atom (2026-11-25) is not in the grant: the plan-standing
-	// rule the Owner signed names the step's own tasks and his sign-off only,
-	// so a rule that reads a kept number is his until he signs a rule that
-	// grants it (CORE-1 5: signing rules are his).
-	for _, atom := range []string{plan.AtomManual, plan.AtomCI, plan.AtomGates, plan.AtomApproval, plan.AtomQuestion, plan.AtomReading} {
+	for _, atom := range []string{plan.AtomManual, plan.AtomCI, plan.AtomGates, plan.AtomApproval, plan.AtomQuestion} {
 		if parsed.Names(atom) {
 			return false, nil
 		}
+	}
+	// The reading atom (2026-11-25) is in the grant only when the signed
+	// rule says so (done_rules_readings, CORE-1 5: signing rules are the
+	// Owner's); its source is read here as the loop will read it.
+	reads := parsed.Names(plan.AtomReading)
+	if reads && !rule.DoneRulesReadings {
+		return false, nil
 	}
 	var first bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 AND node_kind = 'step'
@@ -204,6 +207,10 @@ func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *PlanRule) 
 	res := parsed.Eval(f)
 	if f.err != nil {
 		return false, f.err
+	}
+	// A reading that cannot be read now cannot be shown not to hold already.
+	if reads && res.Value == plan.Unknown {
+		return false, nil
 	}
 	return res.Value != plan.True, nil
 }

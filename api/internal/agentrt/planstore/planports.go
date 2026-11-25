@@ -39,6 +39,8 @@ type PlanRule struct {
 	ID        string
 	Version   int
 	DoneRules bool
+	// DoneRulesReadings: such a first rule may also name the reading atom.
+	DoneRulesReadings bool
 }
 
 // RulePorts is what the plan code needs of the signed rules (verification).

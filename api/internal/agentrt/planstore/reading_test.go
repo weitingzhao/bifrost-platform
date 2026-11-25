@@ -2,8 +2,12 @@ package planstore_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
@@ -37,5 +41,41 @@ func TestReadingMovesAStepOnAKeptNumber(t *testing.T) {
 	doc = `{"inventory":[{"gap":0},{"gap":0}]}`
 	if moved := w.evaluate(t, s3, none); moved != "done" || w.stepState(t, s3) != "done" {
 		t.Fatalf("gaps all 0: moved %q, state %s", moved, w.stepState(t, s3))
+	}
+}
+
+// Origin: 2026-11-25: the plan-standing grant takes a first rule that reads a
+// kept number only when the signed rule grants it (done_rules_readings) and
+// the reading shows it does not hold yet; unknown is not "not yet".
+//
+// Serial: it sets the process's reading sources (SetReadings).
+func TestStandingGrantForReadings(t *testing.T) {
+	w := newWorld(t)
+	t.Cleanup(func() { planstore.SetReadings(nil) })
+	rule := json.RawMessage(`{"reading":{"source":"catalog.status","path":"pool.oldest_days","op":"<=","value":14}}`)
+	change := planstore.PlanChange{Op: "set_done_rule", Node: s3, Rule: rule}
+	check := func(grant planstore.PlanRule, doc string) bool {
+		t.Helper()
+		planstore.SetReadings(func(context.Context, string) ([]byte, bool) { return []byte(doc), doc != "" })
+		var in bool
+		ok(t, eventlog.InTx(ctxOf(t), w.rt, func(tx pgx.Tx) error {
+			var err error
+			in, err = planstore.StandingRuleForTest(ctxOf(t), tx, change, &grant)
+			return err
+		}))
+		return in
+	}
+	granted := planstore.PlanRule{ID: "plan-standing", Version: 2, DoneRules: true, DoneRulesReadings: true}
+	if !check(granted, `{"pool":{"oldest_days":30}}`) {
+		t.Fatal("granted, not holding yet: not in the grant")
+	}
+	if check(planstore.PlanRule{ID: "plan-standing", Version: 1, DoneRules: true}, `{"pool":{"oldest_days":30}}`) {
+		t.Fatal("no readings grant: in the grant")
+	}
+	if check(granted, `{"pool":{"oldest_days":3}}`) {
+		t.Fatal("holding already: in the grant")
+	}
+	if check(granted, "") {
+		t.Fatal("source unreadable: in the grant")
 	}
 }

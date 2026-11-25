@@ -15,6 +15,9 @@ type (
 )
 
 var (
+	// StandingRuleForTest is the plan-standing grant's check of a first done
+	// rule (reading_test.go).
+	StandingRuleForTest          = standingRule
 	ObservationKeyForTest        = observationKey
 	ObservationStreamForTest     = observationStream
 	RecordPlanObservationForTest = recordPlanObservation
