@@ -24,7 +24,7 @@ func (rt Routes) HandlePostOwnerIssues(w http.ResponseWriter, r *http.Request) {
 		rt.Host.Fail(w, err)
 		return
 	}
-	n, err := planstore.RecordOwnerIssues(r.Context(), rt.Host.DB(), who.Actor, b.Issues)
+	n, err := planstore.RecordOwnerIssues(r.Context(), rt.Host.DB(), who, b.Issues)
 	if err != nil {
 		rt.Host.Fail(w, err)
 		return

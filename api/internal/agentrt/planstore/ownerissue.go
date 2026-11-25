@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
@@ -166,8 +167,9 @@ func sameIssue(recorded, b map[string]any) bool {
 
 // RecordOwnerIssues records each issue whose content changed as its next
 // version and says how many it recorded; an issue posted as it stands changes
-// nothing, so the legislation line may post the whole list again.
-func RecordOwnerIssues(ctx context.Context, db eventlog.DB, actor string, issues []OwnerIssue) (int, error) {
+// nothing, so the legislation line may post the whole list again. A thread
+// writing for the first time is registered, as on every write route.
+func RecordOwnerIssues(ctx context.Context, db eventlog.DB, w actor.Writer, issues []OwnerIssue) (int, error) {
 	if len(issues) == 0 || len(issues) > 500 {
 		return 0, eventlog.Invalid("1 to 500 issues a call")
 	}
@@ -184,6 +186,9 @@ func RecordOwnerIssues(ctx context.Context, db eventlog.DB, actor string, issues
 	recorded := 0
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		recorded = 0
+		if err := actor.Ensure(ctx, tx, w, true); err != nil {
+			return err
+		}
 		for _, m := range issues {
 			body := ownerIssueBody(m)
 			last, ok, err := eventlog.Last(ctx, tx, OwnerIssueStream(m.Issue))
@@ -199,7 +204,7 @@ func RecordOwnerIssues(ctx context.Context, db eventlog.DB, actor string, issues
 				version = v + 1
 			}
 			body["version"] = version
-			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: OwnerIssueStream(m.Issue), Type: "owner_issue", Actor: actor, Body: body}); err != nil {
+			if _, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: OwnerIssueStream(m.Issue), Type: "owner_issue", Actor: w.Actor, Body: body}); err != nil {
 				return err
 			}
 			recorded++
