@@ -100,6 +100,9 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			"summary":     a.Summary,
 			"runner":      a.Runner,
 			"drill":       a.Drill,
+			"track":       TrackOf(a.Action),
+			"owner_class": a.OwnerClass,
+			"to_owner":    toOwnerNote(a, body.InlineGPUShutdown),
 		})
 		return
 	}

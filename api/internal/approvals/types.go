@@ -225,3 +225,21 @@ func TrackOf(action string) string {
 	}
 	return TrackDaily
 }
+
+// DailyCardNote is what the requesting thread reads back when it builds a
+// card that is neither a law ticket nor one of the six classes. LAW-6 二:
+// only those two reach the Owner's phone; everything else that can be undone
+// runs by recipe or signed rule, with a record. The note tells the thread at
+// the moment it decides, not afterwards in a reading.
+const DailyCardNote = "daily card: it goes to the Owner's phone although it is neither a law ticket nor one of the six classes " +
+	"(LAW-6 二, target 0 a day). If it is one of the six, withdraw it and create it again with owner_class H1-H6. " +
+	"If it can be undone within an hour, use a tier-B action or a recipe instead, and tell 5 Approvals which one is missing."
+
+// toOwnerNote is empty for law tickets, six-class cards, drills and the
+// Owner's own inline shutdown; DailyCardNote otherwise.
+func toOwnerNote(a Approval, ownerInline bool) string {
+	if a.Drill || ownerInline || a.OwnerClass != "" || TrackOf(a.Action) == TrackLaw {
+		return ""
+	}
+	return DailyCardNote
+}
