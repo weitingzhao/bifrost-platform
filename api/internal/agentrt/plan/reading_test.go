@@ -25,7 +25,7 @@ func (f *readingFacts) ReadingDoc(source string) ([]byte, bool) {
 }
 
 const statusDoc = `{"inventory":[{"repo":"a","gap":0,"measured":true},{"repo":"b","gap":0,"measured":true}],
- "daily":[{"reads":{"status":3}},{"reads":{"status":0}}],"pool":{"oldest_days":9}}`
+ "daily":[{"reads":{"status":3,"/api/v1/catalog/status":42}},{"reads":{"status":0,"/api/v1/catalog/status":7}}],"pool":{"oldest_days":9}}`
 
 func TestReadingParses(t *testing.T) {
 	for _, bad := range []string{
@@ -61,7 +61,9 @@ func TestReadingEvaluates(t *testing.T) {
 		`{"reading":{"source":"catalog.status","path":"inventory.*.measured","op":"==","value":true}}`: True,
 		`{"reading":{"source":"catalog.status","path":"daily.*.reads.status","op":">","value":0}}`:     False,
 		`{"reading":{"source":"catalog.status","path":"pool.oldest_days","op":"<=","value":14}}`:       True,
-		`{"reading":{"source":"catalog.status","path":"pool.oldest_days","op":"<","value":9}}`:         False,
+		// 2026-11-25: the map keeps its read counts by route, a key with slashes.
+		`{"reading":{"source":"catalog.status","path":"daily.*.reads./api/v1/catalog/status","op":">","value":0}}`: True,
+		`{"reading":{"source":"catalog.status","path":"pool.oldest_days","op":"<","value":9}}`:                     False,
 		// not there, not a number, or no source: unknown, never done
 		`{"reading":{"source":"catalog.status","path":"pool.missing","op":"==","value":0}}`:            Unknown,
 		`{"reading":{"source":"catalog.status","path":"inventory.*.repo","op":"==","value":0}}`:        Unknown,

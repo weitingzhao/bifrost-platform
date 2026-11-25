@@ -17,7 +17,8 @@ import (
 //
 // source names a document the platform keeps and serves read-only (the
 // sources the store wires, ReadingFacts); path walks it by object keys, with
-// * for every element of a list. Every value the path reaches must compare
+// * for every element of a list. A key may hold slashes: the map keeps its
+// read counts by route (daily.*.reads./api/v1/catalog/status). Every value the path reaches must compare
 // true, and it must reach at least one: a path that reaches nothing, a value
 // that is not a number (or a flag for == and !=) and a source that cannot be
 // read are all Unknown, never done (LAW-8: only numbers the system produces
@@ -41,7 +42,7 @@ type reading struct {
 
 var (
 	readingSource = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$`)
-	readingKey    = regexp.MustCompile(`^(\*|[A-Za-z0-9_-]+)$`)
+	readingKey    = regexp.MustCompile(`^(\*|[A-Za-z0-9_/-]+)$`)
 	readingOps    = map[string]bool{"==": true, "!=": true, "<": true, "<=": true, ">": true, ">=": true}
 )
 
