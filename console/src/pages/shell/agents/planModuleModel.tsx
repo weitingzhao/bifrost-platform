@@ -172,7 +172,7 @@ const bound: Record<string, string> = {
 
 /**
  * One part of a done rule in words. The grammar is plan/rule.go's, plus the step atoms of design D3 (step_tasks,
- * step_landed, step_stg_settled, step_deployed); anything else is shown as not recognised, never guessed.
+ * step_landed, step_stg_settled, step_deployed) and the reading atom (plan/reading.go); anything else is shown as not recognised, never guessed.
  */
 function ruleLine(rule: unknown, depth: number): RuleLine {
   if (!isRecord(rule)) return { text: 'Unreadable rule part' }
@@ -201,6 +201,7 @@ function ruleLine(rule: unknown, depth: number): RuleLine {
     case 'step_landed': return { text: 'Every accepted task of this step has landed on main, or you declined it and the same change landed from another task of the step' }
     case 'step_stg_settled': return { text: 'Every landed change of this step has settled on STG (a repository with no STG release, such as infra, counts once landed)' }
     case 'step_deployed': return { text: `Every landed commit of this step is deployed on ${envName(fields.env)}` }
+    case 'reading': return { text: `The platform's ${str(fields.source) || '(unnamed source)'} reads ${str(fields.path) || '(no path)'} ${str(fields.op) || '?'} ${JSON.stringify(fields.value ?? null)}` }
   }
   return { text: `Rule not recognised · ${key}` }
 }

@@ -139,6 +139,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			deliveryassembly.BindReleaseTable(s.releases.Service(), pool)
 		}
 		s.startBus(ctx, pool, env, role)
+		// The reading atom's sources, in both roles: the API checks a proposed
+		// rule with them, the workers' plan loop evaluates with them.
+		s.wirePlanReadings()
 		if !role.RunsWorkers() {
 			<-ctx.Done()
 			pool.Close()

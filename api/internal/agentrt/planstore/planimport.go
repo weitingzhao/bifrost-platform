@@ -167,7 +167,7 @@ func importTree(ctx context.Context, tx pgx.Tx, who string, req planimport.Reque
 			if err = RecordManual(ctx, tx, who, n.ID, planimport.ManualAtom(n.ID), text, []string{eid, reqID}); err != nil {
 				return fmt.Errorf("plan import: step %s: %w", n.ID, err)
 			}
-			to, err := evaluateStep(ctx, tx, n.ID, noDeployment)
+			to, err := evaluateStep(ctx, tx, n.ID, noDeployment, nil)
 			if err != nil {
 				return fmt.Errorf("plan import: step %s: %w", n.ID, err)
 			}

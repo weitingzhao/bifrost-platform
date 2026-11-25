@@ -655,6 +655,11 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 	}
 }
 
+// KeptStatus is the status last kept, the document GET /catalog/status
+// serves; nil when none was computed yet. The plan's reading atom reads it
+// (source catalog.status), the same contract the route answers.
+func (s *Scanner) KeptStatus() ([]byte, error) { return s.kept().Read(keptStatus) }
+
 // StatusRoute is GET /catalog/status: the status last kept.
 type StatusRoute struct{ Scanner *Scanner }
 

@@ -81,7 +81,9 @@ func TestContractChangeOutsideWaitsForTheOwner(t *testing.T) {
 		"the title of a live step": retitle(stepLive, "x"),
 		"the title of an item":     retitle(item1, "x"),
 		"a done rule":              doneRule(stepA, `{"owner_signoff":"x"}`),
-		"a drop":                   {Op: "drop_step", Node: stepB},
+		// 2026-11-25: the signed plan-standing grant does not name the reading atom.
+		"a reading rule": doneRule(stepA, `{"reading":{"source":"catalog.status","path":"pool.oldest_days","op":"<=","value":14}}`),
+		"a drop":         {Op: "drop_step", Node: stepB},
 	} {
 		nodes := w.count(`SELECT count(*) FROM agentrt.plan_node`)
 		title := w.node(item1).title
@@ -99,8 +101,8 @@ func TestContractChangeOutsideWaitsForTheOwner(t *testing.T) {
 		t.Fatalf("a dropped step before the answer: %s", got)
 	}
 	if n := w.count(`SELECT count(*) FROM agentrt.event WHERE event_type = 'plan_change_proposed' AND event_stream_id = 'plan:R2'
-	  AND body_json->>'standing' = 'false' AND body_json ? 'question_id' AND actor_id = $1 AND body_json->'changes'->0->>'op' <> 'import'`, writer.Actor); n != 6 {
-		t.Fatalf("%d proposals recorded with their card; want 6", n)
+	  AND body_json->>'standing' = 'false' AND body_json ? 'question_id' AND actor_id = $1 AND body_json->'changes'->0->>'op' <> 'import'`, writer.Actor); n != 7 {
+		t.Fatalf("%d proposals recorded with their card; want 7", n)
 	}
 }
 

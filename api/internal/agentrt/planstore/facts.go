@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 
@@ -107,6 +108,7 @@ type stepFacts struct {
 	tx        pgx.Tx
 	step      string
 	deployed  seenfacts.Deployed
+	readings  Readings
 	err       error
 }
 
@@ -181,15 +183,49 @@ func EvaluateStep(ctx context.Context, db eventlog.DB, stepID string, deployed s
 	var moved string
 	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
 		var err error
-		moved, err = evaluateStep(ctx, tx, stepID, deployed)
+		moved, err = evaluateStep(ctx, tx, stepID, deployed, nil)
 		return err
 	})
 	return moved, err
 }
 
+// Readings serves the documents the reading atom reads (plan/reading.go):
+// the source's document as the platform keeps it now; ok is false when it
+// cannot be read, and a reading of it is then unknown.
+type Readings func(ctx context.Context, source string) (doc []byte, ok bool)
+
+// readingSources is what the process serves to the reading atom; the server
+// sets it once at start (SetReadings). Unset, every reading is unknown.
+var readingSources atomic.Pointer[Readings]
+
+// SetReadings wires the reading atom's sources for this process: the plan
+// loop's evaluation and the standing check of a proposed rule read the same.
+func SetReadings(r Readings) {
+	if r == nil {
+		readingSources.Store(nil)
+		return
+	}
+	readingSources.Store(&r)
+}
+
+// ReadingDoc answers the reading atom: the facts' own sources, else the
+// process's.
+func (f *stepFacts) ReadingDoc(source string) ([]byte, bool) {
+	r := f.readings
+	if r == nil {
+		if p := readingSources.Load(); p != nil {
+			r = *p
+		}
+	}
+	if r == nil {
+		return nil, false
+	}
+	return r(f.ctx, source)
+}
+
 // evaluateStep is EvaluateStep inside tx; a plan import runs it on the steps
 // it brings in done (planimport.go).
-func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed seenfacts.Deployed) (string, error) {
+func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed seenfacts.Deployed, readings Readings) (string, error) {
 	var state, doc string
 	if err := tx.QueryRow(ctx, `SELECT state, done_rule_json::text FROM agentrt.plan_node
 	  WHERE plan_node_id = $1 AND node_kind = 'step' FOR UPDATE`, stepID).Scan(&state, &doc); err != nil {
@@ -204,7 +240,7 @@ func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed seenfa
 	if rule.Empty() || state == "dropped" || state == "stopped" || state == "done" && !rule.Standing() {
 		return "", nil
 	}
-	f := &stepFacts{ctx: ctx, tx: tx, step: stepID, deployed: deployed}
+	f := &stepFacts{ctx: ctx, tx: tx, step: stepID, deployed: deployed, readings: readings}
 	res := rule.Eval(f)
 	if f.err != nil {
 		return "", f.err

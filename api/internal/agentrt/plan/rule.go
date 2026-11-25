@@ -98,6 +98,7 @@ const (
 	kStepTasks
 	kStepLanded
 	kStepSTG
+	kReading
 )
 
 type gate struct{ test, spec string }
@@ -109,6 +110,7 @@ type node struct {
 	atom     string
 	n        int64
 	gates    []gate
+	reading  *reading
 }
 
 // Standing reports whether the rule contains a standing condition, which is
@@ -161,11 +163,15 @@ const (
 	AtomStepTasks  = "step_tasks"
 	AtomStepLanded = "step_landed"
 	AtomStepSTG    = "step_stg_settled"
+	// AtomReading compares a number or a flag the platform keeps (a source's
+	// archived document, reading.go) with a threshold. Like the step atoms it
+	// is history, not a standing condition: a step it made done stays done.
+	AtomReading = "reading"
 )
 
 var atomKinds = map[string]nodeKind{AtomTask: kTask, AtomApproval: kApproval, AtomQuestion: kQuestion, AtomCI: kCI,
 	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates, AtomMain: kBound, AtomDeployment: kBound, AtomReview: kBound, AtomExternal: kBound,
-	AtomStepTasks: kStepTasks, AtomStepLanded: kStepLanded, AtomStepSTG: kStepSTG}
+	AtomStepTasks: kStepTasks, AtomStepLanded: kStepLanded, AtomStepSTG: kStepSTG, AtomReading: kReading}
 
 // StepTaskState is the only state step_tasks counts. A done rule is
 // completion evidence: a state a proposer reaches by proposing a task
@@ -283,6 +289,8 @@ func parseNode(obj map[string]any, depth int) (*node, error) {
 			return &node{kind: kBound, s1: id, n: version, atom: k}, nil
 		case AtomStepTasks:
 			return parseStepTasks(v)
+		case AtomReading:
+			return parseReading(v)
 		case AtomStepLanded, AtomStepSTG:
 			if m, ok := v.(map[string]any); !ok || len(m) != 0 {
 				return nil, fmt.Errorf("%w: %s takes no arguments: {}", ErrRule, k)
@@ -547,6 +555,7 @@ type onceFacts struct {
 	Facts
 	gates map[[3]string]Tri
 	bound map[BoundRef]Tri
+	docs  map[string]docRead
 }
 
 func (o *onceFacts) GatePassed(env, test, specSHA256 string) Tri {
@@ -634,6 +643,8 @@ func eval(n *node, f Facts) Result {
 		return tri(f.OwnerSignoff(n.s1), false)
 	case kManual:
 		return tri(f.ManualRecorded(n.s1), true)
+	case kReading:
+		return Result{Value: evalReading(n.reading, f)}
 	case kStepTasks, kStepLanded, kStepSTG:
 		sf, ok := f.(StepFacts)
 		if !ok {

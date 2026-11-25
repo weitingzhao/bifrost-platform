@@ -186,7 +186,11 @@ func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *PlanRule) 
 	if err != nil || parsed.Empty() {
 		return false, nil
 	}
-	for _, atom := range []string{plan.AtomManual, plan.AtomCI, plan.AtomGates, plan.AtomApproval, plan.AtomQuestion} {
+	// The reading atom (2026-11-25) is not in the grant: the plan-standing
+	// rule the Owner signed names the step's own tasks and his sign-off only,
+	// so a rule that reads a kept number is his until he signs a rule that
+	// grants it (CORE-1 5: signing rules are his).
+	for _, atom := range []string{plan.AtomManual, plan.AtomCI, plan.AtomGates, plan.AtomApproval, plan.AtomQuestion, plan.AtomReading} {
 		if parsed.Names(atom) {
 			return false, nil
 		}
