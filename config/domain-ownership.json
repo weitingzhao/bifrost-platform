@@ -869,6 +869,13 @@
       "status": "assigned",
       "basis": "2026-11-17, moved out of api/internal/agentrt/controller unchanged (fullci.go): the daily full CI's decisions, when the day's full runs of main's head and STG's commit start and how a red run is noted (its failed tasks and tests, the landings since the last green full run that left a module out of their own CI run), and the newest finished run for the gauge. The controller keeps the loop (startFullCI) and binds what a pass reads of it (Host: the ledger, its clock and log, the commit STG runs, the zone of the briefs); an unbound zone starts no run. Imports: verification (evidence, landingci) and foundation (eventlog) only; it does not import the controller or planpace."
     },
+    "api/internal/agentrt/uicheck": {
+      "domains": [
+        "verification"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-25, R0E (CI line): bifrost-ui's stable pin, the newest ui commit the console passed with. A new ui main head is checked by a full run of bifrost-ci-platform with that ui; green moves the pin, red records the block. CI clones ui at the pin instead of main, so the console never goes red because ui moved. The controller runs the loop (verification/assembly wireUICheck) and lends the reads and writes; it imports nothing of the platform."
+    },
     "api/internal/agentrt/rules": {
       "domains": [
         "verification"

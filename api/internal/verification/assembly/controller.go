@@ -88,6 +88,7 @@ func NewController(l ControllerLent) *Controller {
 	pipelineRecords(c, l.PipelineFinished)
 	out := &Controller{c: c}
 	out.fullCIRun = wireFullCI(c, l.CI, l.FullCIZone)
+	wireUICheck(c, l.CI)
 	return out
 }
 
