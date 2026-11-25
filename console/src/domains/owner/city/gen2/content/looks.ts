@@ -1,8 +1,8 @@
 import type { Path, Place } from '@bifrost/ui/city/places'
 
 /**
- * The two looks of one system, side by side (the Owner, 2026-11-19: "游戏的展现形式和传统的 dashboard
- * 是平级的，不应该让 dashboard 包住游戏的页面"). The city fills the screen on its own; the Console is
+ * The two looks of one system, side by side (ISSUE-9: the game look and the dashboard are peers; the
+ * dashboard does not wrap the game's page). The city fills the screen on its own; the Console is
  * its own screen with its pages and, for every place, a ledger: the same places as rows. A switch at
  * the same spot in both moves between them, and the link carries the place and the picked room.
  *

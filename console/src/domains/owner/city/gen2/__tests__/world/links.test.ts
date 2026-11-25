@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SLOTS, edgeSlots, linksAt, linkRulesBroken, type Link } from '@bifrost/ui/city/links'
 import type { Place } from '@bifrost/ui/city/places'
 
-// Origin: the Owner, 2026-11-20 ("框架提供交互方式，系统来配；Bus 和指标两种足够；每层的显示要有规范，
+// Origin (ISSUE-9
 // 太多乱、太少抽象"). These pin the grain each level shows a connection at, and the budget.
 const P = (id: string, kind: Place['kind'], children: Place[] = []): Place => ({ id, kind, shape: '4x4', label: id.toUpperCase(), question: '', dashboard: null, children })
 const tree = P('town', 'town', [
@@ -46,7 +46,7 @@ describe('a content’s connections keep the frame’s rules', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("两边就够：一边进一边出，每边 3 个口子加 Other，再加一个 Orphan"; later the
+// Origin (ISSUE-9): two sides are enough, one in and one out, three ports on each plus Other, and one Orphan; later the
 // same day the named ports went to the busiest partners of what stands on the ground shown, declared or not,
 // the undeclared marked, replacing "only the declared"). These pin the sides, the ranking, and that nothing is dropped.
 describe('a place’s two sides: its declared partners, Other, Orphan', () => {
@@ -80,7 +80,7 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   it('an orphan’s far end need not be a place; a declared partner must be a place beside it', () => {
     expect(linkRulesBroken(town, links)).toEqual(['me: partner z is not a place beside it'])
   })
-  // The Owner, 2026-11-20: the front edges are what is clean; what is yet to be cleared stands in a row on the back left.
+  // (ISSUE-9) the front edges are what is clean; what is yet to be cleared stands in a row on the back left.
   it('the frame sets nine places outside: three in at the front left, three out at the front right, Other in, Other out and Orphan on the back left', () => {
     expect(SLOTS.filter(s => s.edge === 'y1').map(s => s.side)).toEqual(['in', 'in', 'in'])
     expect(SLOTS.filter(s => s.edge === 'x1').map(s => s.side)).toEqual(['out', 'out', 'out'])
@@ -88,7 +88,7 @@ describe('a place’s two sides: its declared partners, Other, Orphan', () => {
   })
 })
 
-// Origin: the Owner, 2026-11-20 ("city 就是整个系统，外面没有东西了"). This pins that the town has no outside:
+// Origin (ISSUE-9). This pins that the town has no outside:
 // an end that is not a place is refused, and no partner can be declared outside.
 describe('the town is the whole system', () => {
   const town: Place = P('town', 'town', [P('a', 'district', [P('x', 'building')])])

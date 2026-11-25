@@ -8,7 +8,7 @@ import type { DomainHoldings } from './domainOwns'
 import { DOMAIN_GLYPH } from './domainGlyphs'
 
 /**
- * The districts' tech tree (the Owner, 2026-11-20): who stands on whom among the domains, from the real
+ * The districts' tech tree (ISSUE-9): who stands on whom among the domains, from the real
  * graph. The nodes are the districts (the domains the map serves), each with its overall light; the edges
  * are the imports between domains' Go packages at the platform's main, as GET /api/v1/ci/domains serves
  * them (the same graph the domain score and the map's boundary light count, so the tree cannot call an
@@ -61,7 +61,7 @@ export function domainTechTree(status: MapStatus | undefined, graph: GraphRead):
 }
 
 /**
- * A district's own tech tree (the Owner, 2026-11-21: the tree follows the level): who among its buildings stands
+ * A district's own tech tree (ISSUE-9: the tree follows the level): who among its buildings stands
  * on whom. The buildings are the map's (each domain's packages grouped by directory, catalog/domain buildings);
  * the edges are the imports inside the domain (/ci/domains inner, production code only), each package put in the
  * building the map gives it, a package of a building that did not fit in Other. Two buildings that use each

@@ -15,7 +15,7 @@ import { districtLinesPanel, linesPanel, type LinesRead, type RosterRead } from 
 /**
  * Today's content, a plug-in of the frame: the districts are the domains the map reads (domainPlaces.ts),
  * the hardware stands in compute's, and the menu along the bottom is the Console's functions (the other
- * dimension, the Owner 2026-11-20). Who stands on whom is the tech tree (techTree.ts), opened from the
+ * dimension, ISSUE-9). Who stands on whom is the tech tree (techTree.ts), opened from the
  * levels, each node with its domain's light; the town's panel keeps what the map counts off it, a district
  * its own lights and, read when it is entered, what it owns (the map's domain read).
  */
@@ -23,7 +23,7 @@ export const consoleContent = (domains: DomainsRead = {}, hardware: Place | null
   const why = domains.error instanceof Error ? domains.error.message : domains.error ? String(domains.error) : ''
   const tree = domainTree(domains.data, hardware, why, holdings, routes, flowSource, insideRead)
   const ids = new Set((domains.data?.domains ?? []).map(d => d.id))
-  // A district whose buildings go past its ground (16 things): cut too fine, to decouple or merge (the Owner, 2026-11-22).
+  // A district whose buildings go past its ground (16 things): cut too fine, to decouple or merge (LAW-11).
   const overflowPanel = (id: string) => {
     const o = overflowOf(holdings[id])
     return o.over > 0 ? [{ id: 'overflow', title: 'Too fine to fit', dock: 'right' as const, cards: [{ kind: 'note' as const, tone: 'warn' as const, text: `${o.buildings} buildings, ${o.over} past the 16 a level holds: the rest stand in the Other site. Cut too fine: decouple or merge them.` }] }] : []

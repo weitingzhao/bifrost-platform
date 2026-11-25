@@ -1,4 +1,4 @@
-// 2026-11-21, the Owner: "set the boundary from the start" — nothing but the engine draws the UI. The content is a
+// (ISSUE-55) The boundary is set from the start: nothing but the engine draws the UI. The content is a
 // translation layer: it reads the system and hands the engine data (places, links, the tech tree, cards as data),
 // never markup. This holds the wall: no .tsx file, no React, no JSX under content/. The positive control below
 // proves the scan sees markup when it is there.

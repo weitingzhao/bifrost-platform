@@ -11,7 +11,7 @@ const mac: MemoryRoomReadings = { total: 17.2 * GB, available: 7.8 * GB, free: 0
 const none: MemoryRoomReadings = { total: null, available: null, free: null, swapTotal: null, swapUsed: null, swapIO: null, corrupted: null }
 
 describe('the memory room', () => {
-  // The Owner, 2026-11-19: a freezer cannot be half. Modules come in GiB and the system reports a little
+  // (ISSUE-9) a freezer cannot be half. Modules come in GiB and the system reports a little
   // less than installed, so whole freezers, rounded up to the modules; contents fill them in proportion.
   it('whole freezers only, one per 4 GiB of modules: 24 GB six, 16 GB four, 8 GB two, 128 GB thirty-two', () => {
     expect(sectionsOf(node)).toBe(6)
@@ -27,7 +27,7 @@ describe('the memory room', () => {
   it('inside, plain fills only: no patterned blocks', () => {
     expect(memoryRoom(node).svg).not.toContain('<pattern')
   })
-  // The Owner, 2026-11-19: seven kinds on the bench were noise; three, each readable apart and keyed.
+  // (ISSUE-9) seven kinds on the bench were noise; three, each readable apart and keyed.
   it('three kinds, in order, adding up to what is installed: in use, can be cleared, empty', () => {
     const f = freezersOf(mac)
     expect(f.map(s => s.id)).toEqual(['held', 'clearable', 'empty'])
@@ -59,7 +59,7 @@ describe('the memory room', () => {
     setRuler('mem.sections', 2 * 2 ** 30)
     try { expect(sectionsOf(node)).toBe(12) } finally { setRuler('mem.sections', null) }
   })
-  // The Owner, 2026-11-19: if the kinds in use can be told apart, show them — on the console, as a bar.
+  // (ISSUE-9) if the kinds in use can be told apart, show them — on the console, as a bar.
   it('in use by kind: system and compressed read exactly; the rest is programs and the rest; they add up to in use', () => {
     const k = inUseOf({ ...mac, kernel: 1.7 * GB, compressed: 1.4 * GB })!
     expect(k.map(x => x.id)).toEqual(['system', 'compressed', 'rest'])

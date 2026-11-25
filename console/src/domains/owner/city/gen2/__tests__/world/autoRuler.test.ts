@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { rulerOf, rulerToFit } from '@bifrost/ui/city/library/dictionary'
 import { cpuRoomFits, cpuRoomShape, machinesOf } from '@bifrost/ui/city/units/cpuRoom'
 
-// Origin: the Owner, 2026-11-20 ("要展示细节就得占多大地方，否则就得模糊细节"): a room grows to its largest
+// Origin (ISSUE-9): a room grows to its largest
 // first; when its parts still do not fit, one part stands for more (one machine for 2, 3, 4 cores), and the
 // viewer's own ruler is left as it was.
 const cpu = (n: number) => ({ cores: Array.from({ length: n }, () => ({ busy: 0.1, freq: null, max: null })), temps: [] })

@@ -1,13 +1,13 @@
 {
   "what": "Draft: whom each domain declares as its partners, up to 3 in and 3 out (frame/links.ts Partners). A draft for the evaluation to come; not wired into the city yet (the city's districts are still the Console's menu).",
-  "why": "The Owner, 2026-11-20: the rules first; detect before judging. The named ports are the partners a domain declares; traffic with anyone undeclared goes to Other. This draft is read from what exists, so the gap between it and what each domain says it wants is the first thing to judge.",
+  "why": "(ISSUE-9) the rules first; detect before judging. The named ports are the partners a domain declares; traffic with anyone undeclared goes to Other. This draft is read from what exists, so the gap between it and what each domain says it wants is the first thing to judge.",
   "drafted_by": "the city line (cockpit), 2026-11-20, for the Owner; each domain's line confirms or changes its own row",
   "read_from": [
     "bifrost-platform/config/domain-ownership.json (contracts and their consumers, measured_at 2e93ae09 / d8dc802c)",
     "bifrost-platform/api/internal/bus/registry/rocket.yaml (event publisher domain and consumers)",
     "bifrost-platform/api/internal/bus/registry/subscriptions/rocket.yaml (each bus client's domain)"
   ],
-  "direction": "in: others come to it (they call its API or tool, or it receives their event); out: it goes to others (it publishes an event they receive, or calls theirs). The town has no outside (the Owner, 2026-11-20: it is the whole system), so every user is a domain inside it.",
+  "direction": "in: others come to it (they call its API or tool, or it receives their event); out: it goes to others (it publishes an event they receive, or calls theirs). The town has no outside (ISSUE-9: it is the whole system), so every user is a domain inside it.",
   "domains": {
     "foundation": {
       "in": [
@@ -99,7 +99,7 @@
     "Where the console and the agents' tools belong (owner, coordination) is a proposal; if they are a domain of their own, the rows change."
   ],
   "users_inside": {
-    "why": "The Owner, 2026-11-20: the town is the whole system; Trade, Finance and the other payloads are inside it, each a satellite of the tenant domain, a black box to us that opens onto its own world. So the callers the ownership table names are mapped to the domain they belong to. PROPOSED: each line confirms.",
+    "why": "(ISSUE-9) the town is the whole system; Trade, Finance and the other payloads are inside it, each a satellite of the tenant domain, a black box to us that opens onto its own world. So the callers the ownership table names are mapped to the domain they belong to. PROPOSED: each line confirms.",
     "console": "owner (the Owner's console: his decisions and his view)",
     "mcp": "coordination (the agents' tool counter: the seats)",
     "trade-infra, trade-api, trade-frontend, trade-core, research, platform-plugin, platform-plugin-market-data": "tenant (the payloads and the plugins; each tenant a satellite, a black box)",

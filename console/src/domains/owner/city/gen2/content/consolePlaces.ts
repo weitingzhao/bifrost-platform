@@ -2,7 +2,7 @@ import { ENTRY_ROUTE_IDS, SHELL_NAV, type ShellRouteId } from '@/lib/shell/conso
 
 /**
  * The Console's functions: its menu entries, read from its routes. They are the bar along the bottom,
- * the dimension by function (the Owner, 2026-11-20: the districts are the domains, the menu is another
+ * the dimension by function (ISSUE-9: the districts are the domains, the menu is another
  * dimension; look at the two apart). A place that serves one says so in its `function`; the menu lights
  * up what serves it on every level.
  *

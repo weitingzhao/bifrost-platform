@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { TINTS, tintOf } from '@bifrost/ui/city/theme'
 import type { Place } from '@bifrost/ui/city/places'
 
-// Origin: the Owner, 2026-11-20 ("一代的建筑和街区配色很漂亮，搬过来再删一代"): gen2 takes gen1's district
+// Origin (ISSUE-9): gen2 takes gen1's district
 // tints and its landmarks. These pin that each district keeps its own tint by its place. (The pages that
 // stood as landmarks left with the menu's tree, 2026-11-20: the districts became the domains.)
 const town = (ids: string[]): Place => ({ id: 'town', kind: 'town', shape: '8x8', label: '', question: '', dashboard: null, children: ids.map(id => ({ id, kind: 'district', shape: '2x2', label: id, question: '', dashboard: null, children: [] })) })

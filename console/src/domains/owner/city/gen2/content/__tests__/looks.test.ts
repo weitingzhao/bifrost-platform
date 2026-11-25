@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { cityHref, consoleHrefOf, ledgerHref, readCityQuery } from '../looks'
 import type { Place } from '@bifrost/ui/city/places'
 
-// Origin: the Owner, 2026-11-19 ("按这个画"): the city and the Console are two peer looks; switching keeps
+// Origin (ISSUE-9): the city and the Console are two peer looks; switching keeps
 // the place and the picked room. These pin that an address carries both and reads back the same.
 const room = (id: string): Place => ({ id, kind: 'room', shape: '2x2', label: id, question: '', dashboard: null, children: [] })
 

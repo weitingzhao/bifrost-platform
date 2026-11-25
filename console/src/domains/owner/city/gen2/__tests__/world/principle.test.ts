@@ -4,7 +4,7 @@ import { GRID, MAX_THINGS } from '@bifrost/ui/city/grid'
 import { PORTS } from '@bifrost/ui/city/links'
 import { LABEL_CHARS } from '@bifrost/ui/city/labels'
 
-// 2026-11-20, the Owner: "boundaries first" is the heart of this UI and must be said in the page itself; what it
+// (ISSUE-9) Boundaries first is the heart of this UI and must be said in the page itself; what it
 // says must be what the frame does, so its numbers come from the frame's own constants.
 describe('the page says its core idea in the frame’s own numbers', () => {
   it('names the ground, the things it holds, the ports and the label length the frame enforces', () => {

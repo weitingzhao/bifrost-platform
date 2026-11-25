@@ -1,7 +1,7 @@
 import type { Facility, Look } from '@bifrost/ui/city/places'
 
 /**
- * The platform's binding (the Owner, 2026-11-20: the world offers the things; the platform only says which of
+ * The platform's binding (ISSUE-55: the world offers the things; the platform only says which of
  * them shows each part of its state, the way a player picks a character): every kind of device it knows, the
  * catalogue's facility it stands as. No drawing here, only the choice; the frame draws what is picked.
  *
@@ -19,5 +19,5 @@ export function facilityFor(look: Look, gpu: boolean): Facility {
   }
 }
 
-/** The town the hardware district stands as on the city: the nuclear plant (the Owner, 2026-11-20). */
+/** The town the hardware district stands as on the city: the nuclear plant (ISSUE-9). */
 export const HARDWARE_TOWN = 'nuclear'

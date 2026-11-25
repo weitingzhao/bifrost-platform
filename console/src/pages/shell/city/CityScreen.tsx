@@ -28,7 +28,7 @@ function placeAt(tree: Place, path: readonly string[]): Place {
 }
 
 /**
- * The city look: the whole screen, outside the Console's frame (the Owner, 2026-11-19: the game look and the
+ * The city look: the whole screen, outside the Console's frame (ISSUE-9: the game look and the
  * dashboard look are peers; the dashboard does not hold the game), under the one world frame every view wears
  * (箭10 2026-11-23, cockpit/ui-world/frame): where you are, the four places in the engine's order, the environment,
  * the time and the alerts corner. The scene's own look switch and alerts corner give way to the frame; its own

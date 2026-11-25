@@ -3,7 +3,7 @@ import type { Shape } from '@bifrost/ui/city/grid'
 import type { DomainHoldings } from './domainOwns'
 
 /**
- * A domain's buildings (the Owner, 2026-11-22: the DAG must show at every level; the map line, f2c674e8): the map
+ * A domain's buildings (ISSUE-9: the DAG must show at every level; the map line, f2c674e8): the map
  * groups each domain's Go packages into buildings by the first directory under a Go root, and GET
  * /api/v1/catalog/domain serves them, the biggest first. City draws each as a building in its district, as read:
  * nothing grouped or named here.
@@ -19,7 +19,7 @@ const MOST = 16
 export const OTHER = 'other'
 
 /**
- * The buildings as they fit (the Owner, 2026-11-20: fixed slots and Other; the mess shown, bounded): the biggest
+ * The buildings as they fit (ISSUE-33: fixed slots and Other; the mess shown, bounded): the biggest
  * first while they fit the ground, one slot kept for Other; the rest go into one Other building that says how
  * many it holds. Nothing is dropped: Other's card lists them.
  */
@@ -40,7 +40,7 @@ export function buildingsOf(h: DomainHoldings | undefined, state: State, roomsOf
   for (const b of all) if (fits([...kept, b], 1)) kept.push(b)
   const rest = all.filter(b => !kept.includes(b))
   const pkgs = rest.reduce((n, b) => n + b.packages.length, 0)
-  // Drawn as a construction site: more than a level holds is cut too fine, work to do (the Owner, 2026-11-22:
+  // Drawn as a construction site: more than a level holds is cut too fine, work to do (LAW-11:
   // what does not fit should be decoupled or merged), never hidden.
   const other = make(OTHER, `Other · ${rest.length}`, pkgs,
     `${rest.length} more buildings of ${h!.id} (${pkgs} packages) do not fit its ground: cut too fine, to decouple or merge: ${rest.map(b => b.id).join(', ')}.`, '4x4')

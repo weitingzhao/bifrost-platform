@@ -3,7 +3,7 @@ import CONFIRMED from './confirmed.json'
 
 /**
  * The memory unit (the second through the unit process, 2026-11-19). City metaphor: the factory's cold store, a row of
- * chest freezers (the Owner, 2026-11-19) — goods kept for now, lost when the power goes (memory empties
+ * chest freezers (ISSUE-9) — goods kept for now, lost when the power goes (memory empties
  * as a freezer spoils); some can be cleared out at need (the cache); what does not fit goes to the
  * overflow corner (swap), slow to fetch.
  *
@@ -45,7 +45,7 @@ export const MEMORY_UNIT: UnitSpec = {
   // what the system keeps and what is compressed can be read exactly on both systems; the rest of what is
   // in use is programs and the rest, not split further.
   chosen: ['total', 'available', 'free', 'kernel', 'compressed', 'swap.total', 'swap.used', 'swap.io', 'corrupted'],
-  // Inside: the cold store (the Owner, 2026-11-19: a chest freezer, not a wooden bench — memory empties
+  // Inside: the cold store (ISSUE-9: a chest freezer, not a wooden bench — memory empties
   // when the power goes, as a freezer spoils). One chest freezer per 4 GB (the standard part), in pairs,
   // low, its glass lid on top showing what is inside now: goods in use, goods that can be cleared, the
   // empty cold floor. An overflow corner on the floor for swap; the room console.

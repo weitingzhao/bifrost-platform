@@ -5,7 +5,7 @@ import { assign, DISTRICT, encodePlan, fitsIn, GRID, MAX_THINGS, planFor, plotsO
 import type { Look, Meter, Place, State } from '@bifrost/ui/city/places'
 
 /**
- * The hardware district (RULES.md §2, the Owner 2026-11-19): the city's utilities, every physical
+ * The hardware district (RULES.md §2, ISSUE-9): the city's utilities, every physical
  * device a building, its resources the rooms. Nothing here is hand-kept (RULES.md 11): the devices
  * are the platform's topology, their states and readings the cluster's and the node exporters'
  * monitoring. City runs in reverse (rule 0): this only shows what the system says.
@@ -45,7 +45,7 @@ const hasGpu = (n: TopoNode) => /gpu|4090/i.test(`${n.id} ${n.label ?? ''}`) || 
 
 /**
  * RULES.md §2.3: a device's size by its weight, large enough that what it shows reads at a glance
- * (the Owner, 2026-11-19: use the ground): the GPU tower and the NAS (a logistics park, tens of
+ * (ISSUE-9: use the ground): the GPU tower and the NAS (a logistics park, tens of
  * terabytes) medium (4×8, two units); every other device small (4×4, one unit): the three classes, 2026-11-20.
  */
 export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
@@ -56,7 +56,7 @@ export function shapeOf(look: Look, cores: number | null, gpu: boolean): Shape {
 }
 
 /**
- * The district's zones (the Owner, 2026-11-19: lay it out by what things are for, not by chance):
+ * The district's zones (ISSUE-9: lay it out by what things are for, not by chance):
  * the west half is the machine room (the GPU tower and the cluster's nodes); in the east, trading
  * (the TWS desks) and storage with the network at the top, operations and the office (the Mac minis,
  * the agent host, the laptop) at the bottom.
@@ -100,7 +100,7 @@ export function zonedArrangement(items: { id: string; shape: Shape; zone: Zone }
 const G = 1e9
 /** A room's size by how much it holds: cores, or bytes. */
 const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
-  // The smallest thing is one unit, 4×4 (the Owner, 2026-11-20: sixteen units to a sheet).
+  // The smallest thing is one unit, 4×4 (ISSUE-9: sixteen units to a sheet).
   if (of == null) return '4x4'
   if (unit === 'cores') return of > 16 ? '4x8' : '4x4'
   return of > 4000 * G ? '8x8' : of > 96 * G ? '4x8' : '4x4'
@@ -206,7 +206,7 @@ export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', uni
   // On several, the engine lays each sheet out anew (places.ts onSheet), so no plan is given.
   const zoned = placed.sheets === 1 ? zonedArrangement(shown.map(b => ({ id: b.id, shape: b.shape, zone: zones.get(b.id)! }))) : undefined
   const arrangement = zoned && shown.every(b => zoned.at[b.id]) ? zoned : undefined
-  // The hardware is the town's power on the map: a nuclear plant (the Owner, 2026-11-20).
+  // The hardware is the town's power on the map: a nuclear plant (ISSUE-9).
   return { id: 'utilities', kind: 'district', shape: SHEET_SHAPE[placed.sheets], style: HARDWARE_TOWN, function: fn, ...(arrangement ? { arrangement } : {}), label: 'Utilities', question: `Is the hardware fine? Every device, and how full it is.${when ? ` ${when}` : ''}`, dashboard: null, children: shown }
 }
 
@@ -290,7 +290,7 @@ export function hardwareRulesBroken(d: Place): string[] {
 }
 
 /**
- * Every device carries a two-digit number on itself (the Owner, 2026-11-20: the building's look says what kind
+ * Every device carries a two-digit number on itself (ISSUE-9: the building's look says what kind
  * it is, its number which one; two digits are enough). A server keeps its node's number (ubt-k3s-04 is 04,
  * 01–09); every other device takes the next free number from 10, in the order of its id, so it keeps the same
  * number from one read to the next. The numbering is the city's own (a house number), not a reading.

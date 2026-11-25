@@ -4,7 +4,7 @@ import type { Panel } from '@bifrost/ui/city/content'
 import type { Trip } from '@bifrost/ui/city/traffic'
 
 /**
- * The bus's deliveries as the City's traffic (the Owner, 2026-11-21: the communication line first, the first
+ * The bus's deliveries as the City's traffic (ISSUE-9: the communication line first, the first
  * kind of vehicle). Everything is read from the communication line's contract and its stream, nothing guessed:
  *   from   the topic's domain, as the bus registry declares it (GET /api/v1/bus/contract, topics[].domain)
  *   to     the domain of the client whose receipt came (clients[].domain): the reader that took it

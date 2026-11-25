@@ -4,7 +4,7 @@ import type { HardwareReads } from './hardware'
 import { counted, gradeOf } from '@/api/alertCount'
 
 /**
- * The monitoring's firing alerts, placed in the City (the Owner, 2026-11-21: the utilities read the metrics line's
+ * The monitoring's firing alerts, placed in the City (ISSUE-9: the utilities read the metrics line's
  * judgment, not one of the picture's own; LAW-8). Read from GET /api/v1/telemetry/alerts (Prometheus's own alert
  * rules, owned by the metrics line, k8s/monitoring). Nothing here judges: an alert is shown as its rule says it.
  *

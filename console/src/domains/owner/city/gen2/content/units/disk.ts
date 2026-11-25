@@ -43,7 +43,7 @@ export const DISK_UNIT: UnitSpec = {
   // Details confirmed 2026-11-19: the fifteen the drives and volumes themselves know; file slots are the
   // file system's count (room standard 1), out.
   chosen: ['drives', 'rpm', 'size', 'used', 'read', 'write', 'busy', 'ops', 'latency', 'temp', 'errors', 'array.state', 'array.disks', 'array.sync', 'readonly'],
-  // Inside: the factory's warehouse (the Owner 2026-11-19: drawn with a factory warehouse's own racks, goods
+  // Inside: the factory's warehouse (ISSUE-9: drawn with a factory warehouse's own racks, goods
   // stacked). A rack per drive, its form its kind; a pallet place per 256 GB, cartons stacked as far as the
   // volume is used. Where a machine has several drives, which volume lies on which is not reported: the
   // volumes' pallets wait on the receiving floor, not on a guessed rack. An array a board apart.

@@ -28,7 +28,7 @@ function rowsOf(place: Place, path: Path): Row[] {
 }
 
 /**
- * The ledger look: the same places as the city, as rows, inside the Console (the Owner, 2026-11-19).
+ * The ledger look: the same places as the city, as rows, inside the Console (ISSUE-9).
  * A row does what its block does in the city: a room is picked, anything else is entered. What is not
  * wired is listed and greyed, as the city draws it as a ghost.
  */

@@ -9,8 +9,8 @@ import { memoryRoomReadings } from './units/memory'
 import { diskRoomReadings } from './units/disk'
 
 /**
- * The units' rooms put into use in the city (the Owner, 2026-11-19: "可以把这些东西放到这个房间里面去了…
- * 模块化，慢慢迭代"). Each room is its own module (frame/units/*Room.ts): readings in, a picture out. This
+ * The units' rooms put into use in the city (ISSUE-9: put them in their rooms now; modular, iterated slowly).
+ * Each room is its own module (frame/units/*Room.ts): readings in, a picture out. This
  * file only reads every unit's details through the platform and hands each computer's rooms their pictures;
  * a room's drawing changes in its module alone.
  */
@@ -56,7 +56,7 @@ function neededRulers(reads: UnitReads, host: string): CityRulers {
 }
 
 /**
- * One measurement for the whole city (the Owner, 2026-11-20: the measurement is the same everywhere, like the
+ * One measurement for the whole city (ISSUE-9: the measurement is the same everywhere, like the
  * real world; if one machine stands for more cores, it does in every room): for each part, the coarsest ruler
  * any computer needs, so every room counts alike and two machines' rooms compare at a glance.
  */

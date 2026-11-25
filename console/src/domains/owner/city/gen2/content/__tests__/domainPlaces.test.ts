@@ -8,8 +8,7 @@ import { COMPUTE, domainConsoleHref, domainTree, styleOf } from '../domainPlaces
 import { consoleHrefOf } from '../looks'
 import type { MapStatus } from '../domainsPanel'
 
-// 2026-11-20, the Owner: "the 2.5D is there to show the system's domain design; the menu is another
-// dimension". These pin that the districts are the domains the map serves, in its order and never a list
+// (ISSUE-9) The 2.5D shows the system's domain design; the menu is another dimension. These pin that the districts are the domains the map serves, in its order and never a list
 // kept here; that the hardware stands in compute's district; that an unread map says so and keeps only
 // what was read itself; and that the menu stays as the functions.
 const light = { value: 'good', why: '' }

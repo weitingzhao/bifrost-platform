@@ -9,8 +9,8 @@ import { formatShellHash } from '@/lib/shell/consoleRoutes'
 import type { MapStatus } from './domainsPanel'
 
 /**
- * The city's districts are the system's domains (the Owner, 2026-11-20: "the 2.5D is there to show the
- * system's domain design; the Console's menu is another dimension, look at the two apart"). So the
+ * The city's districts are the system's domains (ISSUE-9: the 2.5D shows the system's domain design;
+ * the Console's menu is another dimension, and the two are looked at apart). So the
  * districts are read from the map line (GET /api/v1/catalog/status), in the order it serves them, and
  * nothing here lists them by hand; the Console's menu stays the bar along the bottom (by function).
  *
@@ -30,7 +30,7 @@ export const domainConsoleHref = (id: string) => `#status?domain=${encodeURIComp
 
 /**
  * The building a domain's district stands as: the facility kind its line claimed in the Console's ownership table
- * (facilities, the Owner 2026-11-21: the engine draws the catalogue, each line claims its own). Unclaimed, or a
+ * (facilities, ISSUE-9: the engine draws the catalogue, each line claims its own). Unclaimed, or a
  * kind the catalogue does not draw: the plain district, never a guessed picture.
  */
 const FACILITIES = (OWNERSHIP as { facilities?: Record<string, { kind?: string }> }).facilities ?? {}

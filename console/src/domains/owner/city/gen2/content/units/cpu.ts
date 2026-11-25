@@ -4,7 +4,7 @@ import { MEMORY_UNIT } from './memory'
 import { DISK_UNIT } from './disk'
 
 /**
- * The CPU unit (the first through the unit process, 2026-11-19). City metaphor (the Owner, 2026-11-19): the workshop of a
+ * The CPU unit (the first through the unit process, 2026-11-19). City metaphor (ISSUE-9): the workshop of a
  * factory — a computer is a factory, its CPU the machine tools, memory the workbench, disk the warehouse. Details: what node exporter reports about a machine's CPU, listed after a read of
  * every metric family it has (2026-11-19 20:40Z): the Linux nodes report all of these; the Mac minis
  * only the time per core and the load; the NAS has no thermal zone.
