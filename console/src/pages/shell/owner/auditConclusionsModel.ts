@@ -61,6 +61,8 @@ export type StandardRow = {
   card?: string
   /** The law's said_on (GET /laws): from when a reading of it counts. */
   saidOn?: string
+  /** The law's code, LAW-k (the Owner 2026-11-25: laws are written LAW-k, never shortened; platform d9985668), when it has one. */
+  lawCode?: string
   attribution: Attribution | null | undefined
   /** undefined: the step's events are not read (yet); else what they say. */
   reading?: Reading | null
@@ -136,6 +138,7 @@ export function standardsOf(laws: readonly RegisterLaw[]): StandardRow[] {
         attribution: structured ?? undefined,
         ...(s.version ? { card: s.version } : {}),
         ...(l.said_on ? { saidOn: l.said_on } : {}),
+        ...((l as RegisterLaw & { code?: string }).code ? { lawCode: (l as RegisterLaw & { code?: string }).code } : {}),
       }
     }))
 }
@@ -194,6 +197,12 @@ function causeCell(r: StandardRow): Cell {
   return { text: word, ...(a.category === 'unchecked' || a.category === 'unreadable' ? { tone: 'unknown' as const } : {}), title: [a.reason, a.to ? '→ ' + a.to : '', a.raw ? `(not readable: ${a.raw})` : ''].filter(Boolean).join(' ') }
 }
 
+/**
+ * How a law is named on the page: its code (LAW-k) when it has one, else #n, so a row of material is never taken for a
+ * law (the Console line, 2026-11-25). Addresses keep the number.
+ */
+export const lawName = (r: Pick<StandardRow, 'law' | 'lawCode'>): string => r.lawCode ?? '#' + r.law
+
 const short = (t: string, n = 18) => (t.length > n ? t.slice(0, n) + '…' : t)
 
 function numbersCell(r: StandardRow): Cell {
@@ -215,7 +224,7 @@ export function auditTable(rows: readonly StandardRow[]): Extract<Block, { kind:
       open: r.step,
       cells: [
         // Short, so the result stays in view on a phone (390 check, 2026-11-24); the whole standard is in the title and the detail.
-        { text: `${r.law} ${r.label ? r.label + ' · ' : '· '}${short(r.standard)}`, title: `Law ${r.law}: ${r.standard}` },
+        { text: `${lawName(r)} ${r.label ? r.label + ' · ' : '· '}${short(r.standard)}`, title: `${lawName(r)}: ${r.standard}` },
         { text: r.result, tone: TONE[r.result], title: r.grade ? `${r.grade}${r.card ? ' · standard version ' + r.card : ''}` : 'no verdict yet' },
         numbersCell(r),
         causeCell(r),
@@ -228,7 +237,7 @@ export function auditTable(rows: readonly StandardRow[]): Extract<Block, { kind:
 /** The next fillers' list: every unmeasured standard and what it still lacks, as its plan step says. */
 export function unmeasuredList(rows: readonly StandardRow[]): { key: string; what: string; lacks: string; href: string }[] {
   return ordered(rows).filter(r => r.result === 'unmeasured').map(r => ({
-    key: r.step, what: `Law ${r.law} ${r.label || r.step}`, lacks: r.now || 'not written on the step', href: planNodeHref(r.step),
+    key: r.step, what: `${lawName(r)} ${r.label || r.step}`, lacks: r.now || 'not written on the step', href: planNodeHref(r.step),
   }))
 }
 
@@ -271,7 +280,7 @@ export function auditDetail(r: StandardRow | undefined, extra?: { label: string;
       ...(r.reading ? [{ key: 'judged', cells: [`Verdict event ${r.reading.judgedEventId} · reading note ${r.reading.noteEventId}`] }] : []),
       ...refs.map(x => ({ key: 'ref:' + x, cells: [x] })),
       ...(r.planItem ? [{ key: 'item', cells: [`Plan item ${r.planItem}`], href: planNodeHref(r.planItem) }] : []),
-      { key: 'law', cells: [`Law ${r.law} in the register`], href: lawHref(r.law) },
+      { key: 'law', cells: [`${lawName(r)} in the register`], href: lawHref(r.law) },
     ] },
   ]
 }

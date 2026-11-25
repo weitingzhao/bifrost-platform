@@ -76,7 +76,7 @@ describe('audit conclusions', () => {
   })
 
   it('lists what each unmeasured standard still lacks, and nothing for the measured ones', () => {
-    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: 'Law 12 s1', lacks: 'lacks reader 1' })])
+    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: '#12 s1', lacks: 'lacks reader 1' })])
   })
 
   it('opens a row onto the conclusion and the cause apart, then the evidence one click away', () => {
@@ -87,6 +87,18 @@ describe('audit conclusions', () => {
     const evidence = (blocks[2] as { rows: { key: string; href?: string }[] }).rows
     expect(evidence[0].href).toContain('node=R6%3A6.11-1')
     expect(evidence.map(x => x.key)).toEqual(expect.arrayContaining(['judged', 'ref:approval #723', 'ref:commit 848cdc8e', 'ref:run ci-engine-cbfcs', 'ref:evidence_id 126335']))
+  })
+
+  // 2026-11-25 the Owner: laws are written LAW-k, never shortened (platform d9985668 sends code on every law in force).
+  it('names a law by its code, and a row without one as #n so it is never taken for a law', () => {
+    const coded = { ...law('97', ['没核']), code: 'LAW-12' } as RegisterLaw
+    const [r] = standardsOf([coded])
+    expect(auditTable([r]).rows[0].cells[0]).toEqual(expect.objectContaining({ text: expect.stringMatching(/^LAW-12 s1 · /) }))
+    expect(unmeasuredList([r])[0].what).toBe('LAW-12 s1')
+    const links = (auditDetail(r)![2] as { rows: { key: string; cells: unknown[]; href?: string }[] }).rows
+    expect(links.find(x => x.key === 'law')).toEqual(expect.objectContaining({ cells: ['LAW-12 in the register'], href: expect.stringContaining('law=97') }))
+    // Control: no code → #n.
+    expect(auditTable(standardsOf([law('12', ['没核'])])).rows[0].cells[0]).toEqual(expect.objectContaining({ text: expect.stringMatching(/^#12 s1 · /) }))
   })
 
   it('finds the references a reading names and nothing else', () => {
