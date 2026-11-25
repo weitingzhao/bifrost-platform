@@ -67,7 +67,7 @@ func ciRunSpec(name, revision, repo string) map[string]any {
 	if name == "bifrost-ci-python" {
 		params = append(params, map[string]any{"name": "repo", "value": repo})
 	} else {
-		params = append(params, map[string]any{"name": "uiRevision", "value": "main"})
+		params = append(params, map[string]any{"name": "uiRevision", "value": "stable"})
 	}
 	if name == "bifrost-ci-platform" {
 		params = append(params, map[string]any{"name": "repo-url", "value": platformCIRepoURL})

@@ -20,7 +20,7 @@ version: 1
 # a process that has not read it yet), and the plan's pin says which.
 pins:
   bifrost-ui: {commit: 6121f1c532bf26a57954f689e91db097a071934b, advance: stg}
-  bifrost-trade-infra: {commit: b1f96ae803278f7daae792f088741d8ccb48f316, advance: manual}
+  bifrost-trade-infra: {commit: 69316d722cc064bb93497f0b20520349563d81ab, advance: manual}
 
 modules:
   - name: api
