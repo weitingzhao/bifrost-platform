@@ -1,6 +1,7 @@
 import { registerContextAdapter } from '@/lib/shell/sharedContext'
 import { consoleContext } from '@/lib/shell/consoleContext'
 import { agentsContext } from '@/domains/coordination/communication/agentsContext'
+import { signalsContext } from '@/domains/foundation/runtime-observation/signalsContext'
 
 /*
  * Every place's adapter for the shared context, registered once by the shell. Each view's line adds its own line
@@ -13,4 +14,5 @@ export function registerContextAdapters(): void {
   done = true
   registerContextAdapter('console', consoleContext)
   registerContextAdapter('agents', agentsContext)
+  registerContextAdapter('signals', signalsContext)
 }

@@ -2373,6 +2373,7 @@
         "console/src/domains/foundation/runtime-observation/__tests__/operations.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/projection.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/sharedObservation.test.tsx",
+        "console/src/domains/foundation/runtime-observation/__tests__/signalsContext.test.ts",
         "console/src/domains/foundation/runtime-observation/__tests__/states.test.tsx",
         "console/src/domains/foundation/runtime-observation/__tests__/surface.test.tsx",
         "console/src/domains/foundation/runtime-observation/communication.ts",
@@ -2384,6 +2385,7 @@
         "console/src/domains/foundation/runtime-observation/read.ts",
         "console/src/domains/foundation/runtime-observation/sharedObservationHost.tsx",
         "console/src/domains/foundation/runtime-observation/sharedObservationStore.ts",
+        "console/src/domains/foundation/runtime-observation/signalsContext.ts",
         "console/src/domains/foundation/runtime-observation/states.ts",
         "console/src/domains/foundation/runtime-observation/useRuntimeObservationSnapshot.ts"
       ],
@@ -2402,7 +2404,9 @@
         "console/src/lib/delivery",
         "console/src/lib/shell"
       ],
-      "test_imports": [],
+      "test_imports": [
+        "console/src/lib/shell"
+      ],
       "external_imports": [
         "@bifrost/ui/city/observation",
         "@bifrost/ui/city/observationContext",
@@ -3666,6 +3670,7 @@
         "console/src/api/clusterTypes.ts",
         "console/src/components/shell",
         "console/src/domains/coordination/communication",
+        "console/src/domains/foundation/runtime-observation",
         "console/src/lib/control-room",
         "console/src/lib/control-room/fleetSnapshot.ts",
         "console/src/pages/shell/agents",

@@ -7,6 +7,9 @@ import { useRuntimeObservationSnapshot } from './useRuntimeObservationSnapshot'
 import { useSharedObservation } from './sharedObservationStore'
 import { useJourneyBack, useJourneyTrail } from '@/components/shell/world-journey/journeyTrail'
 import { worldLocation } from '@/components/shell/world-journey/location'
+import { CameWithNote } from '@/components/shell/world-journey/CameWithNote'
+import { usePlaceHrefs } from '@/lib/shell/sharedContext'
+import { useOpenedSignal } from './signalsContext'
 
 const links = [{label: 'Agents', href: '#collaboration'}, {label: 'City', href: '#city'}, {label: 'Console', href: '#system'}]
 /** Controlled mode does not mount readers or own observation state. Keep the host above routing.
@@ -19,7 +22,8 @@ export default function RuntimeObservation({observation, frame, hosted = false}:
 function HostedObservation() {
   const frame = useWorldFrame()
   const shared = useSharedObservation()
-  if (shared.state === 'ready') return <RuntimeWorld observation={shared.observation} links={links} frame={frame}/>
+  const [opened, open] = useOpenedSignal()
+  if (shared.state === 'ready') return <RuntimeWorld observation={shared.observation} links={links} frame={frame} focus={opened} onFocus={open}/>
   const error = shared.state === 'reading' ? shared.error : undefined
   return <p role="status">{error ? 'Read failed: ' + String(error) : 'Reading platform telemetry…'}</p>
 }
@@ -34,7 +38,10 @@ function useWorldFrame(): RuntimeWorldFrame {
   // Signals' frame says "New version · Reload" too (lib/shell/newVersion; the engine forwards it, bifrost-ui 0.62.1).
   const notice = useNewVersionNotice()
   const waiting = useFrameWaiting()
-  return { hrefs: { ...WORLD_HREFS, console }, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv), notice, waiting }
+  // The shared context (箭10 2026-11-25): the other places open on what was looked at here; a focus this address
+  // came with but does not show is said in the second row.
+  const hrefs = usePlaceHrefs({ ...WORLD_HREFS, console }, 'signals')
+  return { hrefs, note: <> <CameWithNote/></>, back, env: status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv), notice, waiting }
 }
 /** The last Console address in the journey's trail, or undefined when the journey did not pass through the Console. */
 export function consolePageOf(trail: readonly string[]): string | undefined {
@@ -43,6 +50,7 @@ export function consolePageOf(trail: readonly string[]): string | undefined {
 function IndependentObservation() {
   const frame = useWorldFrame()
   const {snapshot,error} = useRuntimeObservationSnapshot()
+  const [opened, open] = useOpenedSignal()
   if (!snapshot) return <p role="status">{error ? 'Read failed: ' + String(error) : 'Reading platform telemetry…'}</p>
-  return <RuntimeWorld snapshot={snapshot} links={links} frame={frame}/>
+  return <RuntimeWorld snapshot={snapshot} links={links} frame={frame} focus={opened} onFocus={open}/>
 }
