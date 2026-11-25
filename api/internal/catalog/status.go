@@ -170,7 +170,10 @@ type Status struct {
 	// Daily are the kept days, oldest first (DailyPoint): the readings the
 	// plan's completion criteria ask to hold from day to day.
 	Daily []DailyPoint `json:"daily"`
-	Note  string       `json:"note,omitempty"`
+	// Criteria are the plan's completion criteria for the map as numbers
+	// (Criteria).
+	Criteria *Criteria `json:"criteria,omitempty"`
+	Note     string    `json:"note,omitempty"`
 }
 
 // RepoCount is one repository's (or the cluster's) equation.
@@ -646,6 +649,13 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 		return // nothing scanned yet: the route says so without a kept file
 	}
 	st.Daily = s.keepDaily(ctx, in, s.now())
+	if k, ok := s.keptSections(); ok {
+		var domains []contractDomain
+		if json.Unmarshal(k.Domains, &domains) == nil {
+			c := s.criteria(domains, st.Inventory)
+			st.Criteria = &c
+		}
+	}
 	raw, err := json.Marshal(st)
 	if err != nil {
 		return
