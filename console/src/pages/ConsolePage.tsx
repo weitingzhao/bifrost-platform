@@ -1,6 +1,7 @@
 import { WorldJourney } from '@/components/shell/world-journey/WorldJourney'
 import { usePublishFrameWaiting } from '@/lib/shell/frameWaiting'
 import { useEngineEpochReset } from '@/lib/shell/engineEpoch'
+import { registerContextAdapters } from '@/lib/shell/contextAdapters'
 import { useIdleReloadWhenStale } from '@/lib/shell/newVersion'
 import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { Suspense, lazy, useCallback, useEffect, useState, type ComponentType } from 'react'
@@ -156,6 +157,7 @@ function ConsolePageInner() {
   // Laws and actions waiting, worked out once here and read by every view's frame (lib/shell/frameWaiting).
   usePublishFrameWaiting()
   useEngineEpochReset()
+  registerContextAdapters()
 
   useEffect(() => {
     applyHash()

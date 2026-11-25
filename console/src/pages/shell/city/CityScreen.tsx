@@ -11,6 +11,8 @@ import { useShellStatusLine } from '@/domains/foundation/shell/useShellStatusLin
 import { viewerEnvBadgeLabel } from '@/domains/foundation/observation-display/fleetNavigation'
 import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
 import { SignalsPinNote } from '@/components/shell/world-journey/SignalsPinNote'
+import { CameWithNote } from '@/components/shell/world-journey/CameWithNote'
+import { usePlaceHrefs } from '@/lib/shell/sharedContext'
 import { useCityContent } from './useCityContent'
 import './cityScreen.css'
 
@@ -54,6 +56,8 @@ export default function CityScreen() {
   const at = hardware.data?.at
   const notice = useNewVersionNotice()
   const waiting = useFrameWaiting()
+  // The other places' links carry the shared context (scope, focus, time; sharedContext.ts).
+  const placeLinks = usePlaceHrefs({ city: cityHref(q.path, q.sel), signals: '#observation', agents: '#collaboration', console: consoleHrefOf(place, q.path, null) }, 'city')
   return (
     <div className="city-screen">
       <WorldFrame
@@ -62,13 +66,13 @@ export default function CityScreen() {
         waiting={waiting}
         back={back}
         crumbs={crumbsOf(content.tree, q.path)}
-        hrefs={{ city: cityHref(q.path, q.sel), signals: '#observation', agents: '#collaboration', console: consoleHrefOf(place, q.path, null) }}
+        hrefs={placeLinks}
         env={status.viewerEnvLoading ? undefined : viewerEnvBadgeLabel(status.viewerEnv)}
         time={{ mode: 'live', ...(at ? { at: new Date(at).toISOString() } : {}) }}
         alerts={{ ...frameAlerts(content.alerts), onOpen: () => setAlertsOpen(true) }}
         looks={[{ id: 'map', label: 'Map', href: cityHref(q.path, q.sel), on: true }, { id: 'table', label: 'Table', href: ledgerHref(q.path, q.sel), on: false }]}
         // A Signals pin kept across places (the shared context): the City's own reads stay live, this says Signals holds it.
-        context={<SignalsPinNote className="city-screen-pin" />}
+        context={<><SignalsPinNote className="city-screen-pin" /><CameWithNote className="city-screen-pin" /></>}
       />
       <div className="city-screen-body">
         <CityGen2 content={content} path={q.path} picked={q.sel ?? undefined}

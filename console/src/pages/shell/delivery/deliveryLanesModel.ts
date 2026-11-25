@@ -28,8 +28,14 @@ export async function fetchLanes(signal?: AbortSignal): Promise<DeliveryLanesDat
 }
 
 /** The page's address; `line` picks one lane (its Change-Id), so City and a commit can point straight at it (World F1). */
-export const deliveryHref = (line?: string) =>
-  formatShellHash('work', new URLSearchParams({ section: 'delivery', ...(line ? { line } : {}) }).toString())
+export const deliveryHref = (line?: string, session?: string) =>
+  formatShellHash('work', new URLSearchParams({ section: 'delivery', ...(session ? { session } : {}), ...(line ? { line } : {}) }).toString())
+
+/** One line's lanes (session=<thread>; the shared context's focus line). */
+export const lineLanesHref = (session: string) => deliveryHref(undefined, session)
+
+/** A line in City (its Lines card picks it by session). */
+export const lineInCity = (session: string) => formatShellHash('city', new URLSearchParams({ at: 'delivery', sel: session }).toString())
 
 /** Back to City's Delivery district (World F2): the lanes are the delivery domain's. */
 export const OPEN_IN_CITY = formatShellHash('city', 'at=delivery')

@@ -13,7 +13,7 @@ vi.mock('@/api/serverContact', () => ({ serverFetch: (...a: unknown[]) => wire.r
 vi.mock('@/api/core', () => ({ fetchSelfHealth: async () => ({ viewer_env: wire.env }) }))
 
 import { DeliveryLanePage } from '@/pages/shell/delivery/DeliveryLanePage'
-import { deliveryHref, engineLanesOn, lanesLine, OPEN_IN_CITY } from '@/pages/shell/delivery/deliveryLanesModel'
+import { deliveryHref, engineLanesOn, lanesLine, lineInCity, lineLanesHref, OPEN_IN_CITY } from '@/pages/shell/delivery/deliveryLanesModel'
 
 const envelope = (data: unknown) => new Response(JSON.stringify({ version: 1, model: 'delivery-lanes', capturedAt: '2026-11-24T21:30:00Z', provenance: 'live', identity: { epoch: 'e1', role: 'viewer' }, evidence: [], data }), { status: 200 })
 const mount = () => render(<QueryClientProvider client={new QueryClient()}><DeliveryLanePage /></QueryClientProvider>)
@@ -64,5 +64,24 @@ describe('Work → Delivery', () => {
     await waitFor(() => expect(screen.getAllByText(new RegExp(first.repo)).length).toBeGreaterThan(0))
     fireEvent.click(document.querySelector('.lane-head')!)
     expect(window.location.hash).toBe(deliveryHref(first.id))
+  })
+})
+
+// 2026-11-25 箭10, the shared context's line ↔ lane: one line's lanes (session=), and a picked lane links to its line.
+describe('a line and its lanes', () => {
+  it('has addresses for a line\'s lanes and for the line in City', () => {
+    expect(lineLanesHref('local_a')).toBe('#work?section=delivery&session=local_a')
+    expect(deliveryHref('I1', 'local_a')).toBe('#work?section=delivery&session=local_a&line=I1')
+    expect(lineInCity('local_a')).toBe('#city?at=delivery&sel=local_a')
+  })
+  it('lists only the lanes of the line the address names, and says whose they are', async () => {
+    const session = SAMPLE_LANES_DATA.lanes.find(l => l.session)?.session
+    expect(session).toBeTruthy()
+    const mine = SAMPLE_LANES_DATA.lanes.filter(l => l.session === session).length
+    window.location.hash = lineLanesHref(session!)
+    wire.read.mockResolvedValue(envelope(SAMPLE_LANES_DATA))
+    mount()
+    await waitFor(() => expect(document.querySelector('[data-lanes-line]')?.textContent).toMatch(new RegExp(`^${mine} lanes? · `)))
+    expect(document.querySelector('[data-lanes-session]')?.textContent).toContain('Show all')
   })
 })

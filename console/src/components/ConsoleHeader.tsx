@@ -4,6 +4,8 @@ import { useNewVersionNotice } from '@/lib/shell/newVersion'
 import { SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@bifrost/ui'
 import { WorldFrame } from '@bifrost/ui/city/WorldFrame'
 import { SignalsPinNote } from '@/components/shell/world-journey/SignalsPinNote'
+import { CameWithNote } from '@/components/shell/world-journey/CameWithNote'
+import { usePlaceHrefs } from '@/lib/shell/sharedContext'
 import { useJourneyBack } from '@/components/shell/world-journey/journeyTrail'
 import type { WorldTime } from '@bifrost/ui/city/world'
 import { CircleHelp, Ellipsis } from 'lucide-react'
@@ -78,6 +80,8 @@ export function ConsoleHeader({
     communicationHref('agents', new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('exchange')),
     window.location.hash,
   )
+  // The other places' links carry the shared context (scope, focus, time; sharedContext.ts).
+  const placeLinks = usePlaceHrefs(places.hrefs, 'console')
   const notice = useNewVersionNotice()
   const waiting = useFrameWaiting()
   return (
@@ -87,7 +91,7 @@ export function ConsoleHeader({
         notice={notice}
         waiting={waiting}
         crumbs={crumbs ?? consoleCrumbs(back ?? null, pageTitle)}
-        hrefs={places.hrefs}
+        hrefs={placeLinks}
         env={viewerEnvLoading ? undefined : viewerEnvBadgeLabel(viewerEnv)}
         alerts={alerts}
         time={time}
@@ -126,6 +130,7 @@ export function ConsoleHeader({
             </p>
             {/* One implementation for every frame (World's, 2026-11-23). */}
             <SignalsPinNote className="shrink-0 text-[11px] text-muted-foreground no-underline hover:text-foreground" />
+            <CameWithNote className="shrink-0 text-[11px] text-muted-foreground" />
             <span className="ml-auto inline-flex shrink-0 items-center gap-1" data-console-tools>
               {!side && moreHref != null ? (
                 <a href={moreHref} aria-label="More pages" className="inline-flex size-9 items-center justify-center rounded-md text-foreground no-underline">
