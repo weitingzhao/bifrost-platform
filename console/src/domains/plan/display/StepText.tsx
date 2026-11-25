@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-/** A step's number as a badge before its title, monospaced (2.4-1), wherever a step is named (the Owner 2026-10-21). */
+/** A step's number as a badge before its title, monospaced (2.4-1), wherever a step is named (ISSUE-51). */
 export function StepBadge({ label }: { label: string }) {
   return <span data-step-badge={label}
     className="shrink-0 rounded-[var(--control-radius)] border border-[var(--card-border)] bg-[var(--control-fill)] px-1.5 py-0.5 font-mono text-xs font-semibold text-foreground">

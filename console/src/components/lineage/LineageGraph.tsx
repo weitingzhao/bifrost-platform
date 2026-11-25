@@ -108,7 +108,7 @@ function releaseFrontier(g: LineageRepoGraph) {
 
 export function LineageGraph({ graph, threads, showHelp }: LineageGraphProps) {
   // superseded attempts (an agentd attempt whose task another attempt landed) are orphans, not pending work:
-  // folded out of the lanes unless asked for (Owner 2026-11-22: merged work and orphans in separate classes)
+  // folded out of the lanes unless asked for (ISSUE-66: merged work and orphans in separate classes)
   const [showSuperseded, setShowSuperseded] = useState(false)
   const kinds = useMemo(() => {
     const c = { open: 0, superseded: 0, landed: 0, even: 0 }

@@ -1,4 +1,4 @@
-// The part library, shown (the Owner, 2026-11-19: one way per kind of thing, built from parts; what is
+// The part library, shown (ISSUE-9: one way per kind of thing, built from parts; what is
 // done well once serves everywhere). Three shelves: the parts, the facilities put together from them,
 // and the landmarks brought over from the first generation. Levels here are examples to show what a
 // part does, said so; on the map every level comes from a reading.

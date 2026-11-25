@@ -362,7 +362,7 @@ export type DomainDirection = { id: string; isBase: boolean; packages: number; u
 
 /**
  * Every domain with both directions spelled out: what it uses and who uses it. From the same edges as the drawing and
- * the domain score, so the three agree. Owner 2026-11-16: "does foundation depend on the other packages, or do they
+ * the domain score, so the three agree. (ISSUE-22) "does foundation depend on the other packages, or do they
  * depend on it" could not be read off a list of imports.
  */
 export function domainDirections(graph: CiDomainGraph): DomainDirection[] {

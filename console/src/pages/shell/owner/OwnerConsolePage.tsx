@@ -72,9 +72,9 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <HarnessPreview />}
     {blocks.you && <OwnerGpuPower nodes={data.nodes} openApprovals={current(data.needsYou.query)} recentApprovals={current(data.needsYou.handledQuery)} now={data.now} />}
     {blocks.you && <OwnerYou data={data} />}
-    {/* Owner 2026-11-24: the laws up (right after what he approves), For your info down; every section folds, open by default. */}
+    {/* (ISSUE-53) the laws up (right after what he approves), For your info down; every section folds, open by default. */}
     {blocks.you && <CollapsibleSection id="laws" label="Laws"><LawRegister /></CollapsibleSection>}
-    {/* Owner 2026-11-25: laws and complaints apart, and a place of its own for whether a law eased the complaints under it. */}
+    {/* (ISSUE-新) laws and complaints apart, and a place of its own for whether a law eased the complaints under it. */}
     {blocks.you && <CollapsibleSection id="law-effect" label="Law effect"><LawEffect /></CollapsibleSection>}
     {blocks.you && <CollapsibleSection id="issues" label="Owner's issues"><OwnerIssues /></CollapsibleSection>}
     {blocks.you && <OwnerWaiting />}

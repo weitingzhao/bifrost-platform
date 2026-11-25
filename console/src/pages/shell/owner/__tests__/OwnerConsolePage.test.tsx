@@ -354,7 +354,7 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('region', { name: 'Needs your hands' })).toHaveTextContent('Nothing needs your hands right now.')
     const worth = screen.getByRole('region', { name: 'For your information' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
-    // 2026-11-24 the Owner: "for your info 优先级不高，排到下面，把法提起来": the laws come before For your info.
+    // (ISSUE-53) For your info is low priority and the laws come up: the laws come before For your info.
     const laws = document.getElementById('laws')!
     expect(laws.compareDocumentPosition(worth) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByRole('region', { name: 'To approve' }).compareDocumentPosition(laws) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

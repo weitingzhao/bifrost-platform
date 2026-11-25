@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 /**
  * CI skips the Console's checks for a commit that changes only files under api/ that no
- * Console test reads (Owner, 2026-11-13: backend-only commits waited for the Console tests).
+ * Console test reads (ISSUE-22: backend-only commits waited for the Console tests).
  * The list of files the Console tests do read is scripts/ci/console_reads_api.txt. A test
  * that reads a file under api/ which is not on that list would not run when that file
  * changes, so this fails until the file is listed.

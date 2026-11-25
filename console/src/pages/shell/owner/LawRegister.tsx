@@ -14,7 +14,7 @@ import { lawDetail, lawHref, lawRegisterTable } from './lawRegisterModel'
 const LAMP = { ok: 'ok', unknown: 'unknown', pending: 'unknown' } as const
 
 /**
- * Command → Laws: the framework of laws (Owner 2026-11-24: an entry in the Console where the frame that can hold laws
+ * Command → Laws: the framework of laws (ISSUE-17: an entry in the Console where the frame that can hold laws
  * is seen, empty for now) and, behind a switch, the laws that are material or repealed. On STG it reads through the
  * engine (/engine/v1/agents?read=laws); elsewhere directly (GET /api/v1/agentrt/laws), by the environment's table.
  * A picked law is in the address (`#command?section=laws&law=73`), so a law_amend card links straight to it.
@@ -34,7 +34,7 @@ export function LawRegister() {
   const laws = answer?.laws ?? null
   const unread = q.isError || q.isPaused
   const picked = useHashParam('law') ?? ''
-  // Owner 2026-11-24 on the repealed: "我觉得没必要...删掉..对于法律来说都是毒药". The page draws no repealed row; the
+  // ISSUE-24: repealed laws are not kept. The page draws no repealed row; the
   // register's own removal is the legislation line's. The material stays behind its switch, off by default.
   const [showMaterial, setShowMaterial] = useState(picked !== '')
   const material = useMemo(() => materialOrder(behindSwitch(laws ?? []).filter(l => l.state !== REPEALED)), [laws])

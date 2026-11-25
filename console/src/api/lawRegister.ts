@@ -38,14 +38,14 @@ export type RegisterLaw = {
   state?: string
   /** Where the law sits in the framework (level, scope, subject, modality, parent, enforcement…); absent until a card frames it. */
   frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; absorbs?: string[]; [more: string]: unknown }
-  /** A law's name (Owner 2026-11-25: "以后法条统一叫LAW 开始，不用简写"): LAW-1… for the laws in force; absent on material and repealed rows. */
+  /** A law's name (LAW-1: laws are written LAW-k, never abbreviated): LAW-1… for the laws in force; absent on material and repealed rows. */
   code?: string
   /** On a material row: the laws in force that absorb it (立法线 44065b1c); absent when none does. */
   absorbed_by?: string[]
 }
 
 /**
- * The framework of laws as the system holds it (planstore TheFramework, d7ab0b4b8; Owner 2026-11-24: step one is a
+ * The framework of laws as the system holds it (planstore TheFramework, d7ab0b4b8; LAW-1: step one is a
  * frame that can hold laws, shown with no law in it). Every field may be missing from an older platform: the page
  * says unknown, it never fills one in.
  */

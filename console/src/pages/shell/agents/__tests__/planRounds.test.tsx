@@ -11,7 +11,7 @@ import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { SignoffWaiting } from '../SignoffWaiting'
 import { useRuntimePlan } from '../useRuntimePlan'
 
-// The Owner 2026-10-22: round 3's steps had sign-off rules on PROD, yet the Console showed and listed round 2 only
+// (ISSUE-29) round 3's steps had sign-off rules on PROD, yet the Console showed and listed round 2 only
 // (PLAN_ROOT fixed on R2), so they could be neither seen nor signed. The panes now follow the newest round GET /progress
 // counts, and the waits read every round. Round 3 here is PROD's round-2 tree renumbered: the same shapes, other ids.
 

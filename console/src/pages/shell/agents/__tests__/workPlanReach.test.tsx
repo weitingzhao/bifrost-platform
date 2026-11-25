@@ -12,7 +12,7 @@ import { WorkPlanView } from '../WorkPlanView'
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => '' }))
 
 /*
- * R5:5.5-1 「点得到」(the Owner 2026-11-01 03:3x): Work → Plan was fixed on R4, with no control to reach another round,
+ * R5:5.5-1, reachable by click (ISSUE-29): Work → Plan was fixed on R4, with no control to reach another round,
  * so round 5's modules and their detail pages could be opened only by editing the address. Work now shows the newest
  * round GET /progress lists, an address still names any round, the earlier rounds are one menu away and loaded only
  * when chosen, a module's whole row opens its detail, and the detail's ‹ Work goes back to where the row was.
@@ -214,7 +214,7 @@ describe('Work\'s plan reads with an acceptance root (PROD 2026-11-01)', () => {
     expect(document.querySelector('[data-summary-signoffs]')).not.toHaveTextContent('R4')
     expect(new Set(planViewUrls())).toEqual(new Set(['/api/v1/agentrt/plan-view?root=R5']))
     await go('#work?tab=signoffs')
-    // The Sign-offs tab reads every round's tree (the Owner 2026-10-22), as SignoffWaiting did, and counts them all.
+    // The Sign-offs tab reads every round's tree (ISSUE-3), as SignoffWaiting did, and counts them all.
     await waitFor(() => expect(trees()).toEqual(new Set(['R2', 'R3', 'R4', 'R5'].map(r => `/api/v1/agentrt/plan?root=${r}`))))
     await waitFor(() => expect(document.querySelector('[data-summary-signoffs]')).toHaveTextContent('R4 acceptance not counted here'))
     await waitFor(() => expect(planViewUrls()).toContain('/api/v1/agentrt/plan-view?root=R4'))

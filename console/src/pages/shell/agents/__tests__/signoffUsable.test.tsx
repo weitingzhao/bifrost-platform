@@ -10,12 +10,12 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { SignoffWaiting, SignoffWaitingLink } from '../SignoffWaiting'
 
-// The Owner 2026-10-21, after #78: 「这个页面根本没有达到可用的级别」. He could not find the steps to sign
+// (ISSUE-3) The page was not usable: he could not find the steps to sign
 // (2.4-1, 2.4-2, 2.3-4, 2.5-1, 2.5-2, 2.5-3): no step number shown, three steps titled alike, "**" in titles, a
 // ledger line a screen long. The fixture is PROD's GET /plan?root=R2 as the platform answered it on 2026-10-21
 // (read through the platform MCP's get_plan): ten steps have an owner_signoff, none signed. Seven are active and wait;
 // three (2.5-2, 2.5-3, 2.5-4) are planned, their work not started, so they are under Not started and not counted (TD-425,
-// the Owner 2026-10-23: 「为什么这个没有完成的工作，目前推到了我的 for you 栏目里？」).
+// ISSUE-3: work not finished was pushed into his For you).
 
 type Node = { plan_node_id: string; parent_plan_node_id: string | null; node_kind: string; label: string; title: string; state: string | null
   done_rule_json?: unknown; signoffs?: unknown[] }
@@ -172,7 +172,7 @@ describe('the steps waiting on the Owner\'s sign-off, on PROD\'s plan', () => {
   })
 })
 
-// TD-425 (the Owner 2026-10-23): the coordinator set sign-off rules ahead of the work on 3.2-2…3.2-6, and For you said
+// TD-425 (ISSUE-3): the coordinator set sign-off rules ahead of the work on 3.2-2…3.2-6, and For you said
 // five steps waited for his sign-off though nobody had started them. A planned step is not counted, anywhere.
 describe('a step whose work has not started is not waiting for the Owner\'s sign-off (TD-425)', () => {
   it('is not counted: it is under Not started, folded, by number and title, with no Sign off; a started one keeps its', async () => {

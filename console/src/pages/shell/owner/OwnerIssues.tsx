@@ -43,8 +43,8 @@ export function useOwnerIssues() {
 export const NO_ENGINE_READ = 'The issues have no engine read yet: not shown here.'
 
 /**
- * Command → Owner's issues: his complaints, pains and needs, apart from the laws (Owner 2026-11-25: 「在UI上应该把法和
- * 吐槽分开」). Each issue is one thing he keeps saying, with his words, how often, where it goes, the laws that answer
+ * Command → Owner's issues: his complaints, pains and needs, apart from the laws (ISSUE-新).
+ * Each issue is one thing he keeps saying, with his words, how often, where it goes, the laws that answer
  * it, and whether he said it again after them. Read directly (GET /api/v1/agentrt/owner-issues).
  */
 export function OwnerIssues() {

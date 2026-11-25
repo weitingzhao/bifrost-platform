@@ -2,7 +2,7 @@ import type { ApprovalItem } from '@/api/approvals'
 import type { Question } from '@/api/questions'
 
 /*
- * Laws and actions apart (the Owner 2026-11-23, by the coordinator; 箭10 ruled the screen): a change of law or of
+ * Laws and actions apart (ISSUE-3): a change of law or of
  * direction and a piece of executive work do not share one queue. The kind comes from the data, never from a title:
  * - a request's action: law_amend is the one card the Owner approves for a change of law (platform
  *   actions/law_amend.go); every other action is executive work;

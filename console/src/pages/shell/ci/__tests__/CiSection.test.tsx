@@ -255,7 +255,7 @@ it('explores units on demand and clears the context when selecting another repo'
   expect(screen.queryByTestId('ci-config-project-r')).toBeNull()
 })
 
-// Origin: Owner 2026-11-15: a module choice must drive the configuration and the run list together.
+// Origin: (ISSUE-33) a module choice must drive the configuration and the run list together.
 // Reused/unknown scope cannot be silently treated as a module test or dropped as unrelated.
 it('links module cards and runs, preserves unknown evidence, and resets on project change', async () => {
   setup()
@@ -279,7 +279,7 @@ it('links module cards and runs, preserves unknown evidence, and resets on proje
   expect(screen.getByText('Module split not configured. CI tests this project as one block.')).toBeInTheDocument()
 })
 
-// Owner 2026-11-15: dependency groups share the project's workspace; records of no project say so.
+// (ISSUE-33) dependency groups share the project's workspace; records of no project say so.
 it('separates project-scoped information from global records and never calls unknown independent', async () => {
   setup()
   await screen.findByTestId('ci-verdict')
@@ -307,7 +307,7 @@ it('shows no hand-copied benchmark', async () => {
   expect(screen.queryByText('Designed vs actual')).toBeNull()
 })
 
-// Owner 2026-11-15: one selected attempt drives the details; page — it is the page's one selection, set from the run
+// (ISSUE-33) one selected attempt drives the details; page — it is the page's one selection, set from the run
 // list or from a bar, shown at the right of the switch bar, and reset with the project.
 it('selects a run from the run list as the page\'s one selection and resets it with the project', async () => {
   setup()

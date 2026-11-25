@@ -12,7 +12,7 @@ const box = 'ops-signoff-queue flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-[
 
 /**
  * At the top of the plan: the steps waiting on the Owner's sign-off, by number, each with its one-line title and its
- * Sign off (the Owner 2026-10-21: he could not find the six steps to sign in the plan). A signed step leaves the block
+ * Sign off (ISSUE-3: he could not find the six steps to sign in the plan). A signed step leaves the block
  * when the plan is read again; the plan below is unchanged. While the plan is read, or when it cannot be, the block
  * says so in its place (review 502 B1), so `#work?section=signoff` has a target from the first paint (B2); when its
  * steps arrive and the address names it, it is brought into view again. A step with a sign-off rule whose work has not

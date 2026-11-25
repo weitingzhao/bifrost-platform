@@ -44,8 +44,8 @@ const approvalReadings = (viaEngine: boolean, signal: AbortSignal) => viaEngine
 const auditHref = (step: string) => formatShellHash('command', new URLSearchParams({ section: 'audit', step }).toString())
 
 /**
- * Command → Audit: the audit's conclusions on the laws' standards (箭10 2026-11-24; the Owner: 「审计基于立法的标准出结果，
- * 来监督行政」). Each standard: reached, missed or unmeasured; a missed one's cause (law, agent, tool); the plan step it
+ * Command → Audit: the audit's conclusions on the laws' standards (箭10 2026-11-24; ISSUE-20: the audit
+ * judges by the laws' standards and so oversees the administration). Each standard: reached, missed or unmeasured; a missed one's cause (law, agent, tool); the plan step it
  * is judged on; opened, the audit's reading as evidence. The register is /engine/v1/agents?read=laws; each step's
  * verdict note and cause are its own events (read=plan-step). What is not read says so; nothing is guessed.
  */

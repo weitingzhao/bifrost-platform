@@ -24,7 +24,7 @@ const snapshot: ObservationSnapshot = {
   evidence: { 'host%2Fone/cpu': [{ source: '/api/v1/telemetry/promql?q=source-query', outcome: 'read', receivedAt: at, evaluatedAt: at, expiresAt: '2026-11-22T20:01:00Z' }] },
 }
 
-// Owner 2026-11-22: Console and Signals must preserve identity/value/unit/time/source from the same snapshot.
+// (ISSUE-33) Console and Signals must preserve identity/value/unit/time/source from the same snapshot.
 it('renders the shared projection verbatim and preserves zero and full object evidence', () => {
   render(<HardwareSnapshot snapshot={snapshot} at={at} />)
   const block = readingView.present(snapshot, { selected: [], metrics: true, at })[0].blocks[0]
@@ -51,7 +51,7 @@ it.each([
   expect(screen.getAllByText(quality, { exact: false }).length).toBeGreaterThan(0)
 })
 
-// Owner 2026-11-22: opt-in observations must not add an always-on mailbox or workflow action.
+// (ISSUE-74) opt-in observations must not add an always-on mailbox or workflow action.
 it('mounts only the public hardware reader when opened, and preserves retained data on failure', () => {
   access.mockReturnValue({ data: snapshot, isPending: false, isError: true, error: new Error('offline') })
   render(<HardwareEvidence />)

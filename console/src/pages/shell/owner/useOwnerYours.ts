@@ -53,7 +53,7 @@ export function useOwnerYours(now: number) {
   const alertsError = alertsQ.isError ? errorText(alertsQ.error) : alertsQ.isPaused ? 'offline' : null
   const ownerAlerts: NeedsYouCount = alertsError != null ? { state: 'unknown', reason: `Alerts could not be read: ${alertsError}` }
     : alerts == null ? { state: 'loading' } : { state: 'known', count: alerts.yours.length }
-  // Needs you without the silent threads: those are the coordinator's to check (Owner 2026-10-15).
+  // Needs you without the silent threads: those are the coordinator's to check (ISSUE-3).
   const decisions: NeedsYouCount = needsYou.count.state === 'known' ? { state: 'known', count: needsYou.decisionItems.length } : needsYou.count
   const yours = yoursCount(decisions, ownerAlerts)
 

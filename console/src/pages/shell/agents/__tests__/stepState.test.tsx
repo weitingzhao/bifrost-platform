@@ -21,7 +21,7 @@ vi.mock('@/api/client', async original => ({ ...await original<object>(), operat
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 /*
- * R5:5.5-10 (the Owner 2026-11-02, Q75): an active step is shown by what the plan view, read now, has on it; one with
+ * R5:5.5-10 (ISSUE-33): an active step is shown by what the plan view, read now, has on it; one with
  * nothing running or queued is not "In progress"; a step whose done rule is {} is marked while active or stopped. The R5
  * plan view of the module detail's tests (moduleDetailFixture), moved on as each case needs, in the shapes plan-view
  * writes (registered external work is in external_work, and in working while it still expects a heartbeat).

@@ -10,7 +10,7 @@ import type { ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { standbyVerdict, type StandbyEvidence } from './standbyEvidence'
 
 /**
- * The Owner Console (Owner 2026-10-16): what is his to do first, then what is worth a look, the
+ * The Owner Console (ISSUE-53): what is his to do first, then what is worth a look, the
  * work, the system and the data. Each block answers "do I have to act, whose is it, what next";
  * the evidence stays on the detail pages.
  */
@@ -42,10 +42,10 @@ export const TONE_COLOR: Record<Tone, string> = {
   unknown: 'var(--color-lamp-gray)',
 }
 
-/** Alerts only the Owner can clear (Owner 2026-10-16: the TWS login is his alone). */
+/** Alerts only the Owner can clear (ISSUE-88: the TWS login is his alone). */
 const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: string; detail: string } | null> = {
-  // The primary (host) slot: only the Owner holds the TWS login, so it is his (Owner 2026-10-16). The secondary slot is not:
-  // he set it aside on 2026-11-12, so it is told as a notice instead (Owner 2026-11-19).
+  // The primary (host) slot: only the Owner holds the TWS login, so it is his (ISSUE-88). The secondary slot is not:
+  // he set it aside on 2026-11-12, so it is told as a notice instead (ISSUE-88).
   BifrostIBGatewayDisconnected: labels => labels.slot === 'secondary' ? null : ({
     title: `Log in to TWS for the IB ${labels.slot || 'gateway'} slot`,
     detail: 'Outside the system: on the Windows machine that runs TWS for this slot, log in to TWS. Positions, account values and live streams stop behind it until then; only you hold the login.',
@@ -53,7 +53,7 @@ const OWNER_ALERTS: Record<string, (labels: Record<string, string>) => { title: 
 }
 
 /**
- * Alerts that are notices for the Owner, not work waiting on him (the Owner, 2026-11-19, via the
+ * Alerts that are notices for the Owner, not work waiting on him (ISSUE-3, via the
  * coordinator: the secondary IB slot without a TWS session is a warning to see, not an item of
  * Yours). Shown in For your information, with no goal draft: only he can log in.
  */
@@ -184,10 +184,10 @@ export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount)
 
 export function ownerVerdict(input: {
   yours: NeedsYouCount
-  /** The two kinds that are his, told apart in the headline (the Owner, 2026-11-19); absent while either is unread. */
+  /** The two kinds that are his, told apart in the headline (ISSUE-3); absent while either is unread. */
   kinds?: { approve: number; hands: number }
   approvals: number | null
-  /** Of those, how many change the law (law_amend; needs-you/ticketKind): laws and actions are said apart (the Owner 2026-11-23). */
+  /** Of those, how many change the law (law_amend; needs-you/ticketKind): laws and actions are said apart (ISSUE-3). */
   lawApprovals?: number | null
   lane: string
   nodes: { ready: number; total: number } | null

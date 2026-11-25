@@ -127,7 +127,7 @@ describe('Command → Laws reads', () => {
   })
 })
 
-// 2026-11-24 the Owner, step two: "我们一条条提炼，然后一条条放，最后一次性确认新法涵盖老的85条吐槽后，就可以把85条删掉".
+// (ISSUE-17) The material is distilled into laws one by one, then repealed once all of it is covered.
 // The platform counts the coverage (立法线 44065b1c: framework.coverage, absorbed_by, frame.absorbs); the page says it.
 describe('step two: the material covered by laws in force', () => {
   it('says covered / material, and when all is covered that the material can be repealed', () => {
@@ -138,7 +138,7 @@ describe('step two: the material covered by laws in force', () => {
   it('lists the material no law absorbs yet first, and says which law absorbs the rest', () => {
     const rows = [{ ...law('3', '素材'), absorbed_by: ['90'] }, law('7', '素材'), law('5', '废止'), law('1', '素材')]
     expect(materialOrder(rows).map(l => l.law)).toEqual(['1', '7', '3', '5'])
-    // 2026-11-25 the Owner: "以后法条统一叫LAW 开始，不用简写": the absorbing law is named by its code.
+    // (LAW-1) Laws are written LAW-k: the absorbing law is named by its code.
     const t = lawRegisterTable(materialOrder(rows), new Map([['90', 'LAW-5']]))
     const absorbed = (key: string) => t.rows.find(r => r.key === key)!.cells.at(-1)
     expect(absorbed('3')).toBe('LAW-5')

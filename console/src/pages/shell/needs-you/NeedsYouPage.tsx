@@ -52,7 +52,7 @@ function Note({ children }: { children: ReactNode }) {
 }
 
 /**
- * How many steps wait on the Owner's sign-off, and the way to them (the Owner 2026-10-21); they are signed on Work's
+ * How many steps wait on the Owner's sign-off, and the way to them (ISSUE-3); they are signed on Work's
  * plan, not here. It reads the plan itself, so the plan's answer repaints this group only (CI 2026-10-21).
  */
 function SignoffGroup() {
@@ -210,7 +210,7 @@ export function NeedsYouPage() {
   // A group's count is the approvals list's: unknown, not the last list's length, while it cannot be read (review 488 A2).
   const openedAt = useRef(Date.now())
   const groupCount = (n: number) => (openCount.state === 'unknown' ? '?' : String(n))
-  // Laws and actions apart (the Owner 2026-11-23): each kind its own section and count, read from the data (ticketKind).
+  // Laws and actions apart (ISSUE-3): each kind its own section and count, read from the data (ticketKind).
   // Memoized: the same lists keep the same arrays, so the Answer group's memo holds when another read lands.
   const d = useMemo(() => splitApprovals(decide), [decide])
   const t = useMemo(() => splitApprovals(terminal), [terminal])

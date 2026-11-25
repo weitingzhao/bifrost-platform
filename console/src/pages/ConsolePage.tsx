@@ -114,7 +114,7 @@ function backFor(location: ConsoleLocation): HeaderBack | undefined {
 }
 
 /**
- * The looks of the place a Console page shows (the Owner, 2026-11-19: the city and the Console are peers).
+ * The looks of the place a Console page shows (ISSUE-9: the city and the Console are peers).
  * Every Console page is a place in the city: an entry is a district, a detail page a building in its
  * entry's district. On the `#city` route the Console shows the ledger of the place in the address.
  */

@@ -37,7 +37,7 @@ function Row({ row }: { row: OwnerRow }) {
 }
 
 /**
- * For you, in kinds that are not mixed (the Owner, 2026-11-19): what he approves in the system
+ * For you, in kinds that are not mixed (ISSUE-3): what he approves in the system
  * (requests, questions, agent cards), what only his own hands can do outside it (log in to TWS on the
  * Windows machine), what is only for his information, and what was done for him without a card
  * (LAW-6: recorded with how to undo it). The first two are his and counted.
@@ -83,7 +83,7 @@ export function OwnerYou({ data }: { data: OwnerConsoleData }) {
 }
 
 /**
- * What is only to know about, and what was done for him (Owner 2026-11-24: "for your info 优先级不高，排到下面"): its
+ * What is only to know about, and what was done for him (ISSUE-53: low priority, so below): its
  * own block, drawn below the laws and the audit on Command.
  */
 export function OwnerForYourInfo({ data }: { data: OwnerConsoleData }) {

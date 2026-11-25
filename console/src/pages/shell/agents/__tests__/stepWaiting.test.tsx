@@ -10,7 +10,7 @@ import { CLASS_MEANINGS, moduleClass } from '../workSummaryModel'
 import { AT, externalWork, Q_RULE, r5Raw, W3, type Raw } from './moduleDetailFixture'
 
 /*
- * R5:5.5-10 slice 2 (the Owner 2026-11-02, Q75): a step on which something only the Owner moves waits on him reads
+ * R5:5.5-10 slice 2 (ISSUE-3): a step on which something only the Owner moves waits on him reads
  * "Waiting on you". Questions and requests come from the lists Needs you polls (the shell's cache), given to the judge
  * as asks; a list not read now is said, never taken for "none".
  */

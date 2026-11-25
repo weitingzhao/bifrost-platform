@@ -19,7 +19,7 @@ import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine
 import { consoleCrumbs, consoleFramePlaces, type ConsoleLooks, type FrameAlerts, type FrameCrumb } from '@/lib/shell/consoleFrame'
 
 /**
- * The looks of the place on screen (the Owner, 2026-11-19): City | Console, peers, at the same spot as
+ * The looks of the place on screen (ISSUE-9): City | Console, peers, at the same spot as
  * the city's own switch; inside the Console, Page | Ledger. Each half is a link to the same place.
  */
 export type HeaderLooks = ConsoleLooks

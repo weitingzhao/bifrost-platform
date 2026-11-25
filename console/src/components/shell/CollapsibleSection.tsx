@@ -11,7 +11,7 @@ const writeClosed = (id: string, closed: boolean) => {
 }
 
 /**
- * A Command section the Owner can fold (Owner 2026-11-24: "这些section是不是可以收起来。默认展开"). Open by default;
+ * A Command section the Owner can fold (ISSUE-53). Open by default;
  * folding it is remembered in this browser only. An address that names the section opens it again, so a link to it
  * never lands on a closed box.
  */

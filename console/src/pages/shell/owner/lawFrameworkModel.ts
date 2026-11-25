@@ -1,8 +1,8 @@
 import type { FrameworkField, FrameworkLevel, LawFramework, PurgeQueue, RegisterLaw } from '@/api/lawRegister'
 
 /*
- * The framework of laws on Command → Laws (Owner 2026-11-24 by the legislation line: "我要在 console 的那个里面有一个入口
- * 能看到就可以了"; step one is a frame that can hold laws, shown with no law in it). Five blocks: the five levels, the
+ * The framework of laws on Command → Laws (ISSUE-17: one entry in the Console is enough;
+ * step one is a frame that can hold laws, shown with no law in it). Five blocks: the five levels, the
  * fields, the rules between laws and what refuses a card, the states' counts, and the material and repealed laws
  * behind a switch. What the platform does not send is "unknown", never filled in.
  */
@@ -25,7 +25,7 @@ export function frameworkLine(fw: LawFramework | null | undefined): string {
 
 /**
  * Each state with its count, in the framework's order; a state with no count is null (shown "?"), never 0. The repealed
- * are not a state the register keeps any more (立法线 2026-11-24, after the Owner: "删掉..对于法律来说都是毒药"): 废止 is
+ * are not a state the register keeps any more (立法线 2026-11-24; ISSUE-24): 废止 is
  * shown only while the platform still sends it, never as "废止 0" or unknown.
  */
 export function stateCounts(fw: LawFramework | null | undefined): [string, number | null][] {
@@ -65,7 +65,7 @@ export function stateTally(laws: readonly RegisterLaw[]): string {
 export const inForceCount = (laws: readonly RegisterLaw[]): number => laws.filter(l => l.state === IN_FORCE).length
 
 /**
- * Step two (Owner 2026-11-24): the material is distilled into laws in force one by one; once every piece is absorbed
+ * Step two (ISSUE-17): the material is distilled into laws in force one by one; once every piece is absorbed
  * the material is repealed in one go. The platform counts it (framework.coverage); this only says it.
  */
 export function coverageLine(fw: LawFramework | null | undefined): string {

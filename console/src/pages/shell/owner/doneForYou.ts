@@ -2,7 +2,7 @@ import type { ActionRecord } from '@/api/actionRecords'
 import { plural, type OwnerRow } from './ownerModel'
 
 /**
- * Done for you (LAW-6, the Owner, 2026-11-19): what can be undone runs without a card and is
+ * Done for you (LAW-6, LAW-6): what can be undone runs without a card and is
  * recorded instead; he reads here what was done, by whom, why, how to undo it and what was checked
  * after. Read from the action record (GET /api/v1/records); only calls that went through (outcome
  * done). Nothing is filtered by a hand-kept list of actions: every done call shows, repeats of the

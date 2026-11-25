@@ -1,4 +1,4 @@
-// The unit workshop (the Owner, 2026-11-19): how each unit of the city is made, inside out, one stage
+// The unit workshop (ISSUE-9): how each unit of the city is made, inside out, one stage
 // at a time, each stage shown here for the Owner to confirm before the next. The process is the frame's
 // (frame/units/process.ts); the units are content (content/units/). Read-only: confirmations are the
 // Owner's words in the thread, recorded in the spec, never a button here.
@@ -165,7 +165,7 @@ function InsideDraft({ u }: { u: UnitSpec }) {
 }
 
 /**
- * The rulers (the Owner, 2026-11-19): a standard part's size is how the city measures, so it can be
+ * The rulers (ISSUE-9): a standard part's size is how the city measures, so it can be
  * adjusted here — the pictures redraw, the readings stay. Kept in this browser only (a way of
  * looking, like a panel folded); the defaults are the dictionary's.
  */
@@ -250,7 +250,7 @@ const STATE_WORD = { confirmed: 'Confirmed', open: 'Making now', waiting: 'Waits
 function App() {
   const [r, setR] = useState<Reads | null>(snap ?? null)
   const [live, setLive] = useState(false)
-  // Open on the room being made: rooms come before summaries (the Owner, 2026-11-19), so the first unit
+  // Open on the room being made: rooms come before summaries (ISSUE-9), so the first unit
   // still at Details or Inside; once every room is done, the first unit.
   const working = UNITS.find(u => ['details', 'inside'].includes(stagesOf(u).find(s => s.state === 'open')?.id ?? '')) ?? UNITS[0]
   const [unitId, setUnitId] = useState(working.id)

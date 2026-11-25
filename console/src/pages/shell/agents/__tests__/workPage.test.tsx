@@ -13,7 +13,7 @@ import { OwnerConsolePage } from '@/pages/shell/owner/OwnerConsolePage'
 vi.mock('@/api/client', async original => ({ ...await original<object>(), operatorToken: () => 'owner-token' }))
 
 /*
- * R5:5.5-2 (the Owner 2026-11-01 03:3x: Work was 17.7 screens, 28 blocks, "太长了"): Work opens on one summary card and
+ * R5:5.5-2 (ISSUE-53: Work was 17.7 screens, 28 blocks, too long): Work opens on one summary card and
  * four tabs (Design v3.6 WorkPage); everything else that was on the page is a step away and is neither drawn nor read
  * until the address names it. Every block that was there is still reachable, and every address Work took still works.
  */

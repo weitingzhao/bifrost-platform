@@ -7,7 +7,7 @@ import { CommitJourney } from '../CommitJourney'
 import { timingRun } from './timingFixture'
 vi.mock('@/api/ciTimings',()=>({fetchCITimings:vi.fn()}))
 afterEach(()=>{cleanup();vi.resetAllMocks()})
-// Owner 2026-11-15: a visible timeline must use the selected attempt without a second read button.
+// (ISSUE-33) a visible timeline must use the selected attempt without a second read button.
 it('automatically shows timestamps and elapsed time for the selected attempt',async()=>{
  const base=timingRun(), retry={...base,name:'retry',start_time:'2026-11-15T20:02:00Z'}
  const merge={...base,name:'merge',completion_time:'2026-11-15T20:04:00Z'}

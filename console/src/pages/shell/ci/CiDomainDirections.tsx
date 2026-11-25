@@ -4,7 +4,7 @@ import { domainDirections, type DirectionSide } from './ciPageModel'
 /*
  * Work > CI, By dependency: every domain with both directions in words. The drawing shows the shape; this says, for
  * each domain, what it depends on and who depends on it, with counts, and under each row the packages on both sides.
- * Owner 2026-11-16, reading the page: "does foundation depend on the other packages, or do they depend on it?"
+ * (ISSUE-22) "does foundation depend on the other packages, or do they depend on it?"
  */
 
 const MUTED = 'text-[var(--muted-foreground)]'

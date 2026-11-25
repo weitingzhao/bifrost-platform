@@ -14,7 +14,7 @@ function Consumer({id}: {id:string}) {
   const q = useDomainStatusObservation()
   return <output data-testid={id}>{JSON.stringify({data:q.data, evidence:q.evidence, quality:q.evidence ? readQuality([q.evidence], '2026-11-23T03:02:00Z') : 'pending'})}</output>
 }
-// Owner 2026-11-22: shared raw catalog response, domain-only reads and distinguish old data from failure.
+// (ISSUE-74) shared raw catalog response, domain-only reads and distinguish old data from failure.
 it('shares the raw response, preserves backend fields, and exposes stale/error/recovered evidence', async () => {
   wire.read.mockResolvedValue({ok:true,json:async()=>raw})
   const client = new QueryClient()

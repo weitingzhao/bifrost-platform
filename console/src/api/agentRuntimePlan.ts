@@ -82,7 +82,7 @@ export function planRounds(plan: unknown): string[] {
 }
 
 /**
- * The round the plan panes show: the newest GET /progress counts, else PLAN_ROOT. The Owner 2026-10-22: with the
+ * The round the plan panes show: the newest GET /progress counts, else PLAN_ROOT. (ISSUE-29) with the
  * panes fixed on R2, round 3's steps could not be seen or signed on PROD.
  */
 export function currentRound(plan: unknown): string {
@@ -239,7 +239,7 @@ export function stepsOfApproval(doc: unknown, n: number): ApprovalStep[] {
 /** A sign-off the Owner gave a step (GET /plan's signoffs): the owner_signoff ref, who signed, and when. */
 export type StepSignoff = { ref: string; by: string; at: string }
 /**
- * A step the Owner signs off (the Owner 2026-10-21): its node id, the refs of its done rule's owner_signoff atoms in the
+ * A step the Owner signs off (ISSUE-3): its node id, the refs of its done rule's owner_signoff atoms in the
  * order the rule names them, and the sign-offs it holds, oldest first.
  */
 export type StepSignoffs = { node: string; refs: string[]; signed: StepSignoff[] }
@@ -337,7 +337,7 @@ const NOT_STARTED = 'planned'
 
 /**
  * The steps waiting on the Owner's sign-off, by number: an unsigned owner_signoff on a step whose work has started.
- * A step not started is not one (the Owner 2026-10-23: rules set ahead of the work put five unstarted steps on For
+ * A step not started is not one (ISSUE-3: rules set ahead of the work put five unstarted steps on For
  * you; TD-425); signoffNotStarted lists those.
  */
 export function signoffWaits(doc: unknown): SignoffWait[] {

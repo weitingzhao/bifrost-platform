@@ -52,7 +52,7 @@ export function partOfLine(part: ProgressPart): string {
 
 /** Where the plan pane opens (Work's "Plan ›"). */
 export const PLAN_SECTION_HREF = '#work?section=plan'
-/** Work's block of the steps waiting on the Owner's sign-off, at the top of the plan (the Owner 2026-10-21). */
+/** Work's block of the steps waiting on the Owner's sign-off, at the top of the plan (ISSUE-3). */
 export const SIGNOFF_SECTION_HREF = '#work?section=signoff'
 
 /**

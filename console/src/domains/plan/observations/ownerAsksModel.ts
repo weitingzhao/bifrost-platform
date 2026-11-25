@@ -8,7 +8,7 @@ import { isStale, shellRead, SHELL_POLL_MS, type ShellRead } from '@/pages/shell
 import { ruleQuestionIds, type HeldItem } from '@/pages/shell/agents/planModuleModel'
 
 /*
- * What asks the Owner on a step besides the plan view (R5:5.5-10 slice 2, the Owner 2026-11-02, Q75: a step that waits
+ * What asks the Owner on a step besides the plan view (R5:5.5-10 slice 2, (ISSUE-3) a step that waits
  * on you reads "Waiting on you"): the open questions and the requests awaiting his decision. They are the lists the
  * shell already polls for Needs you (useNeedsYou: questions and requests every 30 s), read from that cache with the
  * same keys and never fetched (enabled is false), the same shell reads the module page shows as its sources

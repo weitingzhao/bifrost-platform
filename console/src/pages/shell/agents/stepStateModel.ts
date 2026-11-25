@@ -8,7 +8,7 @@ import { viewOldReason } from './readAge'
 
 /*
  * Work → Plan: what an active step has now, derived from the plan view already held, no request of its own (R5:5.5-10,
- * the Owner 2026-11-02, Q75: a step nobody works on no longer reads "In progress"). The controller's active state alone
+ * (ISSUE-33) a step nobody works on no longer reads "In progress"). The controller's active state alone
  * says only that the step was opened (a recorded event), not that anything runs. In this order:
  * - unknown, before anything else, while the read is not now (readAge.ts viewOldReason: older than 60 s, its refresh
  *   failed, its database not Fresh), with that reason;

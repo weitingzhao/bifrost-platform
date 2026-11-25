@@ -17,7 +17,7 @@ import { streamPage } from '@/test/agentrtPlanStream'
 import { StepSignoffControls } from '../StepSignoffs'
 import { SIGNOFF_PRESS_AGAIN, signedLine } from '../stepSignoffText'
 
-// The Owner signs a step off (the Owner 2026-10-21 「加一个只给我用的「签收这一步」路由和 Console 按钮」). The fixture is
+// The Owner signs a step off (ISSUE-3). The fixture is
 // GET /plan?root=R2 as the platform answered it on a test database (agentrtapi TestOwnerSignsAStepOff, written with
 // CONSOLE_PLAN_SIGNOFFS_FIXTURE_WRITE=1): the round-2 ledger imported, then done rules set through POST /plan/proposals:
 // 2.4-1 waits on owner_signoff exam-2.4-1 and is signed (not yet moved), 2.1-3 on a or b (active), 2.3-2 on race

@@ -215,7 +215,7 @@ function useRoundPlans(enabled: boolean, source: ProgressSource = 'poll', scope:
 }
 
 /**
- * The steps waiting on the Owner's sign-off (the Owner 2026-10-21), from the same GET /plan?root= read the plan panes
+ * The steps waiting on the Owner's sign-off (ISSUE-3), from the same GET /plan?root= read the plan panes
  * make; read is 'ok' with them by number, or the read is not done yet or failed and nothing is listed. Every count of
  * them uses waits; notStarted are the steps with a sign-off rule whose work has not started, kept apart and never
  * counted (TD-425).
@@ -229,7 +229,7 @@ export type SignoffWaitsRead = { read: 'ok'; waits: SignoffWait[]; notStarted: S
   | { read: 'error'; last?: { waits: SignoffWait[]; notStarted: SignoffWait[]; at: number } }
 export function useSignoffWaits(enabled = true, source: ProgressSource = 'poll', scope: RoundScope = 'every'): SignoffWaitsRead {
   const plans = useRoundPlans(enabled, source, scope)
-  // Every round's waits, round by round (the Owner 2026-10-22: round 3's steps waited unseen while R2 alone was read).
+  // Every round's waits, round by round (ISSUE-3: round 3's steps waited unseen while R2 alone was read).
   return useMemo((): SignoffWaitsRead => (plans.read === 'loading' ? plans
     : plans.read === 'error' ? (plans.last ? { read: 'error', last: { waits: plans.last.docs.flatMap(doc => signoffWaits(doc)),
       notStarted: plans.last.docs.flatMap(doc => signoffNotStarted(doc)), at: plans.last.at } } : { read: 'error' })

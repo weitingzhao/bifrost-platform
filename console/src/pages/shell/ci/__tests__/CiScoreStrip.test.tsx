@@ -6,7 +6,7 @@ import { fetchCiScorecard, type CiScorecard } from '@/api/ciScorecard'
 import { CiScoreStrip } from '../CiScoreStrip'
 
 /*
- * Origin of every case in this file — Owner 2026-11-16: CI scores every repository that uses it, and its users score
+ * Origin of every case in this file — (ISSUE-20) CI scores every repository that uses it, and its users score
  * CI; only what is measured is shown, each item with its verdict and raw number, and the pass lines are on the page.
  * The same day he read Work → CI and could not tell what was running, who depends on whom, or what a change pulls in;
  * this page and its two routes replace it, and the scorecard became one line on it.

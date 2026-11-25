@@ -3,7 +3,7 @@ import { TOWN_LANDMARKS } from '@bifrost/ui/city/library/towns'
 import { spriteUrl } from '@bifrost/ui/city/sprites'
 import OWNERSHIP from '../domain-ownership.json'
 
-// Bench only: the engine's catalogue of district towns (the Owner, 2026-11-21: draw them by the engine's rules,
+// Bench only: the engine's catalogue of district towns (ISSUE-55: draw them by the engine's rules,
 // then the lines claim theirs), each with the domain that claims it in the Console's ownership table, if any.
 const claims = (OWNERSHIP as { facilities?: Record<string, { kind?: string }> }).facilities ?? {}
 const claimedBy = (kind: string) => Object.entries(claims).filter(([, v]) => v.kind === kind).map(([d]) => d)

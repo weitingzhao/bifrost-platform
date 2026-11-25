@@ -3,7 +3,7 @@ import type { RuntimeEventRow } from '@/api/agentRuntimeEvents'
 import type { ReleaseRecord } from '@/api/releases'
 
 /**
- * What History is made of (2.5 G6, CUT-round2-2.5 §2; Owner 2026-10-19 「2.5 八条照建议」): the runtime's
+ * What History is made of (2.5 G6, CUT-round2-2.5 §2; 决定 2026-10-19): the runtime's
  * events across streams, in place of the board's hand-written "done today" lines and its feed — steps
  * done, tasks accepted or rejected, attempts failed, decisions, plan changes decided, imports, stops and
  * lifts, policy alerts (a report a host had refused, an executor that failed a task three times in a

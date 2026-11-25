@@ -72,7 +72,7 @@ it('surfaces all parallel active steps without inventing a progress percentage',
   expect(status).toHaveTextContent('no completion percentage is inferred')
 })
 
-// Owner 2026-11-15: the upper attempt selector controls details and later stages.
+// (ISSUE-33) the upper attempt selector controls details and later stages.
 it('follows the selected CI attempt and limits delivery stages to its commit', async () => {
   const chosen = {...timingRun(), name:'chosen-ci'}
   const other = {...timingRun(), name:'other-ci', revision:'f'.repeat(40)}

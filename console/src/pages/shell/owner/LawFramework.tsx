@@ -97,7 +97,7 @@ export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Fr
             <li key={s} data-state={s}><span className="text-muted-foreground">{s}</span> {n ?? <Unknown what={s} />}</li>
           ))}
         </ul>
-        {/* Step two (Owner 2026-11-24): the material distilled into laws one by one, then repealed once all is covered. */}
+        {/* Step two (ISSUE-17): the material distilled into laws one by one, then repealed once all is covered. */}
         <p className="m-0 text-sm" data-coverage>{coverageLine(fw)}</p>
         {/* LAW-1 s5 (2026-11-25): the repealed are not shown, only how many wait to be deleted and whether any is overdue. */}
         <p className="m-0 text-sm text-muted-foreground" data-purge>{purgeLine(purge)}</p>

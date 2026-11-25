@@ -3,7 +3,7 @@ import type { LawStep, RegisterLaw } from '@/api/lawRegister'
 import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
 
 /*
- * Command → Audit conclusions (箭10 2026-11-24; the Owner: 「审计基于立法的标准出结果，来监督行政」; the audit line's
+ * Command → Audit conclusions (箭10 2026-11-24; ISSUE-20: the audit judges by the laws' standards and oversees the administration; the audit line's
  * brief, domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). One row per standard, grouped by law.
  * The conclusion and the cause are apart:
  * - the conclusion: reached / missed / unmeasured, and whether its numbers are kept by the system or read once;
@@ -61,7 +61,7 @@ export type StandardRow = {
   card?: string
   /** The law's said_on (GET /laws): from when a reading of it counts. */
   saidOn?: string
-  /** The law's code, LAW-k (the Owner 2026-11-25: laws are written LAW-k, never shortened; platform d9985668), when it has one. */
+  /** The law's code, LAW-k (LAW-1: laws are written LAW-k, never shortened; platform d9985668), when it has one. */
   lawCode?: string
   attribution: Attribution | null | undefined
   /** undefined: the step's events are not read (yet); else what they say. */

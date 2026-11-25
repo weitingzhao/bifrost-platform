@@ -1,4 +1,4 @@
-// 2026-11-24 箭10: the audit-conclusions page (the Owner: 「审计基于立法的标准出结果，来监督行政」), built to the
+// 2026-11-24 箭10: the audit-conclusions page (ISSUE-20: the audit judges by the laws' standards and oversees the administration), built to the
 // audit line's brief (domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). The shapes are PROD's as read that
 // day: LAW-11 (then law 83; R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
 import { describe, expect, it } from 'vitest'
