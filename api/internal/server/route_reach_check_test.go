@@ -45,15 +45,15 @@ var intendedRouteAdditions = map[string][]string{
 	// session hook posts with a reporter token; every reader reads.
 	"POST /api/v1/agentrt/owner-said": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-said":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	// 2026-11-25 (the Owner: his complaints, pains and needs go to the law
-	// system): the legislation line records issues; every reader reads.
+	// 2026-11-25 (the Owner's issues live in the law system; LAW-1): the
+	// legislation line records issues; every reader reads.
 	"POST /api/v1/agentrt/owner-issues": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-issues":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/harness-preview/grants": {"admin"},
 	// 2026-11-22 (LAW-8, seen and felt; the CI line): why the PROD head-release
 	// loop released or held PROD, from the ledger, read-only, like the delivery reads.
 	"GET /api/v1/delivery/prod-judgements": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// 2026-11-20 (the Owner: every module's state on the bus): each subject's
+	// 2026-11-20 (every module's state on the bus; ISSUE-29): each subject's
 	// latest state for a registered state type, read-only, like the other bus reads.
 	"GET /api/v1/bus/states": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-20 (LAW-8; the coordinator gave the evaluation readout to the
@@ -63,7 +63,7 @@ var intendedRouteAdditions = map[string][]string{
 	// the Owner's arrangement of the home's city; everyone reads, he alone saves.
 	"GET /api/v1/home/layout": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"PUT /api/v1/home/layout": {"admin"},
-	// 2026-11-18 (the Owner audits the laws, Skills and MCP tools on Ops):
+	// 2026-11-18 (laws, Skills and MCP tools are audited on Ops; LAW-10):
 	// read from the source at main, read-only, for the console's readers.
 	"GET /api/v1/governance/instruments": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-17 (progress shows on Ops; ISSUE-1): every seat's latest

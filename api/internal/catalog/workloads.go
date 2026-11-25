@@ -14,8 +14,8 @@ import (
 const ClusterRepo = "cluster"
 
 // DatabaseRepo names the pool of the platform's own database (2026-11-20,
-// perceive first; Owner: the platform's own first, the tenants' databases
-// are not read this round): each table "<schema>/<table>" is scanned like a
+// perceive first; the platform's own first, the tenants' databases are not
+// read this round; 决定 2026-11-20): each table "<schema>/<table>" is scanned like a
 // file, against the ownership table's "tables" rows (a schema row covers its
 // tables, a "<schema>/<table>" row one table).
 const DatabaseRepo = "platform-db"

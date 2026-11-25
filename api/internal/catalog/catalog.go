@@ -332,8 +332,8 @@ type Pool struct {
 	OffMap int `json:"off_map"`
 	Gap    int `json:"gap"`
 	// Whole is true for a repository kept as one entry on purpose: a
-	// tenant's, whose inside the map does not look at this round (Owner
-	// 2026-11-20: the platform's own first).
+	// tenant's, whose inside the map does not look at this round (the
+	// platform's own first; 决定 2026-11-20).
 	Whole bool `json:"whole,omitempty"`
 	// Covered lists, for the cluster and the platform database only, every
 	// workload or table on the map and the row covering it; ByNamespace marks
