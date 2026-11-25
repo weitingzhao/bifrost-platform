@@ -10,7 +10,7 @@ import (
 )
 
 // A domain that declares its buildings puts every package it owns in one, so
-// the City draws only the buildings the domain wrote (laws 75, 79).
+// the City draws only the buildings the domain wrote (LAW-8 四, LAW-10 一).
 //
 // Origin: 2026-11-22, the coordinator asked whether the foundation district
 // in the City really is the 9 buildings Foundation declared that day. It was

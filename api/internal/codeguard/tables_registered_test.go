@@ -126,7 +126,7 @@ func TestEveryPlatformTableHasARow(t *testing.T) {
 	}
 	t.Logf("agentrt tables live by the migrations: %d", len(live))
 	for _, name := range unregisteredTables(live, doc.Tables) {
-		t.Errorf("agentrt.%s has no row in the ownership table's tables section: add \"agentrt/%s\" with its one domain and the reason in the same commit as the migration (laws 72, 75; the map line owns the table)", name, name)
+		t.Errorf("agentrt.%s has no row in the ownership table's tables section: add \"agentrt/%s\" with its one domain and the reason in the same commit as the migration (LAW-10 一; the map line owns the table)", name, name)
 	}
 }
 
