@@ -240,3 +240,4 @@ deny	GET /api/v1/catalog/index
 deny	GET /api/v1/catalog/status
 deny	GET /api/v1/catalog/domain
 deny	GET /api/v1/catalog/users
+deny	GET /api/v1/catalog/seats

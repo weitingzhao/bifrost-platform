@@ -23,7 +23,7 @@ const DailyDays = 90
 
 // ReadRoutes are the map's read routes whose daily calls are kept.
 var ReadRoutes = []string{"/api/v1/catalog/status", "/api/v1/catalog/domain", "/api/v1/catalog/owner",
-	"/api/v1/catalog/unperceived", "/api/v1/catalog/index", "/api/v1/catalog/users"}
+	"/api/v1/catalog/unperceived", "/api/v1/catalog/index", "/api/v1/catalog/users", "/api/v1/catalog/seats"}
 
 const keptDaily = "daily"
 const keptSeen = "seen"

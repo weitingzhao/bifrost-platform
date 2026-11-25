@@ -138,6 +138,9 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-21 (map line, Foundation's ask): who uses each package, prod,
 	// test and event apart, from what the scan kept (read-only; contract v1).
 	"GET /api/v1/catalog/users": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
+	// 2026-11-25 (map line, UI / Engine's ask for Agents and the City): which
+	// thread sits which seat of which domain, the roster the scan kept.
+	"GET /api/v1/catalog/seats": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},

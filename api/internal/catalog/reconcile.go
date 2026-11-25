@@ -188,6 +188,9 @@ func (s *Scanner) keepSeats(repo string, t Tree) {
 			slog.Warn("catalog: keep seats", "err", err)
 		}
 	}
+	if at, err := json.Marshal(s.now().UTC()); err == nil {
+		_ = s.kept().Write(keptSeatsAt, at)
+	}
 }
 
 // seatRow is one row of the roster as far as the check reads it.
@@ -199,6 +202,15 @@ type seatRow struct {
 	InvitedBy string  `json:"invited_by,omitempty" yaml:"invited_by"`
 	// AlsoDomainIDs are the other domains the seat sits.
 	AlsoDomainIDs []string `json:"also_domain_ids,omitempty" yaml:"also_domain_ids"`
+	// Who sits it (GET /catalog/seats, 2026-11-25, Engine's ask): the
+	// thread (session), its harness and whether its mailbox is registered;
+	// a temporary visit's start and end as the roster writes them.
+	Name    string `json:"name,omitempty" yaml:"name"`
+	Session string `json:"session,omitempty" yaml:"session"`
+	Harness string `json:"harness,omitempty" yaml:"harness"`
+	Mailbox string `json:"mailbox,omitempty" yaml:"mailbox"`
+	Started string `json:"started,omitempty" yaml:"started"`
+	Ended   string `json:"ended,omitempty" yaml:"ended"`
 }
 
 // seatCheck compares the roster with its charter pages and the domains

@@ -61,6 +61,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_domain',
   'find_by_task',
   'get_package_users',
+  'get_seats',
   'wait_for_event',
   'report_regression',
   'record_privilege_use',
