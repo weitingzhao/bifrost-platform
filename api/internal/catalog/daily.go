@@ -14,7 +14,7 @@ import (
 // someone asked, so nothing could say they held from one day to the next:
 // whether the read routes are read every day (perceive first 5), how long a
 // new commit takes to be on the map (perceive first 6), and whether the
-// pool's oldest entry only gets younger (law 50). Each round keeps today's
+// pool's oldest entry only gets younger (LAW-10). Each round keeps today's
 // point, one per UTC day, the last DailyDays of them; the status carries
 // them. They measure; they refuse nothing.
 
