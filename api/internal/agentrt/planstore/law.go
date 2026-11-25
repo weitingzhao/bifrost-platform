@@ -69,7 +69,7 @@ func LawTitle(c LawCard) string {
 	}
 	law := "新法"
 	if c.Law != "" {
-		law = "法 " + c.Law
+		law = lawName(c.Law)
 	}
 	op := map[string]string{"add": "新增", "amend": "修改", "repeal": "废止"}[c.Op]
 	text := c.After

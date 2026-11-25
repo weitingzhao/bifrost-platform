@@ -134,8 +134,15 @@ func readLawFrame(raw any) (*LawFrame, error) {
 		}
 		return out
 	}
-	f := &LawFrame{Scope: s("scope"), Subject: s("subject"), Modality: s("modality"), Condition: s("condition"), Parent: s("parent"),
-		DependsOn: list("depends_on"), Supersedes: list("supersedes"), Absorbs: list("absorbs"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
+	refs := func(k string) []string {
+		var out []string
+		for _, r := range list(k) {
+			out = append(out, LawNumberOf(r))
+		}
+		return out
+	}
+	f := &LawFrame{Scope: s("scope"), Subject: s("subject"), Modality: s("modality"), Condition: s("condition"), Parent: LawNumberOf(s("parent")),
+		DependsOn: refs("depends_on"), Supersedes: refs("supersedes"), Absorbs: list("absorbs"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
 		Enforcement: s("enforcement"), Evidence: s("evidence"), ExpiresOn: s("expires_on"), Enforce: s("enforce")}
 	switch v := m["level"].(type) {
 	case float64:
@@ -263,19 +270,19 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 	}
 	if f.Parent != "" {
 		if p, ok := inForce(f.Parent); !ok {
-			notes = append(notes, fmt.Sprintf("上位法第 %s 条不是现行法", f.Parent))
+			notes = append(notes, fmt.Sprintf("上位法 %s 不是现行法", lawName(f.Parent)))
 		} else if *p.Frame.Level >= lv {
-			notes = append(notes, fmt.Sprintf("上位法第 %s 条在第 %d 层，不比它高", f.Parent, *p.Frame.Level))
+			notes = append(notes, fmt.Sprintf("上位法 %s 在第 %d 层，不比它高", lawName(f.Parent), *p.Frame.Level))
 		}
 	}
 	for _, d := range f.DependsOn {
 		if _, ok := inForce(d); !ok {
-			notes = append(notes, fmt.Sprintf("依存的第 %s 条不是现行法", d))
+			notes = append(notes, fmt.Sprintf("依存的 %s 不是现行法", lawName(d)))
 		}
 	}
 	for _, sn := range f.Supersedes {
 		if l, ok := by[sn]; !ok || LawState(l, now) == StateRepealed {
-			notes = append(notes, fmt.Sprintf("要取代的第 %s 条不在名录或已废止", sn))
+			notes = append(notes, fmt.Sprintf("要取代的 %s 不在名录或已废止", lawName(sn)))
 		}
 	}
 	for _, a := range f.Absorbs {
@@ -302,11 +309,11 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 				return nil, fmt.Errorf("law_amend: conflicts with fundamental law %s (%s, %s: %s against %s); nothing loosens a fundamental law",
 					l.Law, f.Scope, f.Subject, o.Modality, f.Modality)
 			}
-			notes = append(notes, fmt.Sprintf("和第 %s 条冲突（%s／%s：%s 对 %s），应在同一张票里改或废它", l.Law, f.Scope, f.Subject, o.Modality, f.Modality))
+			notes = append(notes, fmt.Sprintf("和 %s 冲突（%s／%s：%s 对 %s），应在同一张票里改或废它", lawName(l.Law), f.Scope, f.Subject, o.Modality, f.Modality))
 			continue
 		}
 		if o.Modality == f.Modality && f.DistinctFrom == "" {
-			notes = append(notes, fmt.Sprintf("和第 %s 条重复（%s／%s／%s），应写取代或差别", l.Law, f.Scope, f.Subject, f.Modality))
+			notes = append(notes, fmt.Sprintf("和 %s 重复（%s／%s／%s），应写取代或差别", lawName(l.Law), f.Scope, f.Subject, f.Modality))
 		}
 	}
 	return notes, nil

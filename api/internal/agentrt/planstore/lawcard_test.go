@@ -96,7 +96,7 @@ func TestLawCardMustMatchTheRegister(t *testing.T) {
 		}
 	}
 	add := map[string]any{"op": "add", "after": "x", "standards": std, "revert": "r", "frame": frame(2)}
-	if got := planstore.LawCardSummary(context.Background(), reg, add); !strings.HasPrefix(got, "Law add: will become law 80") {
+	if got := planstore.LawCardSummary(context.Background(), reg, add); !strings.HasPrefix(got, "Law add: will become 第 80 条") {
 		t.Fatalf("add summary = %q", got)
 	}
 	if err := planstore.CheckLawCard(context.Background(), fakeLookup(""), add); err == nil {
@@ -117,7 +117,7 @@ func TestLawCardRepealMany(t *testing.T) {
 	if err := planstore.CheckLawCard(context.Background(), reg, good); err != nil {
 		t.Fatalf("good batch refused: %v", err)
 	}
-	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law repeal ×1: 79" {
+	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law repeal ×1: 第 79 条" {
 		t.Fatalf("summary = %q", got)
 	}
 	bad := map[string]map[string]any{
@@ -147,7 +147,7 @@ func TestLawCardPurge(t *testing.T) {
 	if err := planstore.CheckLawCard(context.Background(), reg, good); err != nil {
 		t.Fatalf("purge of a repealed law refused: %v", err)
 	}
-	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law purge (delete for good) ×1: 5" {
+	if got := planstore.LawCardSummary(context.Background(), reg, good); got != "Law purge (delete for good) ×1: 第 5 条" {
 		t.Fatalf("summary = %q", got)
 	}
 	bad := map[string]map[string]any{

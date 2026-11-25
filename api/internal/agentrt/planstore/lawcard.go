@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,7 +91,7 @@ const (
 // wrong, before a card is written.
 func ReadLawAmend(params map[string]any) (LawAmend, error) {
 	s := func(k string) string { v, _ := params[k].(string); return strings.TrimSpace(v) }
-	la := LawAmend{Op: s("op"), Law: s("law"), Before: s("before"), After: s("after"), Revert: s("revert")}
+	la := LawAmend{Op: s("op"), Law: LawNumberOf(s("law")), Before: s("before"), After: s("after"), Revert: s("revert")}
 	if la.Op == "add" || la.Op == "amend" {
 		f, err := readLawFrame(params["frame"])
 		if err != nil {
@@ -138,7 +139,7 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 				return la, fmt.Errorf("law_amend %s: repeals[%d] must be an object", la.Op, i)
 			}
 			f := func(k string) string { v, _ := m[k].(string); return strings.TrimSpace(v) }
-			rp := LawRepeal{Law: f("law"), Before: f("before"), Reason: f("reason")}
+			rp := LawRepeal{Law: LawNumberOf(f("law")), Before: f("before"), Reason: f("reason")}
 			if rp.Law == "" || rp.Before == "" || rp.Reason == "" {
 				return la, fmt.Errorf("law_amend %s: repeals[%d] needs law, before and reason", la.Op, i)
 			}
@@ -284,7 +285,7 @@ func readArchive(params map[string]any, la LawAmend) (LawAmend, error) {
 			return la, fmt.Errorf("law_amend archive: repeals[%d] must be an object", i)
 		}
 		f := func(k string) string { v, _ := m[k].(string); return strings.TrimSpace(v) }
-		rp := LawRepeal{Law: f("law"), Reason: f("reason")}
+		rp := LawRepeal{Law: LawNumberOf(f("law")), Reason: f("reason")}
 		if rp.Law == "" || rp.Reason == "" || len(rp.Reason) > lawCardMaxText {
 			return la, fmt.Errorf("law_amend archive: repeals[%d] needs law and a reason", i)
 		}
@@ -492,12 +493,12 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 	op, _ := params["op"].(string)
 	law, _ := params["law"].(string)
 	if op == "add" || op == "amend" {
-		line := strings.TrimSpace("Law " + op + " " + law)
+		line := strings.TrimSpace("Law " + op + " " + lawName(LawNumberOf(law)))
 		if op == "add" {
 			line = "Law add"
 			if reg.Next != nil {
 				if next, err := reg.Next(ctx); err == nil && next != "" {
-					line = "Law add: will become law " + next
+					line = "Law add: will become " + lawName(next)
 				}
 			}
 		}
@@ -511,9 +512,9 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		ns := make([]string, 0, len(la.Amends))
 		var notes []string
 		for _, a := range la.Amends {
-			ns = append(ns, a.Law)
+			ns = append(ns, lawName(a.Law))
 			if fn, _ := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); len(fn) > 0 {
-				notes = append(notes, fmt.Sprintf("第 %s 条：%s", a.Law, strings.Join(fn, "，")))
+				notes = append(notes, fmt.Sprintf("%s：%s", lawName(a.Law), strings.Join(fn, "，")))
 			}
 		}
 		line := fmt.Sprintf("Law amend ×%d: %s", len(ns), strings.Join(ns, ", "))
@@ -531,7 +532,7 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		if reg.Next != nil {
 			if next, err := reg.Next(ctx); err == nil && next != "" {
 				first := lawNumber(next)
-				line += fmt.Sprintf(": will become laws %d–%d", first, first+len(la.Adds)-1)
+				line += fmt.Sprintf(": will become %s–%s", lawName(next), lawName(strconv.Itoa(first+len(la.Adds)-1)))
 			}
 		}
 		var notes []string
@@ -549,13 +550,13 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		if la, err := ReadLawAmend(params); err == nil {
 			ns := make([]string, 0, len(la.Repeals))
 			for _, rp := range la.Repeals {
-				ns = append(ns, rp.Law)
+				ns = append(ns, lawName(rp.Law))
 			}
 			return fmt.Sprintf("Law %s ×%d: %s", verb, len(ns), strings.Join(ns, ", "))
 		}
 		return "Law " + verb + " (several)"
 	}
-	return strings.TrimSpace("Law " + op + " " + law)
+	return strings.TrimSpace("Law " + op + " " + lawName(LawNumberOf(law)))
 }
 
 // LawCardNotes is what the framework finds about a card (FrameNotes), for

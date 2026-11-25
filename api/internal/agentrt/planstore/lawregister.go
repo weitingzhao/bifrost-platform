@@ -41,6 +41,7 @@ type LawRow struct {
 // Law is a law as the register holds it now.
 type Law struct {
 	Law        string    `json:"law"`
+	Code       string    `json:"code,omitempty"` // LAW-k (lawcode.go); empty for material
 	Version    int       `json:"version"`
 	Op         string    `json:"op"` // transcribed, add, amend or repeal
 	SaidOn     string    `json:"said_on,omitempty"`
@@ -62,7 +63,7 @@ func LawStream(n string) string { return "law:" + n }
 // RepealedStatus is the status of a law a card repealed.
 const RepealedStatus = "废止"
 
-var lawRow = regexp.MustCompile(`^\|\s*(\d+)\s*\|`)
+var lawRow = regexp.MustCompile(`^\|\s*(\d+|LAW-\d+)\s*\|`)
 
 // ParseLawTable reads the rows of OWNER_LAW.md's register table (the section
 // 「## 登记」): seven cells each, a pipe inside backticks being text.
@@ -78,6 +79,7 @@ func ParseLawTable(md string) ([]LawRow, error) {
 			continue
 		}
 		cells := splitRow(line)
+		cells[0] = LawNumberOf(cells[0])
 		if len(cells) != 7 {
 			return nil, fmt.Errorf("OWNER_LAW.md: row %q has %d cells, not 7", cells[0], len(cells))
 		}
@@ -125,7 +127,7 @@ func lockRegister(ctx context.Context, tx pgx.Tx) error {
 func lawOf(r eventlog.Row) Law {
 	s := func(k string) string { v, _ := r.Body[k].(string); return v }
 	v, _ := r.Body["version"].(float64)
-	return Law{Law: s("law"), Version: int(v), Op: s("op"), SaidOn: s("said_on"), Text: s("text"), Where: s("where"),
+	return Law{Law: s("law"), Code: LawCode(s("law")), Version: int(v), Op: s("op"), SaidOn: s("said_on"), Text: s("text"), Where: s("where"),
 		EnforcedBy: s("enforced_by"), Status: s("status"), OldWording: s("old_wording"), Source: s("source"),
 		ApprovalID: s("approval_id"), Standards: r.Body["standards"], Frame: frameOf(r.Body["frame"]), At: r.At}
 }
