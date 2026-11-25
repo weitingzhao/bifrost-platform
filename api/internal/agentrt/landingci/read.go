@@ -40,6 +40,10 @@ type Client struct {
 	// the list until the bus run cache has matched it long enough). A run it
 	// hands back may hold only what that cache keeps.
 	GateRuns func(pipeline string, keep func(*unstructured.Unstructured) bool, listed func() ([]unstructured.Unstructured, error)) ([]unstructured.Unstructured, error)
+	// UIRevision, when set, names the ui commit a full run clones: the
+	// stable pin (agentrt/uicheck), the newest ui commit the console passed
+	// with. Empty or nil, the run clones ui's main (R0E, 2026-11-25).
+	UIRevision func(ctx context.Context) string
 }
 
 // DefaultNamespace is where the pipelines run when Namespace is empty.

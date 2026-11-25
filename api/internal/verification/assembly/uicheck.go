@@ -119,6 +119,26 @@ func wireUICheck(c *controller.Controller, lent *CILent) {
 	}})
 }
 
+// uiPinCommit reads the stable pin's commit for the full runs (R0E): "" when
+// there is no pin, it cannot be read, or the pin loop is off.
+func uiPinCommit(lent *CILent) func(ctx context.Context) string {
+	if os.Getenv("AGENTRT_UI_CHECK") == "off" || lent == nil || lent.Kubernetes == nil {
+		return nil
+	}
+	return func(ctx context.Context) string {
+		namespace := k8sstate.Namespace()
+		k, err := lent.Kubernetes()
+		if namespace == "" || err != nil {
+			return ""
+		}
+		cm, err := k.CoreV1().ConfigMaps(namespace).Get(kubemetrics.WithSite(ctx, "uicheck.pin"), UIPinConfigMap, metav1.GetOptions{})
+		if err != nil {
+			return ""
+		}
+		return cm.Data["commit"]
+	}
+}
+
 func dataOf(p uicheck.Pin) map[string]string {
 	out := map[string]string{}
 	for k, v := range map[string]string{"commit": p.Commit, "version": p.Version, "run": p.Run, "at": p.At,

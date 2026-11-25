@@ -154,6 +154,7 @@ func wireFullCI(c *controller.Controller, lent *CILent, zone string) func(ctx co
 	}
 	ci := lent.client()
 	ci.FullScopeParam = param
+	ci.UIRevision = uiPinCommit(lent)
 	// The full CI's day is the Owner's, in the zone of the briefs.
 	c.FullCIZone = zone
 	// The PROD head-release loop starts a candidate's full CI with the same

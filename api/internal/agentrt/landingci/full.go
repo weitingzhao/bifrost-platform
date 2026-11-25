@@ -65,14 +65,23 @@ type FullRun struct {
 
 // EnsureFullRun creates the full run of revision on day and returns its
 // name. Its spec is EnsureLandingCI's without base (whatever BaseParam, so
-// the run stays full), plus api-scope-request=full when FullScopeParam is set; an existing run of that name with another spec or
-// other labels is a collision, as in ensure.
+// the run stays full), plus api-scope-request=full when FullScopeParam is set,
+// with ui at UIRevision's pin (else main); an existing run of that name with
+// another spec or other labels is a collision, as in ensure, except its ui:
+// the pin may move within the day, and the run's ui-commit result says which
+// ui it ran with.
 func (c *Client) EnsureFullRun(ctx context.Context, revision string, day time.Time) (string, error) {
 	if !fullSHA.MatchString(revision) || day.IsZero() {
 		return "", fmt.Errorf("invalid full CI revision")
 	}
 	name := FullRunName(revision, day)
-	params := map[string]string{"revision": revision, "uiRevision": "main", "repo-url": platformRepoURL}
+	ui := "main"
+	if c.UIRevision != nil {
+		if pin := c.UIRevision(ctx); fullSHA.MatchString(pin) {
+			ui = pin
+		}
+	}
+	params := map[string]string{"revision": revision, "uiRevision": ui, "repo-url": platformRepoURL}
 	if c.FullScopeParam {
 		params[APIScopeRequestParam] = APIScopeFull
 	}

@@ -30,6 +30,7 @@ func (c *Client) create(ctx context.Context, name, pipeline string, params, labe
 		want := withoutPreRepoURL(params, counts)
 		if pipeline == "bifrost-ci-platform" {
 			want = withoutPreBase(want, counts)
+			want = withExistingUI(want, values, labels)
 		}
 		if inline || !reflect.DeepEqual(actualRef, expectedRef) || !reflect.DeepEqual(values, want) {
 			return fmt.Errorf("landing CI name collision")
@@ -73,6 +74,22 @@ func withoutPreRepoURL(params map[string]string, counts map[string]int) map[stri
 // all) is still this operation's run; one that names another base collides.
 func withoutPreBase(params map[string]string, counts map[string]int) map[string]string {
 	return withoutAbsent(params, counts, BaseParamName)
+}
+
+// A full run's ui follows the stable pin, which may move within the day (or
+// was main before the pin): an existing full run of the name with another ui
+// is still the day's run. Only full runs: a ui check's name carries its ui.
+func withExistingUI(params, existing map[string]string, labels map[string]string) map[string]string {
+	ui, ok := existing["uiRevision"]
+	if labels["bifrost.io/trigger"] != FullCITrigger || !ok || params["uiRevision"] == ui {
+		return params
+	}
+	out := make(map[string]string, len(params))
+	for name, value := range params {
+		out[name] = value
+	}
+	out["uiRevision"] = ui
+	return out
 }
 
 // withoutAbsent drops param from params when the existing run has none.

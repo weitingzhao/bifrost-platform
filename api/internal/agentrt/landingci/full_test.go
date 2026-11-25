@@ -279,3 +279,43 @@ func TestFullRunsListsByTheTriggerLabelOnly(t *testing.T) {
 		t.Fatal("a run Tekton has not labelled yet is missing", runs)
 	}
 }
+
+// Origin: R0E (CI line, 2026-11-25). A full run cloned ui's main, so a ui
+// change that broke the console turned the platform's full CI red (a9761108,
+// "ui drift", Foundation's attribution 11-25). A full run now clones the
+// stable pin; the day's run made before the pin, or before the pin moved, is
+// still the day's run.
+func TestAFullRunClonesTheStablePin(t *testing.T) {
+	t.Parallel()
+	c, _ := drillService(t)
+	ctx := context.Background()
+	day := time.Date(2026, 11, 25, 7, 30, 0, 0, time.UTC)
+	name, err := c.EnsureFullRun(ctx, factSHA1, day) // no pin yet: main
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params, _ := fullParams(t, c, name); params["uiRevision"] != "main" {
+		t.Fatal("no pin clones main", params)
+	}
+	pin := factSHA2
+	c.UIRevision = func(context.Context) string { return pin }
+	if again, err := c.EnsureFullRun(ctx, factSHA1, day.Add(time.Hour)); err != nil || again != name {
+		t.Fatal("the day's run made before the pin is still the day's run", again, err)
+	}
+	next, err := c.EnsureFullRun(ctx, factSHA1, day.AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params, _ := fullParams(t, c, next); params["uiRevision"] != factSHA2 {
+		t.Fatal("a new run clones the pin", params)
+	}
+	// Positive control: a pin that is not a commit is not sent.
+	pin = "main; rm -rf"
+	third, err := c.EnsureFullRun(ctx, factSHA1, day.AddDate(0, 0, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params, _ := fullParams(t, c, third); params["uiRevision"] != "main" {
+		t.Fatal("a pin that is not a full sha clones main", params)
+	}
+}
