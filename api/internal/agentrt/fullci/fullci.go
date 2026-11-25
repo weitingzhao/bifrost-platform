@@ -26,7 +26,9 @@ import (
 // binds the FullCIZone the server gave it, planpace.BriefZone, the zone of
 // the briefs), a full run of main's head starts, and one of the commit STG
 // runs now when that differs, so a PROD promotion of STG's commit
-// has a full green before releasing starts at 08:00. A commit runs at most once a day (the
+// has a full green before releasing starts at 08:00. STG's commit also runs
+// in full whenever it changes, at any hour (2026-11-24), so a release in the
+// day finds its full pass ready. A commit runs at most once a day (the
 // run's name is its commit and the day). A red run is noted once, with the
 // pipeline tasks that failed and the commits landed since the last green
 // full run whose own CI run left a module out: the full run is the net under
@@ -82,6 +84,11 @@ type FullCI struct {
 	mu      sync.Mutex
 	day     string   // the day whose runs are started, or being started
 	pending []string // the commits of day still to start
+	stg     string   // the STG commit last queued on its change (below)
+	// The runs this process started for STG's change, by name: they are not
+	// the day's runs (startFullRuns).
+	changeRuns map[string]bool
+	changeOf   map[string]bool // commits queued for STG's change, not yet started
 
 	// The newest finished run of the last pass. It has its own lock: mu is
 	// held for a whole pass, and a scrape of /metrics must not wait for one.
@@ -228,26 +235,47 @@ func startFullRuns(ctx context.Context, host Host, f *FullCI, now time.Time, run
 		return 0, err
 	}
 	local := now.In(loc)
-	if local.Before(time.Date(local.Year(), local.Month(), local.Day(), h, m, 0, 0, loc)) {
-		return 0, nil
-	}
-	day := local.Format("20060102")
-	if f.day != day {
-		for _, r := range runs {
-			if strings.HasSuffix(r.Name, "-"+day) {
-				f.day, f.pending = day, nil
-				return 0, nil
+	// STG's commit is run in full when it changes, at any hour (CI line
+	// 2026-11-24): a PROD release of it is judged on a full pass of that commit
+	// (LedgerCIStrict), and with the day's runs alone a release in the day
+	// started its own full run and waited for it (0e98b939: 20:07 on STG, its
+	// full run started by hand). A commit runs at most once a day, as Ensure
+	// names the run by commit and day. Revert: delete this block.
+	if host.STG != nil {
+		if stg, ok := host.STG(ctx); ok && stg != "" && stg != f.stg {
+			f.stg = stg
+			ran := false // today's run of it already exists (a restart)
+			for _, r := range runs {
+				ran = ran || (r.Revision == stg && strings.HasSuffix(r.Name, "-"+local.Format("20060102")))
+			}
+			if !ran && !slices.Contains(f.pending, stg) {
+				f.pending = append(f.pending, stg)
+				if f.changeOf == nil {
+					f.changeOf = map[string]bool{}
+				}
+				f.changeOf[stg] = true
 			}
 		}
-		main, err := f.Main(ctx)
-		if err != nil || main == "" {
-			return 0, fmt.Errorf("full CI: main's head: %v", err)
+	}
+	if day := local.Format("20060102"); f.day != day && !local.Before(time.Date(local.Year(), local.Month(), local.Day(), h, m, 0, 0, loc)) {
+		// The day's runs: main's head (STG's commit is queued above). A run of
+		// today means they were started (a restarted controller starts none),
+		// except a run this process started for STG's change.
+		started := false
+		for _, r := range runs {
+			started = started || (strings.HasSuffix(r.Name, "-"+day) && !f.changeRuns[r.Name])
 		}
-		f.day, f.pending = day, []string{main}
-		if host.STG != nil {
-			if stg, ok := host.STG(ctx); ok && stg != "" && stg != main {
-				f.pending = append(f.pending, stg)
-			} else if !ok {
+		f.day = day
+		if !started {
+			main, err := f.Main(ctx)
+			if err != nil || main == "" {
+				f.day = ""
+				return 0, fmt.Errorf("full CI: main's head: %v", err)
+			}
+			if !slices.Contains(f.pending, main) {
+				f.pending = append([]string{main}, f.pending...)
+			}
+			if host.STG == nil {
 				host.logf("agentrt-full-ci: the commit STG runs cannot be read; only main's head runs today")
 			}
 		}
@@ -262,6 +290,13 @@ func startFullRuns(ctx context.Context, host Host, f *FullCI, now time.Time, run
 			left = append(left, commit)
 			errs = append(errs, fmt.Errorf("full CI of %s: %w", commit, err))
 			continue
+		}
+		if f.changeOf[commit] {
+			delete(f.changeOf, commit)
+			if f.changeRuns == nil {
+				f.changeRuns = map[string]bool{}
+			}
+			f.changeRuns[name] = true
 		}
 		names = append(names, name)
 	}
