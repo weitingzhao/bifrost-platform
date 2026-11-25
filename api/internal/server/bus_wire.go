@@ -422,7 +422,12 @@ func (s *Server) consumeUnitWatch(ctx context.Context, js jetstream.JetStream, e
 	if s.delivery == nil {
 		return
 	}
-	unitwatch.OnMainMoved(ctx, env, s.unitWatchPass, func(name string, each func(context.Context)) {
+	// When main moves, the declaration is read and main's head gets the unit
+	// evidence it has none of (unitwatch.MainEvidenceSource).
+	evidence := unitwatch.MainEvidenceSource(unitwatch.DailyDeps{Head: s.giteaMainHead, DB: s.recordDB, Trees: s.unitTreesOf,
+		Cluster: s.unitClusterOf, Namespace: s.delivery.PipelinesNamespace, Placed: s.placedUnitConfig})
+	pass := func(ctx context.Context) error { return errors.Join(s.unitWatchPass(ctx), evidence(ctx)) }
+	unitwatch.OnMainMoved(ctx, env, pass, func(name string, each func(context.Context)) {
 		relay.ConsumePasses(ctx, js, env, name, []string{bushook.Type}, each)
 	})
 }
