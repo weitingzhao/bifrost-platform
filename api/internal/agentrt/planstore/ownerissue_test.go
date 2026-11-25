@@ -85,3 +85,38 @@ func TestOwnerIssueRefusals(t *testing.T) {
 		t.Fatalf("good issue: %d, %v", n, err)
 	}
 }
+
+// Origin: 2026-11-25, the Owner: a place apart from the laws and the complaints
+// that says whether the complaints under a law eased (「提供一个新的法下吐槽是否
+// 可以缓解和解决的地方」). The verdict compares the rate before the law with
+// the rate after; a law none of whose issues names a law time says so.
+func TestLawEffects(t *testing.T) {
+	t.Parallel()
+	law := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	now := law.Add(28 * 24 * time.Hour)
+	n := func(v int) *int { return &v }
+	issue := func(code string, laws []string, times int, after *int, inForce *time.Time) planstore.OwnerIssueRead {
+		return planstore.OwnerIssueRead{OwnerIssue: planstore.OwnerIssue{Issue: code, Laws: laws, Times: times,
+			FirstAt: law.Add(-28 * 24 * time.Hour), LawInForceAt: inForce}, SaidAfterLaw: after}
+	}
+	got := planstore.LawEffects([]planstore.OwnerIssueRead{
+		issue("ISSUE-1", []string{"LAW-8"}, 40, n(0), &law),   // never again
+		issue("ISSUE-2", []string{"LAW-6"}, 40, n(4), &law),   // 36 in 4 weeks, then 4: eased
+		issue("ISSUE-3", []string{"LAW-6"}, 20, n(0), &law),   // shares LAW-6
+		issue("ISSUE-4", []string{"LAW-14"}, 30, n(20), &law), // 10 then 20: not eased
+		issue("ISSUE-5", []string{"ZONE-1"}, 5, nil, nil),     // no law time yet
+	}, now)
+	want := map[string]string{"LAW-6": "eased", "LAW-8": "not said again", "LAW-14": "not eased", "ZONE-1": "no law time"}
+	if len(got) != len(want) {
+		t.Fatalf("effects %+v", got)
+	}
+	for _, e := range got {
+		if e.Verdict != want[e.Law] {
+			t.Errorf("%s: %s, want %s (%+v)", e.Law, e.Verdict, want[e.Law], e)
+		}
+	}
+	// LAW-6 sums its two issues and comes first (most said).
+	if got[0].Law != "LAW-6" || got[0].Times != 60 || got[0].SaidAfter != 4 || len(got[0].Issues) != 2 {
+		t.Fatalf("LAW-6 %+v", got[0])
+	}
+}

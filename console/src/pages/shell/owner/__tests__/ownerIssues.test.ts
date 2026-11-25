@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cameBack, issuesLine } from '../OwnerIssues'
-import type { OwnerIssue, OwnerIssuesAnswer } from '@/api/lawRegister'
+import type { OwnerIssue, OwnerIssuesAnswer } from '@/api/ownerIssues'
 
 const issue = (over: Partial<OwnerIssue>): OwnerIssue => ({
   issue: 'ISSUE-1', title: 't', kinds: ['pain'], action: 'enforce', detail: 'd', status: 'open', evidence: ['e'], times: 3,

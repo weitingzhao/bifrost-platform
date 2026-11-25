@@ -1,6 +1,8 @@
 import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
 import { CollapsibleSection } from '@/components/shell/CollapsibleSection'
 import { LawRegister } from './LawRegister'
+import { LawEffect } from './LawEffect'
+import { OwnerIssues } from './OwnerIssues'
 import { AuditConclusions } from './AuditConclusions'
 import { DomainSection } from '@/components/shell/DomainSection'
 import { CapabilityEvidence } from '../agents/CapabilityEvidence'
@@ -72,6 +74,9 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <OwnerYou data={data} />}
     {/* Owner 2026-11-24: the laws up (right after what he approves), For your info down; every section folds, open by default. */}
     {blocks.you && <CollapsibleSection id="laws" label="Laws"><LawRegister /></CollapsibleSection>}
+    {/* Owner 2026-11-25: laws and complaints apart, and a place of its own for whether a law eased the complaints under it. */}
+    {blocks.you && <CollapsibleSection id="law-effect" label="Law effect"><LawEffect /></CollapsibleSection>}
+    {blocks.you && <CollapsibleSection id="issues" label="Owner's issues"><OwnerIssues /></CollapsibleSection>}
     {blocks.you && <OwnerWaiting />}
     {/* The audit's conclusions on those laws' standards (箭10 2026-11-24): what the audit found, beside the laws. */}
     {blocks.you && <CollapsibleSection id="audit" label="Audit conclusions"><AuditConclusions /></CollapsibleSection>}

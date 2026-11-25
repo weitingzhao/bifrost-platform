@@ -113,6 +113,7 @@
         "console/src/api/lawRegister.ts",
         "console/src/api/lineageActivity.ts",
         "console/src/api/matrixTypes.ts",
+        "console/src/api/ownerIssues.ts",
         "console/src/api/prodJudgements.ts",
         "console/src/api/regressions.ts",
         "console/src/api/seatStatus.ts"
@@ -5140,6 +5141,7 @@
         "console/src/pages/shell/owner/CrewInstruments.tsx",
         "console/src/pages/shell/owner/HarnessPreview.tsx",
         "console/src/pages/shell/owner/LastRead.tsx",
+        "console/src/pages/shell/owner/LawEffect.tsx",
         "console/src/pages/shell/owner/LawFramework.tsx",
         "console/src/pages/shell/owner/LawRegister.tsx",
         "console/src/pages/shell/owner/OwnerConsolePage.tsx",
@@ -5163,6 +5165,7 @@
         "console/src/pages/shell/owner/__tests__/fixtures/pools-utc.json",
         "console/src/pages/shell/owner/__tests__/fixtures/standby-evidence.prod.json",
         "console/src/pages/shell/owner/__tests__/fixtures/telemetry-alerts.prod.json",
+        "console/src/pages/shell/owner/__tests__/lawEffect.test.ts",
         "console/src/pages/shell/owner/__tests__/lawFramework.test.tsx",
         "console/src/pages/shell/owner/__tests__/lawRegisterModel.test.ts",
         "console/src/pages/shell/owner/__tests__/ownerIssues.test.ts",

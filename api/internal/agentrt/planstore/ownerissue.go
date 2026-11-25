@@ -51,6 +51,11 @@ type OwnerIssue struct {
 	Times    int       `json:"times"`
 	FirstAt  time.Time `json:"first_at"`
 	LastAt   time.Time `json:"last_at"`
+	// Laws are the codes of the laws in force that answer the issue (LAW-6,
+	// ZONE-1, …): the issue names its laws; a law never names an issue, so
+	// the register of laws holds laws only (Owner 2026-11-25: 「不要把吐槽和
+	// 法混在一起」).
+	Laws []string `json:"laws,omitempty"`
 	// LawInForceAt is when the law that answers the issue went in force.
 	LawInForceAt *time.Time `json:"law_in_force_at,omitempty"`
 	Round        int        `json:"round,omitempty"`
@@ -71,6 +76,7 @@ type OwnerIssueRead struct {
 var (
 	issueCode   = regexp.MustCompile(`^ISSUE-[1-9][0-9]{0,4}$`)
 	issueTo     = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+	issueLaw    = regexp.MustCompile(`^(DAO|CORE|LAW|ZONE)-[1-9][0-9]{0,3}$`)
 	issueKinds  = map[string]bool{"direction": true, "standard": true, "wall": true, "pain": true, "need": true}
 	issueAction = map[string]bool{"law-new": true, "law-amend": true, "enforce": true, "rule": true, "drop": true, "conflict": true}
 	issueStatus = map[string]bool{"open": true, "drafted": true, "in_force": true, "closed": true, "dropped": true}
@@ -121,6 +127,11 @@ func checkOwnerIssue(m OwnerIssue) error {
 			return bad("evidence is owner_said message ids")
 		}
 	}
+	for _, l := range m.Laws {
+		if !issueLaw.MatchString(l) {
+			return bad("laws are law codes (DAO-k, CORE-k, LAW-k, ZONE-k)")
+		}
+	}
 	for _, q := range m.Quotes {
 		if !fitsIn(q, 400) {
 			return bad("a quote is at most 400 bytes")
@@ -140,6 +151,9 @@ func ownerIssueBody(m OwnerIssue) map[string]any {
 	}
 	if len(m.Quotes) > 0 {
 		b["quotes"] = m.Quotes
+	}
+	if len(m.Laws) > 0 {
+		b["laws"] = m.Laws
 	}
 	if m.LawInForceAt != nil {
 		b["law_in_force_at"] = m.LawInForceAt.UTC().Format(time.RFC3339)
@@ -230,7 +244,7 @@ func issueFromBody(b map[string]any) OwnerIssue {
 	num := func(k string) int { n, _ := strconv.Atoi(fmt.Sprint(b[k])); return n }
 	at := func(k string) time.Time { t, _ := time.Parse(time.RFC3339, s(k)); return t }
 	m := OwnerIssue{Issue: s("issue"), Title: s("title"), Kinds: list("kinds"), Action: s("action"), Detail: s("detail"),
-		To: s("to"), LawRef: s("law_ref"), Gap: s("gap"), Status: s("status"), Evidence: list("evidence"), Quotes: list("quotes"),
+		To: s("to"), LawRef: s("law_ref"), Gap: s("gap"), Status: s("status"), Evidence: list("evidence"), Quotes: list("quotes"), Laws: list("laws"),
 		Times: num("times"), FirstAt: at("first_at"), LastAt: at("last_at"), Round: num("round")}
 	if t := at("law_in_force_at"); !t.IsZero() {
 		m.LawInForceAt = &t
@@ -320,4 +334,90 @@ func countSaidAfterLaw(ctx context.Context, db eventlog.DB, issues []OwnerIssueR
 		issues[i].SaidAfterLaw = &n
 	}
 	return nil
+}
+
+// LawEffect is whether the issues a law answers eased after it went in force
+// (Owner 2026-11-25: a place, apart from the laws and from the complaints,
+// that says whether the complaints under a new law eased or ended).
+type LawEffect struct {
+	Law    string   `json:"law"`
+	Issues []string `json:"issues"`
+	// Times is how often he said these issues in all; SaidAfter how often
+	// after the law went in force (issues with a law time only).
+	Times     int `json:"times"`
+	SaidAfter int `json:"said_after"`
+	// PerWeekBefore and PerWeekAfter are the rates before and after the law,
+	// over the issues that name a law time; zero spans count as one day.
+	PerWeekBefore float64 `json:"per_week_before"`
+	PerWeekAfter  float64 `json:"per_week_after"`
+	// Verdict is "not said again", "eased" (the rate after is under half the
+	// rate before), "not eased", or "no law time" when none of its issues
+	// says when the law went in force.
+	Verdict string `json:"verdict"`
+}
+
+// LawEffects groups the issues by the laws that answer them, the law whose
+// issues he said most often first.
+func LawEffects(issues []OwnerIssueRead, now time.Time) []LawEffect {
+	type acc struct {
+		LawEffect
+		before, after         float64
+		daysBefore, daysAfter float64
+		timed                 bool
+	}
+	by := map[string]*acc{}
+	days := func(from, to time.Time) float64 {
+		if d := to.Sub(from).Hours() / 24; d > 1 {
+			return d
+		}
+		return 1
+	}
+	for _, m := range issues {
+		for _, l := range m.Laws {
+			a := by[l]
+			if a == nil {
+				a = &acc{LawEffect: LawEffect{Law: l}}
+				by[l] = a
+			}
+			a.Issues = append(a.Issues, m.Issue)
+			a.Times += m.Times
+			if m.LawInForceAt == nil || m.SaidAfterLaw == nil {
+				continue
+			}
+			a.timed = true
+			after := *m.SaidAfterLaw
+			a.SaidAfter += after
+			a.after += float64(after)
+			a.before += float64(max(m.Times-after, 0))
+			a.daysBefore = max(a.daysBefore, days(m.FirstAt, *m.LawInForceAt))
+			a.daysAfter = max(a.daysAfter, days(*m.LawInForceAt, now))
+		}
+	}
+	out := make([]LawEffect, 0, len(by))
+	for _, a := range by {
+		e := a.LawEffect
+		switch {
+		case !a.timed:
+			e.Verdict = "no law time"
+		default:
+			e.PerWeekBefore = a.before / a.daysBefore * 7
+			e.PerWeekAfter = a.after / a.daysAfter * 7
+			switch {
+			case e.SaidAfter == 0:
+				e.Verdict = "not said again"
+			case e.PerWeekAfter < e.PerWeekBefore/2:
+				e.Verdict = "eased"
+			default:
+				e.Verdict = "not eased"
+			}
+		}
+		out = append(out, e)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Times != out[j].Times {
+			return out[i].Times > out[j].Times
+		}
+		return out[i].Law < out[j].Law
+	})
+	return out
 }

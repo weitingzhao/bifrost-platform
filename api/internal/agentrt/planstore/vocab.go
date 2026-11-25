@@ -81,7 +81,7 @@ var planBodies = map[string][]eventlog.Field{
 		field("status", eventlog.Str, false), field("evidence", eventlog.IDs, false), field("times", eventlog.Int, false),
 		field("first_at", eventlog.Str, false), field("last_at", eventlog.Str, false), field("to", eventlog.Str, true),
 		field("law_ref", eventlog.Str, true), field("gap", eventlog.Str, true), field("quotes", eventlog.IDs, true),
-		field("law_in_force_at", eventlog.Str, true), field("round", eventlog.Int, true)},
+		field("law_in_force_at", eventlog.Str, true), field("round", eventlog.Int, true), field("laws", eventlog.IDs, true)},
 	"law_purged": {field("law", eventlog.Str, false), field("events", eventlog.Int, false), field("reason", eventlog.Str, false),
 		field("repealed_at", eventlog.Str, false), field("approval_ids", eventlog.IDs, true), field("code", eventlog.Str, true)},
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),

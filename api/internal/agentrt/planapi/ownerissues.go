@@ -2,6 +2,7 @@ package planapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
@@ -34,7 +35,8 @@ func (rt Routes) HandlePostOwnerIssues(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetOwnerIssues is GET /owner-issues[?to=<line or domain>]: every
 // issue as it stands, the most often said first, with how many go each way and
-// how many a law answers whose pain came back; with to, only the issues routed
+// how many a law answers whose pain came back, and by_law: for each law, its
+// issues and whether they eased after it; with to, only the issues routed
 // to that line or domain (Owner 2026-11-25: every agent reads the complaints in
 // its own business). Read-only.
 func (rt Routes) HandleGetOwnerIssues(w http.ResponseWriter, r *http.Request) {
@@ -65,5 +67,6 @@ func (rt Routes) HandleGetOwnerIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rt.Host.JSON(w, http.StatusOK, map[string]any{"issues": issues, "total": len(issues),
-		"by_action": byAction, "by_status": byStatus, "came_back_after_law": cameBack})
+		"by_action": byAction, "by_status": byStatus, "came_back_after_law": cameBack,
+		"by_law": planstore.LawEffects(issues, time.Now())})
 }
