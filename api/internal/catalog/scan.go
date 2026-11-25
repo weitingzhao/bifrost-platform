@@ -154,6 +154,9 @@ type Scanner struct {
 	// UsersChanged is handed each round's measured package users (nil: no
 	// one is told).
 	UsersChanged func(context.Context, UsersDoc)
+	// CommitTime is when a repository's commit landed (nil: new commits are
+	// not timed, the daily points carry no waits).
+	CommitTime func(ctx context.Context, repo, commit string) (time.Time, error)
 
 	mu sync.Mutex // one scan at a time
 }
@@ -203,6 +206,9 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 	} else {
 		var table *Table
 		p, table = poolAndTable(repo, t, s.tenantWhole(repo))
+		if before != nil {
+			s.noteSighting(ctx, repo, before.Commit, t.Commit, now)
+		}
 		if !p.Measured && before != nil {
 			p.Entries = before.Entries
 		}

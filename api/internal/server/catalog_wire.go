@@ -38,6 +38,30 @@ func (s *Server) catalogScanner() *catalog.Scanner {
 		s.catalog = &catalog.Scanner{Source: s.catalogSource}
 		s.catalog.AfterRound = func(ctx context.Context) { s.catalog.KeepStatus(ctx, s.catalogStatusInputs()) }
 		s.catalog.UsersChanged = catalogusers.Writer{DB: func() eventlog.DB { return s.bus.db() }}.Kept
+		// When a commit landed (its committer date, which the landing
+		// writes): how long a new main commit waits to be on the map.
+		s.catalog.CommitTime = func(ctx context.Context, repo, commit string) (time.Time, error) {
+			if s.delivery == nil || repo == catalog.ClusterRepo || repo == catalog.DatabaseRepo {
+				return time.Time{}, errors.New("not a Gitea repository")
+			}
+			s.unitTreesOf()
+			body, err := s.unitTrees.Get(ctx, url.PathEscape(repo)+"/git/commits/"+url.PathEscape(commit)+"?stat=false&verification=false&files=false", 1<<20)
+			if err != nil {
+				return time.Time{}, err
+			}
+			var doc struct {
+				SHA    string `json:"sha"`
+				Commit struct {
+					Committer struct {
+						Date time.Time `json:"date"`
+					} `json:"committer"`
+				} `json:"commit"`
+			}
+			if err := json.Unmarshal(body, &doc); err != nil || doc.SHA != commit {
+				return time.Time{}, fmt.Errorf("gitea: %s commit %s: not that commit (%v)", repo, commit, err)
+			}
+			return doc.Commit.Committer.Date, nil
+		}
 	})
 	return s.catalog
 }

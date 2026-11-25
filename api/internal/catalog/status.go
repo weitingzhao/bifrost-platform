@@ -167,7 +167,10 @@ type Status struct {
 	// trees (ClassCheck): what each registry misses and what it holds that
 	// is not there.
 	Checks []ClassCheck `json:"checks"`
-	Note   string       `json:"note,omitempty"`
+	// Daily are the kept days, oldest first (DailyPoint): the readings the
+	// plan's completion criteria ask to hold from day to day.
+	Daily []DailyPoint `json:"daily"`
+	Note  string       `json:"note,omitempty"`
 }
 
 // RepoCount is one repository's (or the cluster's) equation.
@@ -642,6 +645,7 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 	if len(st.Domains) == 0 {
 		return // nothing scanned yet: the route says so without a kept file
 	}
+	st.Daily = s.keepDaily(ctx, in, s.now())
 	raw, err := json.Marshal(st)
 	if err != nil {
 		return
