@@ -14,7 +14,7 @@ import { jsonResult, platformGet, platformSend } from './platformClient.js'
  * and send nothing unless it equals the line built from the stored request:
  * what the Owner clicks "allow" on is what gets decided.
  *
- * Tier D is decided on Console only (ADR §5, Owner 2026-10-10): a prompt
+ * Tier D is decided on Console only (ADR §5; 决定 2026-10-10): a prompt
  * cannot show the full command, and once the out-of-band executor runs the
  * approval is the only gate. The tier is the one the API stored. The API
  * also answers 403 to a chat approval of tier D; refusing here as well keeps

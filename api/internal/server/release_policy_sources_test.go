@@ -83,7 +83,7 @@ func (h *policyHarness) createApply(t *testing.T) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// Approval cards for changes that have a way back (LAW-6); design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. A tier C apply the signed
 // policy covers runs on the direct call and is audited as a release is; the
 // approval route answers "call directly". The same apply of an object the
@@ -123,7 +123,7 @@ func TestPolicyCoversADirectApplyAndAudits(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// Approval cards for changes that have a way back (LAW-6); design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. Under the policy signed
 // before the apply section existed, the direct call's refusal is the body it
 // always was, to the byte: no release_policy reasons, nothing audited.

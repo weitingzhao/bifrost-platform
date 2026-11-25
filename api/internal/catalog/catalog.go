@@ -1,5 +1,5 @@
 // Package catalog is the map's pool of what it cannot perceive (0.2 map line,
-// Owner 2026-11-20): a repository's files that no row of its ownership table
+// LAW-10): a repository's files that no row of its ownership table
 // covers. The map cannot see them, which does not mean they are not there;
 // each is a defect to review: claim it into the map, delete it, or mark it
 // unknown. The pool is a reading the machine produces on every scan; nothing

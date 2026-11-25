@@ -11,7 +11,7 @@ const SERVER_NAME = 'mcp-server-trade'
 const SERVER_VERSION = '0.1.0'
 
 /**
- * One gateway prefix per API process (TD-55, Owner 2026-10-04 option B): Traefik strips
+ * One gateway prefix per API process (TD-55, option B; 决定 2026-10-04): Traefik strips
  * `/api/<prefix>` and forwards to the process named in `process` — api-monitor (/api/monitor,
  * which also serves the ops router at /ops/* and the docs aggregate at /research/docs/*),
  * api-account (/api/account), api-market (/api/market), api-research (/api/research).
@@ -28,7 +28,7 @@ const DOMAINS = [
 ] as const
 
 /**
- * The alias prefixes TD-55 B2 removed from the gateway (Owner 2026-10-04): /api/<prefix>/… now
+ * The alias prefixes TD-55 B2 removed from the gateway (决定 2026-10-04): /api/<prefix>/… now
  * falls through to the SPA. docs and ops stay domain ids under /api/monitor. Their
  * get_trading/strategy/portfolio_health tools went with them (use get_account_health).
  */

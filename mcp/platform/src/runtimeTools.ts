@@ -422,11 +422,11 @@ export async function getPlanView(input: { root: string; recent_cursor?: string 
 export async function getLaws(d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return note(await d.get(`${BASE}/laws`))
 }
-/** GET /owner-issues[?to=]: the Owner's complaints, pains and needs as issues (Owner 2026-11-25). */
+/** GET /owner-issues[?to=]: the Owner's complaints, pains and needs as issues (ISSUE-新). */
 export async function getOwnerIssues(input: { to?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return note(await d.get(input.to ? `${BASE}/owner-issues?to=${id(input.to)}` : `${BASE}/owner-issues`))
 }
-/** GET /owner-said?since=&limit=: what the Owner said, as his session transcripts hold it (Owner 2026-11-25). */
+/** GET /owner-said?since=&limit=: what the Owner said, as his session transcripts hold it (ISSUE-新). */
 export async function getOwnerSaid(input: { since?: string; limit?: number }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   const q = new URLSearchParams()
   if (input.since) q.set('since', input.since)

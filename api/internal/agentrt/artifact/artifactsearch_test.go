@@ -40,7 +40,7 @@ func allArtifacts(t *testing.T, w *world, where string) []string {
 	return ids
 }
 
-// W-31 2.3 search_artifacts (the Owner 2026-10-21 「四条都照推荐 A」): the
+// W-31 2.3 search_artifacts (决定 2026-10-21): the
 // metadata of the artifacts, newest first, narrowed by kind, author, time, a
 // task's or a mission's records; pages chained by their cursor list each
 // artifact once; an Agent host is shown no exam artifact.

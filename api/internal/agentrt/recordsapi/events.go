@@ -12,7 +12,7 @@ import (
 )
 
 // GET /events without a stream reads across every stream (2.5 G6,
-// CUT-round2-2.5-interface-2026-10-19.md §2; Owner 2026-10-19 「2.5 八条照建议」):
+// CUT-round2-2.5-interface-2026-10-19.md §2; 决定 2026-10-19):
 // what the Console's recent and activity views are made of, in place of the
 // board's hand-written lines.
 //

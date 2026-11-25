@@ -102,8 +102,8 @@ func recorderLog(t *testing.T, work string) recorderimport.Request {
 		Source: recorderimport.Source{WorkID: work, File: work + "/events.jsonl", SHA256: hex.EncodeToString(all[:])}}
 }
 
-// TD-393 (the Owner 2026-10-20 「走查不再用「需要本人」，按钮的路径用 Console 测
-// 试」): every button the Owner has on a runtime card, from the answer his
+// TD-393 (walkthroughs test the buttons' paths with Console tests; ISSUE-3):
+// every button the Owner has on a runtime card, from the answer his
 // Console sends to what the runtime does with it, on the real question store
 // and a real database, each card made by the runtime's own code:
 //   - a blocked task's card: a gives it one more round (its budget raised, the

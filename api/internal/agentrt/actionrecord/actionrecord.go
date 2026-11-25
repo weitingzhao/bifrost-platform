@@ -1,7 +1,7 @@
 // Package actionrecord is the append-only record of actions taken or refused
-// (migration 0022; Owner 2026-11-15). A card is for changing a law; every
-// other action is done by the line that owns it and recorded here, for the
-// Owner's review afterwards: who, what, why, what undoes it and whether that
+// (migration 0022; LAW-6). A card is for changing a law; every
+// other action is done by the line that owns it and recorded here, for
+// review afterwards: who, what, why, what undoes it and whether that
 // was ready, on which law it rested, how it ended, what was checked after,
 // what was not.
 package actionrecord

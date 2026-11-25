@@ -66,8 +66,8 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-18 (the Owner audits the laws, Skills and MCP tools on Ops):
 	// read from the source at main, read-only, for the console's readers.
 	"GET /api/v1/governance/instruments": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// 2026-11-17 (the Owner: "I ask for progress because Ops does not show
-	// it"): every seat's latest status message, for everyone who reads the
+	// 2026-11-17 (progress shows on Ops; ISSUE-1): every seat's latest
+	// status message, for everyone who reads the
 	// runtime (read-only; a status is written with POST /messages).
 	"GET /api/v1/agentrt/seats": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// 2026-11-17 (the Owner cannot see what the bus's work does): the
@@ -119,11 +119,11 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/units/full-ci/check": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// Stage 3: the newest CI runs of one project, for the run view (read-only).
 	"GET /api/v1/units/runs": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// Owner 2026-11-16: the CI scorecard (how each repository uses CI, and CI
-	// as their provider), for the Ops page, like /units/runs (read-only).
+	// 2026-11-16: the CI scorecard (how each repository uses CI, and CI
+	// as their provider), for the Ops page, like /units/runs (read-only; ISSUE-20).
 	"GET /api/v1/ci/scorecard": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
-	// Owner 2026-11-16: the CI page's domain graph and what each commit
-	// changed by domain, like /ci/scorecard (read-only; contracts v1).
+	// 2026-11-16: the CI page's domain graph and what each commit
+	// changed by domain, like /ci/scorecard (read-only; contracts v1; ISSUE-22).
 	"GET /api/v1/ci/domains": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/ci/changes": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-20 (0.2 map line): the map's pool of what it cannot perceive,
@@ -141,8 +141,8 @@ var intendedRouteAdditions = map[string][]string{
 	// 2026-11-14: the approval records counted, for the Ops page (read-only).
 	"GET /api/v1/readings/approvals": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	"POST /api/v1/units/evidence":    {"operator", "admin", "trade-satellite"},
-	// Owner 2026-11-15: the platform runs its own environment's migrations
-	// (tier C: on the signed policy or an approved card; the guard decides).
+	// 2026-11-15: the platform runs its own environment's migrations
+	// (tier C: on the signed policy or an approved card; the guard decides; LAW-6).
 	"POST /api/v1/agentrt/migrations/run": {"operator", "admin", "trade-satellite"},
 	// 2026-11-15: the action record, read by seat, law and day (read-only).
 	"GET /api/v1/records": {"viewer", "reporter", "operator", "admin", "trade-satellite"},

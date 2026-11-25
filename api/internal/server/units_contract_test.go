@@ -19,8 +19,8 @@ import (
 // The contract between the units routes and the Console's CI views: the
 // bodies in testdata/contract/units are what these routes answer, and the
 // Console's tests read the same files instead of this package's source.
-// Origin: the Owner, 2026-11-14: "CI has its own front end and back end now;
-// what it asks of the products that run on it, it asks of itself", and the
+// Origin: 2026-11-14 (ISSUE-34): CI has its own front end and back end, and
+// what it asks of the products that run on it, it asks of itself; and the
 // declaration standard's rule that a contract is one copy, kept by the side
 // that provides it, compared on every run. Each body is computed by the code
 // the route runs and compared with its file; UNITS_CONTRACT_WRITE=1 writes

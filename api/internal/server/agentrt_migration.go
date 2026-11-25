@@ -13,7 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 )
 
-// run_agentrt_migration (Owner 2026-11-15): the action and what it does live
+// run_agentrt_migration (LAW-6): the action and what it does live
 // in agentrt/migraterun; this file hands it what it stands on and serves the
 // route.
 

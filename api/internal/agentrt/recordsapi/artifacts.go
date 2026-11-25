@@ -13,7 +13,7 @@ import (
 )
 
 // HandleSearchArtifacts lists artifacts' metadata, newest first (GET /artifacts,
-// W-31 2.3 search_artifacts; the Owner 2026-10-21 「2.3 的四条都照推荐 A」):
+// W-31 2.3 search_artifacts; 决定 2026-10-21):
 // kind= one or more kinds, comma-separated; task= a task (t_…) or mission= a
 // mission (M-n): the artifacts its records name; author= the actor that first
 // stored it; since= an RFC 3339 instant; limit= 1 to 100 (default 50);

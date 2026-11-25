@@ -19,8 +19,8 @@ import (
 // when CONSOLE_PLAN_SIGNOFFS_FIXTURE_WRITE=1 (only when every assertion held); the Console's tests read it.
 const consolePlanSignoffsFixture = "../../../console/src/api/__fixtures__/agentrt-plan-signoffs.testdb.json"
 
-// The Owner signs a step off (the Owner 2026-10-21 「加一个只给我用的「签收这
-// 一步」路由和 Console 按钮」): POST /plan/{id}/signoff, the admin role only,
+// The Owner signs a step off (an admin-only signoff route and Console button;
+// ISSUE-3): POST /plan/{id}/signoff, the admin role only,
 // records the owner_signoff its done rule waits on; the controller's next
 // rules pass moves the step; GET /plan says who signed and when. The steps are
 // round 2's, their rules set by a plan change the Owner applied.

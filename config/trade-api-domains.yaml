@@ -1,5 +1,5 @@
 # Vision V4 — Trade API domain registry (read-only Business Agent)
-# One gateway prefix per process (TD-55, Owner 2026-10-04 option B): {gateway}/api/{prefix}/… —
+# One gateway prefix per process (TD-55, option B; 决定 2026-10-04): {gateway}/api/{prefix}/… —
 # Traefik strips /api/{prefix} and forwards to the process's Service. Four processes:
 # api-monitor (/api/monitor; it also serves the ops router at /ops/* and the docs aggregate at
 # /research/docs/*), api-account (/api/account), api-market (/api/market), api-research
@@ -7,7 +7,7 @@
 #
 # domains: what is probed. probe URL = /api/{prefix}{probe_path}; service is the `service` that
 # path's JSON names (measured DEV/STG/PROD 2026-10-04). An unrouted /api/{x}/… is the SPA (200 HTML).
-# retired_prefixes: the alias prefixes TD-55 B2 removed (Owner 2026-10-04) with their routes and
+# retired_prefixes: the alias prefixes TD-55 B2 removed (决定 2026-10-04) with their routes and
 # Services; they now fall through to the SPA. docs and ops stay domain ids under /api/monitor.
 # Must match api/internal/probe/trade_routes.go (TestTradeRoutesMatchRegistry).
 

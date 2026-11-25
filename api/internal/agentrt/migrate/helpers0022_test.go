@@ -45,8 +45,8 @@ func tableExists(t *testing.T, conn *pgx.Conn, name string) bool {
 	return there
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // 0022 is itself of the class it serves: two CREATE FUNCTION statements. It
 // applies on a database at 0021 and adds the two functions and nothing else.
 func TestUpgradeTo0022AddsTheTwoHelpers(t *testing.T) {
@@ -89,8 +89,8 @@ func TestUpgradeTo0022AddsTheTwoHelpers(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // drop_table_if_empty drops an empty table; with one row, or without the
 // table, it raises naming the table and drops nothing.
 func TestDropTableIfEmpty(t *testing.T) {
@@ -159,8 +159,8 @@ func TestDropTableIfEmpty(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // assert_no_rows passes when no row matches and raises naming the table, the
 // column and the pattern when one does; a column or a pattern with odd
 // characters is quoted or passed as a parameter, never run.
@@ -211,8 +211,8 @@ func TestAssertNoRows(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // A migration that calls a helper runs in one transaction: when the helper
 // raises, what the file did before it is rolled back, no record of the
 // migration is written, and the error names the table. With the row gone

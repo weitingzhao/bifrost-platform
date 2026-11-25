@@ -258,8 +258,8 @@ modules:
       - "bifrost-trade-infra:k8s/cicd/tekton/task-unit-run.yaml"
       - api/internal/questions/testdata/contract
       # The contract of CI's own views with the units routes: kept by the
-      # api side, read by the console's CI tests (Owner, 2026-11-14: CI asks
-      # of itself what it asks of the products that run on it).
+      # api side, read by the console's CI tests: CI asks of itself what it
+      # asks of the products that run on it (ISSUE-22).
       - api/internal/server/testdata/contract/units
       - api/internal/server/testdata/contract/readings
       - api/internal/approvals/types.go

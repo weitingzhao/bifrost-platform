@@ -20,8 +20,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
-// Owner 2026-11-15: a card must not go stale because STG moved on (#568
-// waited 5h31m and every lane stopped). What the release policy reads of a
+// A card must not go stale because STG moved on (#568 waited 5h31m and
+// every lane stopped) (ISSUE-3). What the release policy reads of a
 // source pipeline is every retained record, newest first, and only runs that
 // succeeded have one: a delivery that failed vouches for no commit.
 func TestShippedListsEverySuccessfulRecordNewestFirst(t *testing.T) {

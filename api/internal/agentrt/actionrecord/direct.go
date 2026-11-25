@@ -13,7 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// The action record of a direct call (Owner 2026-11-15): a direct call of a
+// The action record of a direct call (LAW-6): a direct call of a
 // catalogued action is recorded when it happens, by seat, with its reason,
 // what undoes it, the law it rested on, how it ended and what the caller did
 // not check, for the Owner's review afterwards. The record only records: it

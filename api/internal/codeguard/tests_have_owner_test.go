@@ -18,7 +18,7 @@ import (
 // A test has an owner: its file sits in a package the ownership table gives
 // to one domain, or the file declares itself a flow test across domains.
 //
-// Origin: Owner 2026-11-16. The code had been split into domains
+// Origin: 2026-11-16 (LAW-10). The code had been split into domains
 // (config/domain-ownership.json) and the tests had not: of some 2,200 Go
 // tests about 850 sat in the seven packages several domains share, so a red
 // one had no domain to go to. Ruling: every test file sits in a package of
@@ -422,7 +422,7 @@ func controlOwnership(t *testing.T) ownership {
 }
 
 // The positive control of TestEveryTestHasAnOwner (2026-11-16, the ruling
-// above): on a made-up tree a test added to a shared package beyond its
+// above; LAW-10): on a made-up tree a test added to a shared package beyond its
 // baseline is named with what to do; tests in one domain's package, in a
 // package with no row and in a file with a declaration that holds are not;
 // a baseline that is too high, or of a package that is gone, is named.

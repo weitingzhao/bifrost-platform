@@ -7,7 +7,7 @@ export function consoleApprovalUrl(id: string, env: NodeJS.ProcessEnv = process.
 /**
  * Where the Owner decides a new request. Sessions without bifrost-approve
  * (Cursor, by design) only pass this on; they cannot approve. Tier D is
- * decided on Console only (ADR §5, Owner 2026-10-10).
+ * decided on Console only (ADR §5; 决定 2026-10-10).
  */
 export function approveHint(id: string, number?: number, tier?: string, env: NodeJS.ProcessEnv = process.env): string {
   const ref = number ? `#${number}` : id

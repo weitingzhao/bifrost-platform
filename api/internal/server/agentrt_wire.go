@@ -159,7 +159,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 		lent := agentRuntimeController(env, pool, s.agentRuntimeSources(), s.questionRuntime.Unacked())
 		s.wireExternalRecords(&lent.Sources)
-		// The old landing lane is retired (the Owner 2026-11-13): its loops
+		// The old landing lane is retired (ISSUE-24): its loops
 		// (drill, live claims, cards, grant requests, reconcile, the reading
 		// of main for landed results) are not wired any more. Changes reach
 		// main through ready/ and the bifrost-land pipeline.

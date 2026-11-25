@@ -15,8 +15,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Searching the artifacts (W-31 2.3, search_artifacts; the Owner 2026-10-21
-// 「2.3 的四条都照推荐 A」, CUT-round2-2.3-rest §3 第 1 条): their metadata,
+// Searching the artifacts (W-31 2.3, search_artifacts; 决定 2026-10-21,
+// CUT-round2-2.3-rest §3 第 1 条): their metadata,
 // newest first, never a body (GET /artifacts/{id} reads one). A listing, not
 // a feed: an artifact committed after a page was read whose place is among
 // the pages already read is not listed later; one whose place is past the

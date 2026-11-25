@@ -8,8 +8,8 @@
 # One path per line; a line ending in / is a directory and everything under it.
 # The Console test consoleReadsApi.test.ts fails when a Console test reads a file
 # under api/ that is not listed here, and when a line here names nothing.
-# Why (Owner, 2026-11-13): a backend-only commit waited 5 to 7 minutes for the
-# Console tests, the slowest part of its CI, which it cannot change the result of.
+# Why: a backend-only commit waited 5 to 7 minutes for the Console tests, the
+# slowest part of its CI, which it cannot change the result of (ISSUE-22).
 #
 # The request and response examples both sides test against (questions).
 api/internal/questions/testdata/contract/

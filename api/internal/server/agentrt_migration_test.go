@@ -20,8 +20,8 @@ import (
 
 const migCommit = "1111111111111111111111111111111111111111"
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // What the policy reads of this platform is what /health reports (the
 // applied migrations by number and sha256; an unread schema is an error),
 // here as the server wires it: no runtime, and a schema not read yet.
@@ -36,8 +36,8 @@ func TestOwnMigrationsAreWiredFromTheRuntime(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // The action is in the catalog at tier C with the platform as its runner, so
 // an approved card is run by the platform and not from a terminal.
 func TestMigrationActionIsTierCRunByThePlatform(t *testing.T) {
@@ -115,8 +115,8 @@ func (h *policyHarness) createMigration(t *testing.T) *httptest.ResponseRecorder
 	return rec
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // The direct call the signed policy covers reaches the handler and is
 // audited with the files it let through; the approval route answers "call
 // directly". The same call with a DROP TABLE in the pending file is 403 with
@@ -152,8 +152,8 @@ func TestPolicyCoversADirectMigrationAndAudits(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
-// a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
+// A migration that cannot destroy rows reaches PROD without a card; the
+// platform runs it (cards #493 #554 #558 were Owner-run Jobs) (LAW-6).
 // Under a policy signed before ddl_reversible existed the action always
 // needs a card: the direct call is the plain 403 of any tier C action, with
 // no release_policy reasons and nothing audited.
@@ -171,7 +171,7 @@ func TestAPolicyWithoutDDLReversibleAlwaysNeedsACardForAMigration(t *testing.T) 
 	}
 }
 
-// Owner 2026-11-15: the migration action's errors are the platform's classes
+// LAW-6: the migration action's errors are the platform's classes
 // (an uncertain Job outcome is a 504, never a retry) and its Job names the
 // approval that ran it; migraterun is handed them, and this is where they are
 // the actions package's.

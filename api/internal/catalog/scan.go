@@ -268,8 +268,8 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 }
 
 // tenantWhole: the map reviewed repo's whole-repository entry as a claim for
-// tenant, so it is kept whole (Owner 2026-11-20: tenants' repositories and
-// databases are not looked into this round).
+// tenant, so it is kept whole: tenants' repositories and databases are not
+// looked into this round (ISSUE-71).
 func (s *Scanner) tenantWhole(repo string) bool {
 	r, ok := s.reviewsFromElsewhere(repo)["."]
 	return ok && r.Verdict == VerdictClaim && r.Domain == "payload"

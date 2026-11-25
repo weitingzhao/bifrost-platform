@@ -121,9 +121,9 @@ func (unreadable) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	return nil, errors.New("connection refused")
 }
 
-// Owner 2026-11-15: what the release policy reads of this platform is the
-// migrations the database applied at the last read, by number and sha256; a
-// platform that has read nothing, or whose last read failed, answers none.
+// What the release policy reads of this platform is the migrations the
+// database applied at the last read, by number and sha256; a platform that
+// has read nothing, or whose last read failed, answers none (LAW-6).
 func TestAppliedIsWhatTheLastReadSaid(t *testing.T) {
 	var nilWatch *Watch
 	if _, ok := nilWatch.Applied(); ok {

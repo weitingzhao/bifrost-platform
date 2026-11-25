@@ -127,7 +127,7 @@ func (s *Server) catalogScanAhead(ctx context.Context) {
 // catalogDatabaseTree lists the platform's own database's tables (every
 // schema but the system ones, from pg_tables: it lists tables whatever the
 // role may read) as "<schema>/<table>/table" files, against the kept
-// "tables" rows. The tenants' databases are not read (Owner 2026-11-20).
+// "tables" rows. The tenants' databases are not read (ISSUE-34).
 func (s *Server) catalogDatabaseTree(ctx context.Context) (catalog.Tree, error) {
 	if s.agentRuntime == nil || s.agentRuntime.late == nil || !s.agentRuntime.late.Ready() {
 		return catalog.Tree{}, errors.New("the platform's database is not connected on this process")

@@ -8,7 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
-// What the release policy's apply section reads (Owner 2026-11-14): the plan
+// What the release policy's apply section reads (LAW-6): the plan
 // of an apply_manifest request and the cluster's copy of each object. Each
 // fails rather than guessing, and a source that is not connected is an
 // error, so the policy covers nothing then.

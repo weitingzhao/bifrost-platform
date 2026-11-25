@@ -10,7 +10,7 @@ import (
 // TradeGatewayRoute is one thing the platform probes on the Trade gateway: a router inside one
 // API process, reached through that process's own gateway prefix.
 //
-// One gateway prefix per process (TD-55, Owner 2026-10-04 option B): /api/monitor (api-monitor,
+// One gateway prefix per process (TD-55, option B; 决定 2026-10-04): /api/monitor (api-monitor,
 // which also serves the ops router at /ops/* and the docs aggregate at /research/docs/*),
 // /api/account (api-account), /api/market (api-market) and /api/research (api-research). The
 // gateway (bifrost-trade-infra k8s/overlays/{dev,stg,prod}/trade-ingressroute.yaml) strips
@@ -18,7 +18,7 @@ import (
 //
 // The older prefixes /api/docs, /api/ops (api-monitor) and /api/trading, /api/strategy,
 // /api/portfolio (api-account) were aliases of the same processes. B1 moved every platform caller
-// off them; B2 (Owner 2026-10-04) removed their routes and Services, so they now fall through to
+// off them; B2 (决定 2026-10-04) removed their routes and Services, so they now fall through to
 // the SPA (TestNoProbeUsesARetiredPrefix; nothing may probe them).
 //
 // ProbePath is the path under the prefix that the route's own router answers, and Service is the
