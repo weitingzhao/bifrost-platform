@@ -3,7 +3,7 @@
 // day: law 96 (then law 83; R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
 import { describe, expect, it } from 'vitest'
 import type { RegisterLaw } from '@/api/lawRegister'
-import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, approvalsReading, ordered, periodOf, readingOf, readsApprovals, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
+import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, approvalsReading, ordered, periodOf, readingOf, startOf, readsApprovals, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
 
 const law = (n: string, grades: string[], counts = { reached: 0, missed: 0, unmeasured: 0 }): RegisterLaw => ({
   law: n, version: 2, op: 'amend', text: 'Law ' + n, status: '已批', source: 'card', at: '2026-11-24T00:00:00Z', plan_item: 'R6:6.' + n, counts,
@@ -108,5 +108,16 @@ describe('audit conclusions', () => {
     expect(readsApprovals({ standard: '整套 CI 照过', method: '每日 13:30Z 整套 CI' })).toBe(false)
     expect(approvalsReading(weekly, undefined)).toBe('not read')
     expect(approvalsReading({ ...weekly, saidOn: undefined }, readings)).toContain('not known')
+  })
+
+  // 2026-11-24 the legislation line: law 91 s1's method says 「从 2026-11-25 起计」 while the law was said on 11-24; the
+  // page counted from said_on and would have added 11-24.
+  it('counts from the start the method writes, and from the law’s date only when it writes none', () => {
+    const readings = { days: [{ day: '2026-11-25', to_owner: { daily: [1] } }, { day: '2026-11-24', to_owner: { daily: [1, 2] } }] }
+    const s91 = { standard: '既不是修法票也不属于六类的，每周为 0', method: 'GET /api/v1/readings/approvals 的 days[].to_owner.daily 条数（原第 85 条 s1 的读口），按周合计；与审批线行政台账同口径。从 2026-11-25 起计', saidOn: '2026-11-24' }
+    expect(startOf(s91)).toEqual({ from: '2026-11-25', by: 'method' })
+    expect(approvalsReading(s91, readings)).toMatch(/^1 cards in the last 1 day\(s\) · 2026-11-25: 1 \(/)
+    // Control: without a written start, the law's date.
+    expect(startOf({ method: 'GET /api/v1/readings/approvals', saidOn: '2026-11-24' })).toEqual({ from: '2026-11-24', by: 'law' })
   })
 })

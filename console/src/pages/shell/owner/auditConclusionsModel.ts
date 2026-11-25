@@ -284,17 +284,26 @@ export function auditDetail(r: StandardRow | undefined, extra?: { label: string;
  */
 export type ApprovalReadings = { days?: { day: string; to_owner?: { daily?: unknown[] } }[] }
 export const readsApprovals = (r: Pick<StandardRow, 'method' | 'standard'>): boolean => /readings\/approvals/.test(r.method + ' ' + r.standard)
+/** A start written in how it is measured (「从 2026-11-25 起计」/「起算」), which wins over the law's said_on. */
+export function startOf(r: Pick<StandardRow, 'method' | 'saidOn'>): { from: string; by: 'method' | 'law' } | null {
+  const m = /从\s*(\d{4}-\d{2}-\d{2})\s*起(?:计|算)/.exec(r.method)
+  if (m) return { from: m[1], by: 'method' }
+  return r.saidOn ? { from: r.saidOn.slice(0, 10), by: 'law' } : null
+}
 export const periodOf = (r: Pick<StandardRow, 'method' | 'standard'>): 'week' | 'day' => /每周|按周|per week|weekly/i.test(r.standard + ' ' + r.method) ? 'week' : 'day'
 
 export function approvalsReading(r: Pick<StandardRow, 'method' | 'standard' | 'saidOn'>, data: ApprovalReadings | undefined): string {
   if (!data?.days) return 'not read'
-  const from = r.saidOn
-  if (!from) return 'the law’s date is not read, so the days that count are not known'
-  const days = data.days.filter(d => d.day >= from.slice(0, 10))
+  // The standard's own start when its method writes one (the legislation line, 2026-11-24: law 91 s1 「从 2026-11-25
+  // 起计」), else the law's said_on.
+  const start = startOf(r)
+  if (!start) return 'the law’s date is not read, so the days that count are not known'
+  const from = start.from
+  const days = data.days.filter(d => d.day >= from)
   if (days.length === 0) return `no day since ${from} yet`
   const n = (d: { to_owner?: { daily?: unknown[] } }) => d.to_owner?.daily?.length ?? 0
   const perDay = days.map(d => `${d.day}: ${n(d)}`).join(' · ')
-  const source = ` (GET /api/v1/readings/approvals, kept by the system; days since ${from}; the first day may hold cards from before the law)`
+  const source = ` (GET /api/v1/readings/approvals, kept by the system; days since ${from}, ${start.by === 'method' ? 'as the method says' : 'the law’s date; the first day may hold cards from before the law'})`
   if (periodOf(r) === 'week') {
     // The standard counts per week: the newest seven days held, summed, and each day shown.
     const week = days.slice(0, 7)
