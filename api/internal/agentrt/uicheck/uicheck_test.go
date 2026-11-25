@@ -129,7 +129,7 @@ func TestARedPushRunIsCheckedAgainBeforeTheCommitIsBlocked(t *testing.T) {
 		w.ensured = append(w.ensured, name)
 		return name, nil
 	}
-	c.Own = func(run string) bool { return strings.HasPrefix(run, "ui-check-") }
+	c.Own = func(_ context.Context, run string) bool { return strings.HasPrefix(run, "ui-check-") }
 	pass(t, c)
 	w.status["ci-platform-push"] = "Failed"
 	pushed = false

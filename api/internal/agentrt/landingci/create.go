@@ -118,6 +118,11 @@ func platformSpec(pipeline string, values map[string]string) map[string]any {
 	for _, key := range keys {
 		params = append(params, map[string]any{"name": key, "value": values[key]})
 	}
+	// The frontend's checkout and node_modules take 3Gi, as its trigger asks.
+	storage := "2Gi"
+	if pipeline == "bifrost-ci-frontend" {
+		storage = "3Gi"
+	}
 	return map[string]any{
 		"pipelineRef": map[string]any{"name": pipeline}, "params": params,
 		"taskRunTemplate": map[string]any{"podTemplate": map[string]any{
@@ -125,7 +130,7 @@ func platformSpec(pipeline string, values map[string]string) map[string]any {
 			"tolerations":  []any{map[string]any{"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"}},
 		}},
 		"workspaces": []any{map[string]any{"name": "source", "volumeClaimTemplate": map[string]any{"spec": map[string]any{
-			"accessModes": []any{"ReadWriteOnce"}, "storageClassName": "local-path", "resources": map[string]any{"requests": map[string]any{"storage": "2Gi"}},
+			"accessModes": []any{"ReadWriteOnce"}, "storageClassName": "local-path", "resources": map[string]any{"requests": map[string]any{"storage": storage}},
 		}}}},
 	}
 }

@@ -55,10 +55,51 @@ func (c *Client) EnsureUICheck(ctx context.Context, platform, ui string) (string
 	return name, c.create(ctx, name, "bifrost-ci-platform", params, labels)
 }
 
+// UIFrontendPushTrigger is the Gitea trigger that runs bifrost-ci-frontend at
+// the Trade frontend's main with the commit a bifrost-ui push moved to.
+const UIFrontendPushTrigger = "frontend-ci-ui"
+
+// UIFrontendCheckRunName names the Trade frontend's check of ui.
+func UIFrontendCheckRunName(ui string) string { return "ui-check-fe-" + ui[:12] }
+
+// EnsureUIFrontendCheck is the Trade frontend's check of ui commit ui, as
+// EnsureUICheck is the console's: the push run of the commit
+// (UIFrontendPushTrigger) that has not failed, else a run of
+// bifrost-ci-frontend at the frontend's main with uiRevision set to ui. The
+// stable pin is cloned by the frontend's CI too, so a ui commit that breaks
+// it does not move the pin either (2026-11-25).
+func (c *Client) EnsureUIFrontendCheck(ctx context.Context, ui string) (string, error) {
+	if !fullSHA.MatchString(ui) {
+		return "", fmt.Errorf("invalid ui check revision")
+	}
+	name := UIFrontendCheckRunName(ui)
+	res, err := c.resource()
+	if err != nil {
+		return "", err
+	}
+	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err != nil && apierrors.IsNotFound(err) {
+		if pushed, err := c.pushRunOf(ctx, "bifrost-ci-frontend", UIFrontendPushTrigger, ui); err != nil {
+			return "", err
+		} else if pushed != "" {
+			return pushed, nil
+		}
+	}
+	params := map[string]string{"revision": "main", "uiRevision": ui}
+	labels := map[string]string{"tekton.dev/pipeline": "bifrost-ci-frontend", "bifrost.io/repo": "bifrost-trade-frontend",
+		"bifrost.io/trigger": UICheckTrigger, "bifrost.io/ui-revision": ui}
+	return name, c.create(ctx, name, "bifrost-ci-frontend", params, labels)
+}
+
 // uiPushRun is the newest run of UIPushTrigger with uiRevision ui that has
 // not failed, "" when there is none.
 func (c *Client) uiPushRun(ctx context.Context, ui string) (string, error) {
-	items, err := c.pipelineRuns(ctx, "bifrost-ci-platform", "triggers.tekton.dev/trigger="+UIPushTrigger)
+	return c.pushRunOf(ctx, "bifrost-ci-platform", UIPushTrigger, ui)
+}
+
+// pushRunOf is the newest run of pipeline by trigger with uiRevision ui that
+// has not failed, "" when there is none.
+func (c *Client) pushRunOf(ctx context.Context, pipeline, trigger, ui string) (string, error) {
+	items, err := c.pipelineRuns(ctx, pipeline, "triggers.tekton.dev/trigger="+trigger)
 	if err != nil {
 		return "", err
 	}

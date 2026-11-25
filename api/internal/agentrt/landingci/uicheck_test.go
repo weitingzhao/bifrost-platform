@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -65,5 +66,44 @@ func TestTheUIPushRunIsTheCheckUnlessItFailed(t *testing.T) {
 	c2, _ := drillService(t, push("ci-platform-red", factSHA2, "False"))
 	if name, err := c2.EnsureUICheck(ctx, factSHA1, factSHA2); err != nil || name != UICheckRunName(factSHA1, factSHA2) {
 		t.Fatal("a failed push run is not the check", name, err)
+	}
+}
+
+// Origin: 2026-11-25. The Trade frontend's CI clones the stable pin too, and
+// the pin moved on the console's check alone: a ui commit that broke only the
+// frontend would have moved it. The frontend's push run of the commit is its
+// check; a failed one is not, and an own run (3Gi, as the trigger asks) is made.
+func TestTheFrontendCheckIsItsPushRunUnlessItFailed(t *testing.T) {
+	t.Parallel()
+	push := func(name, ui, status string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "PipelineRun",
+			"metadata": map[string]any{"name": name, "namespace": "cicd", "labels": map[string]any{"triggers.tekton.dev/trigger": UIFrontendPushTrigger}},
+			"spec": map[string]any{"pipelineRef": map[string]any{"name": "bifrost-ci-frontend"},
+				"params": []any{map[string]any{"name": "revision", "value": "main"}, map[string]any{"name": "uiRevision", "value": ui}}},
+			"status": map[string]any{"conditions": []any{map[string]any{"type": "Succeeded", "status": status}}}}}
+	}
+	ctx := context.Background()
+	c, _ := drillService(t, push("ci-frontend-ok", factSHA2, "True"))
+	if name, err := c.EnsureUIFrontendCheck(ctx, factSHA2); err != nil || name != "ci-frontend-ok" {
+		t.Fatal("the frontend's push run of the commit is its check", name, err)
+	}
+	c2, _ := drillService(t, push("ci-frontend-red", factSHA2, "False"))
+	name, err := c2.EnsureUIFrontendCheck(ctx, factSHA2)
+	if err != nil || name != UIFrontendCheckRunName(factSHA2) {
+		t.Fatal("a failed push run is not the check", name, err)
+	}
+	params, labels := fullParams(t, c2, name)
+	if !reflect.DeepEqual(params, map[string]string{"revision": "main", "uiRevision": factSHA2}) || labels["bifrost.io/trigger"] != UICheckTrigger {
+		t.Fatal(params, labels)
+	}
+	res, _ := c2.resource()
+	obj, _ := res.Get(ctx, name, metav1.GetOptions{})
+	ws, _, _ := unstructured.NestedSlice(obj.Object, "spec", "workspaces")
+	storage, _, _ := unstructured.NestedString(ws[0].(map[string]any), "volumeClaimTemplate", "spec", "resources", "requests", "storage")
+	if storage != "3Gi" {
+		t.Fatal("the frontend's own run asks 3Gi", storage)
+	}
+	if _, err := c2.EnsureUIFrontendCheck(ctx, "main"); err == nil {
+		t.Fatal("a branch name was accepted")
 	}
 }

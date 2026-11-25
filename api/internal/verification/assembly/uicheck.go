@@ -36,6 +36,9 @@ const UIPinConfigMap = "platform-state-ui-stable"
 
 const uiGitea = "http://gitea.cicd.svc.cluster.local:3000"
 
+// uiCheckJoin joins the runs of one ui check in its name.
+const uiCheckJoin = "+"
+
 var uiFullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // wireUICheck gives PROD's controller the ui pin loop (R0E, 2026-11-25):
@@ -99,27 +102,62 @@ func wireUICheck(c *controller.Controller, lent *CILent) {
 			_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
 			return err
 		},
+		// A check is two runs, the console's and the Trade frontend's, both
+		// consumers of the pin; its name is theirs joined by "+".
 		Ensure: func(ctx context.Context, platform, ui string) (string, error) {
-			return ci.EnsureUICheck(kubemetrics.WithSite(ctx, "landingci.uicheck"), platform, ui)
+			ctx = kubemetrics.WithSite(ctx, "landingci.uicheck")
+			console, err := ci.EnsureUICheck(ctx, platform, ui)
+			if err != nil {
+				return "", err
+			}
+			frontend, err := ci.EnsureUIFrontendCheck(ctx, ui)
+			if err != nil {
+				return "", err
+			}
+			return console + uiCheckJoin + frontend, nil
 		},
 		Status: func(ctx context.Context, run string) (string, error) {
-			s, err := ci.RunStatus(kubemetrics.WithSite(ctx, "landingci.uicheck"), run)
-			if errors.Is(err, landingci.ErrRunGone) {
-				return "", uicheck.ErrNoRun
+			ctx = kubemetrics.WithSite(ctx, "landingci.uicheck")
+			all := "Succeeded"
+			for _, part := range strings.Split(run, uiCheckJoin) {
+				s, err := ci.RunStatus(ctx, part)
+				if errors.Is(err, landingci.ErrRunGone) {
+					return "", uicheck.ErrNoRun
+				}
+				if err != nil {
+					return "", err
+				}
+				switch {
+				case s == "Failed":
+					return "Failed", nil
+				case s != "Succeeded":
+					all = s
+				}
 			}
-			return s, err
+			return all, nil
 		},
 		Logf: c.Logf,
-		Own:  func(run string) bool { return strings.HasPrefix(run, "ui-check-") },
+		// A red check is the loop's own when every failed run of it is.
+		Own: func(ctx context.Context, run string) bool {
+			for _, part := range strings.Split(run, uiCheckJoin) {
+				if strings.HasPrefix(part, "ui-check-") {
+					continue
+				}
+				if s, err := ci.RunStatus(kubemetrics.WithSite(ctx, "landingci.uicheck"), part); err != nil || s == "Failed" {
+					return false
+				}
+			}
+			return true
+		},
 		Notify: func(ctx context.Context, ui, run, stable string) {
 			thread, err := reader.session(ctx, "bifrost-ui", ui)
 			if err != nil || thread == "" {
 				c.Logf("agentrt-ui-check: nobody told of ui %s kept off (%v)", ui, err)
 				return
 			}
-			body := fmt.Sprintf("bifrost-ui %s is kept off the stable pin: the console's CI with it failed (run %s). "+
+			body := fmt.Sprintf("bifrost-ui %s is kept off the stable pin: the CI of the console or of the Trade frontend failed with it (runs %s). "+
 				"console and the Trade frontend stay on ui %s until a later ui commit passes. "+
-				"Read the run: GET /api/v1/delivery/runs/%s", ui, run, stable, run)
+				"Read the runs: GET /api/v1/delivery/runs/<name>", ui, run, stable)
 			if lent.Tell == nil {
 				return
 			}

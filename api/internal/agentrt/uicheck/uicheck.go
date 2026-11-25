@@ -45,10 +45,11 @@ type Check struct {
 	Status func(ctx context.Context, run string) (string, error)
 	Now    func() time.Time
 	Logf   func(format string, args ...any)
-	// Own says whether a run is one Ensure created; nil, every run is. A red
-	// run that is not (the ui push's own run, taken as the check) is checked
-	// again with one that is before the commit is kept off the pin.
-	Own func(run string) bool
+	// Own says whether a red check is the loop's own: every failed run of it
+	// is one Ensure created; nil, every run is. A red one that is not (a ui
+	// push's own run, taken as the check) is checked again with runs of the
+	// loop's own before the commit is kept off the pin.
+	Own func(ctx context.Context, run string) bool
 	// Notify tells whoever made the ui commit that it was kept off the pin,
 	// by which run, and which commit the pin stays at; nil, only the log says so.
 	Notify func(ctx context.Context, ui, run, stable string)
@@ -131,7 +132,7 @@ func (c *Check) Pass(ctx context.Context) (string, error) {
 		c.ui, c.run = "", ""
 		return "moved " + short(head), nil
 	case "Failed":
-		if c.Own != nil && !c.Own(c.run) {
+		if c.Own != nil && !c.Own(ctx, c.run) {
 			c.logf("agentrt-ui-check: %s failed; checking ui %s again with a run of its own", c.run, short(head))
 			c.ui, c.run = "", "" // Ensure passes over a failed push run
 			return "", nil
