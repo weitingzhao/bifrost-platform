@@ -12,12 +12,12 @@ import (
 // framework holds (86 on) are LAW-1, LAW-2, …; rows 1 to 85 were material and
 // have no code. A card may name a law by its code or its number.
 func TestLawCode(t *testing.T) {
-	for n, want := range map[string]string{"86": "LAW-1", "89": "CONSTITUTION-1", "98": "LAW-13", "85": "", "1": "", "x": ""} {
+	for n, want := range map[string]string{"86": "LAW-1", "89": "CORE-1", "98": "LAW-13", "85": "", "1": "", "x": ""} {
 		if got := planstore.LawCode(n); got != want {
 			t.Fatalf("LawCode(%s) = %q, want %q", n, got, want)
 		}
 	}
-	for ref, want := range map[string]string{"LAW-1": "86", "LAW-13": "98", " LAW-2 ": "87", "CONSTITUTION-1": "89", "90": "90", "LAW-14": "LAW-14", "DAO-1": "DAO-1", "LAW-0": "LAW-0", "law-1": "law-1", "L5": "L5"} {
+	for ref, want := range map[string]string{"LAW-1": "86", "LAW-13": "98", " LAW-2 ": "87", "CORE-1": "89", "90": "90", "LAW-14": "LAW-14", "DAO-1": "DAO-1", "LAW-0": "LAW-0", "law-1": "law-1", "L5": "L5"} {
 		if got := planstore.LawNumberOf(ref); got != want {
 			t.Fatalf("LawNumberOf(%q) = %q, want %q", ref, got, want)
 		}
@@ -47,7 +47,7 @@ func TestLawCardTakesCodes(t *testing.T) {
 	if la.Frame.Parent != "90" {
 		t.Fatalf("parent read as %q, want 90", la.Frame.Parent)
 	}
-	if got := planstore.LawCardSummary(ctx, reg, add); !strings.HasPrefix(got, "Law add: will become BYLAW-1") {
+	if got := planstore.LawCardSummary(ctx, reg, add); !strings.HasPrefix(got, "Law add: will become ZONE-1") {
 		t.Fatalf("summary = %q", got)
 	}
 }
@@ -75,7 +75,7 @@ func TestAbsorbedArchivedMaterialIsNotACitation(t *testing.T) {
 
 // Origin: 2026-11-25, Owner: 「每一层都用特定的单词表示，同时采用特定的编号体系」.
 // A new law is coded by its level, each level counting on its own (DAO,
-// CONSTITUTION, LAW, BYLAW), the code kept in its record; an amend keeps the
+// CORE, LAW, ZONE), the code kept in its record; an amend keeps the
 // code and may not change the level; the codes before (LAW-1…13) stay.
 func TestLevelCodes(t *testing.T) {
 	t.Parallel()
@@ -93,7 +93,7 @@ func TestLevelCodes(t *testing.T) {
 		{Op: "add", After: "another belief", Standards: std, Frame: &planstore.LawFrame{Level: lv(0)}}}}
 	_, err = planstore.RecordLaws(ctx, w.rt, []planstore.LawCard{batch})
 	ok(t, err)
-	for n, want := range map[string]string{"3": "DAO-1", "4": "LAW-1", "5": "BYLAW-1", "6": "DAO-2"} {
+	for n, want := range map[string]string{"3": "DAO-1", "4": "LAW-1", "5": "ZONE-1", "6": "DAO-2"} {
 		l, _, _ := planstore.CurrentLaw(ctx, w.rt, n)
 		if l.Code != want {
 			t.Fatalf("law %s code = %q, want %q", n, l.Code, want)

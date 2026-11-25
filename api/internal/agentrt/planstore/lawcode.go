@@ -20,15 +20,16 @@ const lawCodeBase = 85
 var lawCodePattern = regexp.MustCompile(`^LAW-([1-9][0-9]*)$`)
 
 // The words of the levels (Owner 2026-11-25: 「每一层都用特定的单词表示，同时
-// 采用特定的编号体系」): 0 道 DAO, 1 根本法 CONSTITUTION, 2 基本法 LAW, 3 领域法
-// BYLAW. Each level counts from 1 on its own, a code is never given twice,
+// 采用特定的编号体系」): 0 道 DAO, 1 根本法 CORE, 2 基本法 LAW, 3 领域法
+// ZONE; each word at most four letters (Owner 2026-11-25: 「constitution 太长了，
+// 搞一个短点的..最多四个」). Each level counts from 1 on its own, a code is never given twice,
 // and a law that changes level is repealed and added again with a new code.
 // A law added from round 2 on keeps its code in its record; the laws before
 // (86 to 98) keep the codes they had (LAW-k, k = number - 85), except 89, the
-// fundamental law, which is CONSTITUTION-1 (LAW-4 stays unused).
-var levelWords = map[int]string{LevelDao: "DAO", LevelFundamental: "CONSTITUTION", LevelBasic: "LAW", LevelDomain: "BYLAW", LevelDetail: "BYLAW"}
+// fundamental law, which is CORE-1 (LAW-4 stays unused).
+var levelWords = map[int]string{LevelDao: "DAO", LevelFundamental: "CORE", LevelBasic: "LAW", LevelDomain: "ZONE", LevelDetail: "ZONE"}
 
-var anyCodePattern = regexp.MustCompile(`^(DAO|CONSTITUTION|LAW|BYLAW)-([1-9][0-9]*)$`)
+var anyCodePattern = regexp.MustCompile(`^(DAO|CORE|LAW|ZONE)-([1-9][0-9]*)$`)
 
 // levelWord is the word a law of the given level is coded with; LAW when the
 // level is not given.
@@ -56,7 +57,7 @@ func nextCode(codes []string, level *int) string {
 }
 
 // LawCode is law n's code as the laws before round 2 had it, derived from the
-// number: LAW-k, k = n - 85, and CONSTITUTION-1 for 89; "" for material. A
+// number: LAW-k, k = n - 85, and CORE-1 for 89; "" for material. A
 // law added later carries its code in its record (Law.Code).
 func LawCode(n string) string {
 	v, err := strconv.Atoi(n)
@@ -64,17 +65,17 @@ func LawCode(n string) string {
 		return ""
 	}
 	if v == lawCodeBase+4 {
-		return "CONSTITUTION-1"
+		return "CORE-1"
 	}
 	return fmt.Sprintf("LAW-%d", v-lawCodeBase)
 }
 
 // LawNumberOf reads a reference to one of the laws before round 2 by its
-// code (LAW-1 … LAW-13, CONSTITUTION-1) or a number as the register's number.
+// code (LAW-1 … LAW-13, CORE-1) or a number as the register's number.
 // A later code is returned as given; a card names those by number.
 func LawNumberOf(ref string) string {
 	ref = strings.TrimSpace(ref)
-	if ref == "CONSTITUTION-1" {
+	if ref == "CORE-1" {
 		return strconv.Itoa(lawCodeBase + 4)
 	}
 	if m := lawCodePattern.FindStringSubmatch(ref); m != nil {
