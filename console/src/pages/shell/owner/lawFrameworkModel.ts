@@ -1,4 +1,4 @@
-import type { FrameworkField, FrameworkLevel, LawFramework, RegisterLaw } from '@/api/lawRegister'
+import type { FrameworkField, FrameworkLevel, LawFramework, PurgeQueue, RegisterLaw } from '@/api/lawRegister'
 
 /*
  * The framework of laws on Command → Laws (Owner 2026-11-24 by the legislation line: "我要在 console 的那个里面有一个入口
@@ -80,3 +80,15 @@ export function materialOrder(laws: readonly RegisterLaw[]): RegisterLaw[] {
   const open = (l: RegisterLaw) => (l.state === MATERIAL && !(l.absorbed_by && l.absorbed_by.length > 0) ? 0 : 1)
   return [...laws].sort((a, b) => open(a) - open(b) || num(a) - num(b))
 }
+
+/**
+ * "awaiting deletion 16 · overdue 0 · next 2026-12-01" (LAW-1 s5: a repealed law is deleted seven days on). Not sent by
+ * the platform says so; nothing waiting says so.
+ */
+export function purgeLine(q: PurgeQueue | null | undefined): string {
+  if (!q) return `repealed awaiting deletion: ${UNKNOWN}`
+  if (q.waiting === 0) return 'repealed awaiting deletion 0'
+  const next = q.next_purge_at ? ` · next ${q.next_purge_at.slice(0, 10)}` : ''
+  return `repealed awaiting deletion ${q.waiting} · overdue ${q.overdue}${next}`
+}
+

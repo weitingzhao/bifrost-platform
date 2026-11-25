@@ -169,3 +169,32 @@ func TestLawRecordsCannotBeDeleted(t *testing.T) {
 		w.chainHolds(t, planstore.LawStream(n))
 	}
 }
+
+// Origin: 2026-11-25, LAW-1 s5 (「废止即走」) had no reading: a repealed law is
+// not in the register's view, so the laws route says how many wait to be
+// deleted and how many are overdue, numbers and times only.
+func TestPurgeQueueCountsWaitingAndOverdue(t *testing.T) {
+	t.Parallel()
+	fresh, _, _ := purgeWorld(t, time.Now())
+	q, err := planstore.LawPurgeQueue(ctx, fresh.rt, time.Now())
+	ok(t, err)
+	if q.Waiting != 1 || q.Overdue != 0 || q.OldestRepealedAt == nil || q.NextPurgeAt == nil ||
+		q.NextPurgeAt.Sub(*q.OldestRepealedAt) != planstore.LawPurgeAfter {
+		t.Fatalf("just repealed: %+v", q)
+	}
+	// Positive control of the case above: repealed eight days ago, it is overdue.
+	old, _, _ := purgeWorld(t, time.Now().Add(-8*24*time.Hour))
+	q, err = planstore.LawPurgeQueue(ctx, old.rt, time.Now())
+	ok(t, err)
+	if q.Waiting != 1 || q.Overdue != 1 {
+		t.Fatalf("eight days on: %+v", q)
+	}
+	// Deleted, it waits no more.
+	_, err = planstore.PurgeRepealedLaws(ctx, old.rt, time.Now())
+	ok(t, err)
+	q, err = planstore.LawPurgeQueue(ctx, old.rt, time.Now())
+	ok(t, err)
+	if q.Waiting != 0 || q.Overdue != 0 || q.OldestRepealedAt != nil {
+		t.Fatalf("after the purge: %+v", q)
+	}
+}

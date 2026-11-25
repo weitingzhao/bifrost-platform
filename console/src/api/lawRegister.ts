@@ -68,8 +68,14 @@ export type LawFramework = {
   coverage?: { material: number; covered: number; uncovered: string[] }
 }
 
-/** GET /api/v1/agentrt/laws as a whole: the framework (null when the platform does not send it yet) and the laws. */
-export type LawsAnswer = { framework: LawFramework | null; laws: RegisterLaw[]; via: 'engine' | 'direct' }
+/**
+ * The repealed laws waiting to be deleted (planstore LawPurgeQueue, 2026-11-25, LAW-1 s5): numbers and times only, the
+ * repealed themselves are not in the register's view. Absent from an older platform.
+ */
+export type PurgeQueue = { waiting: number; overdue: number; oldest_repealed_at?: string; next_purge_at?: string }
+
+/** GET /api/v1/agentrt/laws as a whole: the framework (null when the platform does not send it yet), the laws and the purge queue. */
+export type LawsAnswer = { framework: LawFramework | null; laws: RegisterLaw[]; purge: PurgeQueue | null; via: 'engine' | 'direct' }
 
 /** The engine's name for this read (UI / Engine 2026-11-24: one read, one name; it passes the platform's answer through). */
 export const ENGINE_LAWS_PATH = '/engine/v1/agents'
@@ -82,8 +88,8 @@ export const engineLawsOn = (env: string | null | undefined): boolean => {
 }
 
 const answerOf = (body: unknown, via: LawsAnswer['via']): LawsAnswer => {
-  const b = (body ?? {}) as { framework?: LawFramework | null; laws?: RegisterLaw[] }
-  return { framework: b.framework ?? null, laws: b.laws ?? [], via }
+  const b = (body ?? {}) as { framework?: LawFramework | null; laws?: RegisterLaw[]; purge?: PurgeQueue | null }
+  return { framework: b.framework ?? null, laws: b.laws ?? [], purge: b.purge ?? null, via }
 }
 
 /** The whole answer, through the engine (it says so when it cannot be reached; never a quiet direct read) or directly. */

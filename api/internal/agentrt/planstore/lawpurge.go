@@ -130,3 +130,44 @@ func purgedLaws(ctx context.Context, tx pgx.Tx) (numbers []int, approvals map[st
 	}
 	return numbers, approvals, nil
 }
+
+// PurgeQueue is what waits to be deleted, as numbers and times only: a
+// repealed law is not in the register's view (Owner 2026-11-24), but LAW-1
+// s5 measures that none outlives LawPurgeAfter, so the laws route says how
+// many wait, how many are overdue and when the oldest was repealed.
+type PurgeQueue struct {
+	Waiting int `json:"waiting"`
+	// Overdue is the repealed laws older than LawPurgeAfter still kept: the
+	// daily pass deletes them, so anything but 0 for a day is a fault.
+	Overdue          int        `json:"overdue"`
+	OldestRepealedAt *time.Time `json:"oldest_repealed_at,omitempty"`
+	NextPurgeAt      *time.Time `json:"next_purge_at,omitempty"`
+}
+
+// LawPurgeQueue reads the purge queue at now.
+func LawPurgeQueue(ctx context.Context, db eventlog.DB, now time.Time) (PurgeQueue, error) {
+	var q PurgeQueue
+	err := eventlog.InTx(ctx, db, func(tx pgx.Tx) error {
+		laws, err := currentLaws(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for _, l := range laws {
+			if l.Status != RepealedStatus {
+				continue
+			}
+			q.Waiting++
+			if now.Sub(l.At) >= LawPurgeAfter {
+				q.Overdue++
+			}
+			if q.OldestRepealedAt == nil || l.At.Before(*q.OldestRepealedAt) {
+				at := l.At
+				q.OldestRepealedAt = &at
+				next := at.Add(LawPurgeAfter)
+				q.NextPurgeAt = &next
+			}
+		}
+		return nil
+	})
+	return q, err
+}

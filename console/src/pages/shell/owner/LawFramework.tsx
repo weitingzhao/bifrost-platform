@@ -1,5 +1,5 @@
-import type { LawFramework as Framework, RegisterLaw } from '@/api/lawRegister'
-import { coverageLine, inForceAt, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
+import type { LawFramework as Framework, PurgeQueue, RegisterLaw } from '@/api/lawRegister'
+import { coverageLine, inForceAt, purgeLine, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
 import { lawName } from './lawRegisterModel'
 
 const Unknown = ({ what }: { what: string }) => (
@@ -27,7 +27,7 @@ function List({ items, what }: { items: readonly string[] | undefined; what: str
  * The framework of laws itself (GET /api/v1/agentrt/laws → framework): the five levels, the fields, the rules between
  * laws and what refuses a card, and the states' counts. The laws in force hang under their level; today there are none.
  */
-export function LawFrameworkView({ framework: fw, laws }: { framework: Framework; laws: readonly RegisterLaw[] }) {
+export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Framework; laws: readonly RegisterLaw[]; purge?: PurgeQueue | null }) {
   return (
     <div className="flex min-w-0 flex-col gap-3" data-law-framework>
       <Block id="levels" title="Levels">
@@ -99,6 +99,8 @@ export function LawFrameworkView({ framework: fw, laws }: { framework: Framework
         </ul>
         {/* Step two (Owner 2026-11-24): the material distilled into laws one by one, then repealed once all is covered. */}
         <p className="m-0 text-sm" data-coverage>{coverageLine(fw)}</p>
+        {/* LAW-1 s5 (2026-11-25): the repealed are not shown, only how many wait to be deleted and whether any is overdue. */}
+        <p className="m-0 text-sm text-muted-foreground" data-purge>{purgeLine(purge)}</p>
       </Block>
 
       {fw.source ? <p className="m-0 text-xs text-muted-foreground">Source: {fw.source}</p> : null}

@@ -15,7 +15,7 @@ vi.mock('@/api/core', () => ({ fetchSelfHealth: async () => ({ viewer_env: wire.
 import { engineLawsOn } from '@/api/lawRegister'
 import { LawRegister } from '@/pages/shell/owner/LawRegister'
 import { LawFrameworkView } from '@/pages/shell/owner/LawFramework'
-import { behindSwitch, coverageLine, frameworkLine, inForceAt, inForceCount, materialOrder, requiredLabels, stateCounts, stateTally } from '@/pages/shell/owner/lawFrameworkModel'
+import { behindSwitch, coverageLine, frameworkLine, inForceAt, inForceCount, materialOrder, purgeLine, requiredLabels, stateCounts, stateTally } from '@/pages/shell/owner/lawFrameworkModel'
 import { lawRegisterTable } from '@/pages/shell/owner/lawRegisterModel'
 
 const framework: LawFramework = {
@@ -153,5 +153,15 @@ describe('step two: the material covered by laws in force', () => {
     expect(document.querySelector('[data-in-force-law="90"]')?.textContent).toContain('Absorbs material 3, 12')
     expect(document.querySelector('[data-in-force-law="90"]')?.textContent).toMatch(/^LAW-5: law 90/)
     expect(document.querySelector('[data-coverage]')?.textContent).toBe('material covered 2 / 69')
+  })
+})
+
+// Origin: 2026-11-25, LAW-1 s5 had no reading on the page: the repealed are not shown, only how many wait to be
+// deleted and whether any is overdue; a platform that does not send it says unknown, never 0.
+describe('purge queue line', () => {
+  it('says the numbers, nothing waiting, and unknown', () => {
+    expect(purgeLine({ waiting: 16, overdue: 0, next_purge_at: '2026-12-01T20:04:00Z' })).toBe('repealed awaiting deletion 16 · overdue 0 · next 2026-12-01')
+    expect(purgeLine({ waiting: 0, overdue: 0 })).toBe('repealed awaiting deletion 0')
+    expect(purgeLine(null)).toBe('repealed awaiting deletion: unknown')
   })
 })

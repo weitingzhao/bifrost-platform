@@ -28,5 +28,14 @@ func (rt Routes) HandleGetLaws(w http.ResponseWriter, r *http.Request) {
 	for i, l := range laws {
 		plain[i] = l.Law
 	}
-	rt.Host.JSON(w, 200, map[string]any{"framework": planstore.TheFramework(plain, time.Now()), "laws": laws})
+	now := time.Now()
+	// The purge queue (LAW-1 s5): numbers and times only; a queue that
+	// cannot be read leaves the field out rather than failing the register.
+	out := map[string]any{"framework": planstore.TheFramework(plain, now), "laws": laws}
+	if q, err := planstore.LawPurgeQueue(r.Context(), rt.Host.DB(), now); err == nil {
+		out["purge"] = q
+	} else {
+		rt.Host.Logf("laws: purge queue: %v", err)
+	}
+	rt.Host.JSON(w, 200, out)
 }
