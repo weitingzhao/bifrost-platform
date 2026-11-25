@@ -1616,6 +1616,7 @@
         "console/src/domains/coordination/communication/__tests__/looks.test.ts",
         "console/src/domains/coordination/communication/__tests__/observer.test.tsx",
         "console/src/domains/coordination/communication/__tests__/scope.test.tsx",
+        "console/src/domains/coordination/communication/__tests__/seatRoster.test.ts",
         "console/src/domains/coordination/communication/__tests__/work.test.tsx",
         "console/src/domains/coordination/communication/adapter.ts",
         "console/src/domains/coordination/communication/agentScreen.css",
@@ -1624,12 +1625,14 @@
         "console/src/domains/coordination/communication/frame.ts",
         "console/src/domains/coordination/communication/looks.ts",
         "console/src/domains/coordination/communication/roster.generated.json",
+        "console/src/domains/coordination/communication/seatRoster.ts",
         "console/src/domains/coordination/communication/useCommunication.ts"
       ],
       "imports": [
         "console/src/api",
         "console/src/api/agentRuntimeEvents.ts",
         "console/src/api/agentThreads.ts",
+        "console/src/api/approvals.ts",
         "console/src/api/client.ts",
         "console/src/api/clusterTypes.ts",
         "console/src/api/lineage.ts",

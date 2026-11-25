@@ -2,8 +2,7 @@ import { useBusStream } from '@/domains/foundation/bus/useBusStream'
 import { fetchBusContract } from '@/domains/foundation/bus/busNextgen'
 import { busFacts } from '@/domains/foundation/bus/communication'
 import { operatorToken } from '@/api/client'
-import type { Member } from '@bifrost/ui/communication'
-import roster from './roster.generated.json'
+import { engineSeatsOn, fetchSeatRoster, seatSource, seatsQueryKey, withRoster } from './seatRoster'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchLatestEvents, fetchEventsAfter, type RuntimeEventRow } from '@/api/agentRuntimeEvents'
 import { fetchAgentThreads } from '@/api/agentThreads'
@@ -28,6 +27,10 @@ export function useCommunicationObservation() {
   const health = useQuery(shellSelfHealthQuery)
   const viewerEnv = health.data?.viewer_env
   const viaEngine = engineCommunicationOn(viewerEnv)
+  // Who sits which seat, read live (the map line's roster); the frozen copy only when it is not read, said so.
+  const seatsViaEngine = engineSeatsOn(viewerEnv)
+  const seats = useQuery({ queryKey: seatsQueryKey(seatsViaEngine), queryFn: ({ signal }) => fetchSeatRoster(seatsViaEngine, signal), staleTime: 60_000, refetchInterval: 300_000, retry: false, enabled: !health.isLoading })
+  const seated = seatSource(seats.data, seats.error)
   const bus = useBusStream()
   const contract = useQuery({ queryKey: ['city', 'gen2', 'bus-contract'], queryFn: fetchBusContract, staleTime: 300000 })
   const events = useQuery<EventWindow>({
@@ -76,12 +79,14 @@ export function useCommunicationObservation() {
     state: events.error ? 'error' : events.data ? 'ready' : 'loading',
     updatedAt: events.dataUpdatedAt ? new Date(events.dataUpdatedAt).toISOString() : undefined,
     truncated: events.data?.truncated ?? false,
-    note: (events.error ? String(events.error) + '. ' : '') + 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '. Messages, inbox arrivals and ACK evidence from the platform ledger. Replies require explicit sender links and matching participants; older letters may lack links. Opening and acceptance are not recorded by this source. Absence of a reply is not agent inactivity. Crew membership is a source snapshot imported ' + roster.importedAt + '; it is not live presence. ' + (threads.error ? 'Member titles could not be refreshed.' : 'Work activity is independent of message activity.') + (statuses.error?' Work reports unavailable: '+String(statuses.error):' Work reports are self-reported, timestamped.') + (lineage.error?' Work records unavailable: '+String(lineage.error):' Commit records cover the last two days.'),
-  }, roster.members as Member[], busFacts(contract.data, bus.events, bus.receipts), statuses.data??[],lineage.data?.threads??[])
+    note: (events.error ? String(events.error) + '. ' : '') + 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '. Messages, inbox arrivals and ACK evidence from the platform ledger. Replies require explicit sender links and matching participants; older letters may lack links. Opening and acceptance are not recorded by this source. Absence of a reply is not agent inactivity. ' + seated.note + ' ' + (threads.error ? 'Member titles could not be refreshed.' : 'Work activity is independent of message activity.') + (statuses.error?' Work reports unavailable: '+String(statuses.error):' Work reports are self-reported, timestamped.') + (lineage.error?' Work records unavailable: '+String(lineage.error):' Commit records cover the last two days.'),
+  }, seated.members, busFacts(contract.data, bus.events, bus.receipts), statuses.data??[],lineage.data?.threads??[])
   if (viaEngine) {
     const facts = busFacts(contract.data, bus.events, bus.receipts)
     const busNote = 'Event stream: ' + bus.connection + (bus.receiptsOff ? ' (receipts unavailable)' : '') + '.'
-    return { snapshot: engineSnapshot(engine.data, engine.error, facts, busNote), history: {
+    // The engine's members carry its own roster copy: their memberships come from the live roster when it is read.
+    const read = engine.data && seats.data ? { ...engine.data, members: withRoster(engine.data.members, seated.members) } : engine.data
+    return { snapshot: engineSnapshot(read, engine.error, facts, busNote + (seats.data ? ' ' + seated.note : '')), history: {
       loadOlder: () => {}, loading: false, hasOlder: false,
       // The engine's history note is written for programs ("read again with before=…"); the page says it plainly.
       note: !engine.data ? 'Reading letters; how far back they go is not known yet.' : engine.data.coverage.history.hasOlder ? 'Earlier letters exist; loading them on this page is not available yet.' : 'This is as far back as the letters are kept.',
