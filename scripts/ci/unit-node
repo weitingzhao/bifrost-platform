@@ -76,7 +76,13 @@ while IFS= read -r dir; do
 done < "$result/.beside"
 rm -f "$result/.beside"
 echo "==> unit-node: npm ci"
-npm ci --prefer-offline || { echo "unit-node: installing this package failed"; exit 1; }
+# Once more with a cache of its own when the shared one fails: on 2026-11-25 three console
+# tasks of the night's unit run installed at the same second and npm got errno -116 (a
+# stale NFS handle) writing the shared cache; the install, not the code, failed.
+npm ci --prefer-offline || {
+  echo "unit-node: npm ci failed with the shared cache; once more with a private one"
+  npm_config_cache="$(mktemp -d)" npm ci --prefer-offline
+} || { echo "unit-node: installing this package failed"; exit 1; }
 echo "unit-node: install $(( $(date +%s) - started ))s"
 
 started="$(date +%s)"
