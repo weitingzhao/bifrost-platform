@@ -68,15 +68,17 @@ func TestRepoUsersAreReadFromDependencyFiles(t *testing.T) {
 // name nobody writes has no users and is still listed.
 func TestRetiredRepositoriesAreLookedFor(t *testing.T) {
 	s := &Scanner{Kept: memKept{}}
+	ix, _ := json.Marshal(Index{Classes: []Class{{Class: "repository", Sources: []string{"infra:k8s/cicd/repositories.yaml"}, Check: CheckScanned}}})
+	_ = s.kept().Write(keptIndex, ix)
 	repos, _ := json.Marshal([]string{"infra", "bifrost-platform"})
 	_ = s.kept().Write(keptRepos, repos)
 	reg, _ := json.Marshal(keptRepoRows{Rows: []repoRow{{Name: "bifrost-analytics", Tier: RetiredTier}, {Name: "gone-quietly", Tier: RetiredTier}, {Name: "bifrost-platform", Tier: RetiredTier}}})
 	_ = s.kept().Write(keptRepoRegistry, reg)
-	s.keepRepoRefs("infra", Tree{Commit: "c", Files: []string{"scripts/guard.sh"}, Read: func(string) ([]byte, bool, error) {
+	s.keepRepoRefs("infra", Tree{Commit: "c", Files: []string{"scripts/guard.sh", "k8s/cicd/repositories.yaml"}, Read: func(string) ([]byte, bool, error) {
 		return []byte("refuse bifrost-analytics\n"), true, nil
 	}}, time.Time{})
 	doc, ok := s.repoUsers("bifrost-analytics")
-	if !ok || len(doc.Repos) != 1 || !doc.Repos[0].Retired || doc.Repos[0].Kinds["governance"] != 1 {
+	if !ok || len(doc.Repos) != 1 || !doc.Repos[0].Retired || doc.Repos[0].Kinds["governance"] != 1 || doc.Repos[0].Kinds["clone"] != 0 {
 		t.Fatalf("%+v", doc)
 	}
 	if doc, ok := s.repoUsers("gone-quietly"); !ok || len(doc.Repos[0].Users) != 0 {

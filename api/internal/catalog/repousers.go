@@ -139,6 +139,10 @@ func (s *Scanner) keepRepoRefs(repo string, t Tree, now time.Time) {
 			}
 		}
 	} else {
+		// The registry of repositories names every repository by design; it
+		// is the list, not a use (STG 11-25 21:13Z: it was counted as a
+		// clone of bifrost-analytics).
+		regRepo, regFile, _ := s.classSource("repository")
 		res := map[string]*regexp.Regexp{}
 		for _, n := range names {
 			if n != repo {
@@ -147,7 +151,7 @@ func (s *Scanner) keepRepoRefs(repo string, t Tree, now time.Time) {
 		}
 		for _, f := range t.Files {
 			kind := refKind(f)
-			if kind == "" {
+			if kind == "" || (repo == regRepo && f == regFile) {
 				continue
 			}
 			raw, ok, err := t.Read(f)
