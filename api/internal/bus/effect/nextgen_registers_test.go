@@ -62,8 +62,7 @@ func goFiles(t *testing.T, r string) map[string]string {
 	return out
 }
 
-// 2026-11-17 (the Owner: nothing in Ops may be kept by hand; what it shows
-// is computed from the source). The disposition table is the design's 153
+// ISSUE-18 (what Ops shows is computed from the source). The disposition table is the design's 153
 // rows, each disposition as the design counted them; a channel marked
 // retired must be gone from the code (its paths absent, its text in no Go
 // file), so the Bus page's "now" cannot run ahead of the code.
@@ -277,8 +276,8 @@ func TestStepsMatchTheTableAndCutsNameTheirProof(t *testing.T) {
 			t.Errorf("step %s: %d rows, the table has %d", st.Step, st.Total, want[st.Step])
 		}
 	}
-	// 2026-11-18, the Owner: what stays must say who uses it and what breaks
-	// without it; what cannot is deleted (the kept rows judged again).
+	// What stays must say who uses it and what breaks without it; what cannot
+	// is deleted (LAW-10).
 	if p.Removable != 33 || p.Stays != 120 || p.End != 133 {
 		t.Errorf("removable %d, stays %d, end %d; the table says 33, 120, 133", p.Removable, p.Stays, p.End)
 	}

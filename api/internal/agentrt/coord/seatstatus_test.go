@@ -31,8 +31,7 @@ func ok2(t *testing.T, err error) {
 	}
 }
 
-// 2026-11-17 (the Owner, via the coordinator: "I ask for progress because Ops
-// does not show it"; after card #587, no new write route): a seat sends its
+// ISSUE-1 (progress must show on Ops; after card #587, no new write route): a seat sends its
 // status as a "status" message to the board with the existing message route.
 // The board reads each sender's latest status; a status that does not parse
 // is listed with its problem and its sender; other messages to the board are
@@ -93,7 +92,7 @@ func TestParseSeatStatus(t *testing.T) {
 	}
 }
 
-// 2026-11-17 (the Owner: he cannot see what the bus's work does): the Bus
+// ISSUE-29 (what the bus's work does must be visible): the Bus
 // page counts the dispatcher's wakes from the messages themselves — those
 // that reached a seat, those that went to the duty seat because the
 // recipient was unknown, and how long a seat took to acknowledge one. A

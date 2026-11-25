@@ -47,7 +47,7 @@ func nodesRow(t *testing.T) WatchSpec {
 // Origin: 2026-11-20 02:50Z, ubt-k3s-05 was cordoned and drained for a disk
 // swap; NATS, whose disk was on it, sat Pending for an hour and the bus said
 // nothing of the node. The node watch is now a row of configuration
-// (the Owner: a module that joins must not mean a code change); each change
+// (ISSUE-34); each change
 // of Ready or cordon is said once, the heartbeat says nothing.
 func TestAWatchedObjectIsSaidOncePerChange(t *testing.T) {
 	w := nodesRow(t)

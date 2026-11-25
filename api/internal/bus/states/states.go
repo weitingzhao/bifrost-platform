@@ -1,8 +1,8 @@
 // Package states answers GET /api/v1/bus/states: each subject's latest state
 // for one registered state-change type, read from the ledger.
 //
-// 2026-11-20, the Owner: every module's state changes reach the bus, and a
-// module that joins must not mean a code change. A type qualifies by its
+// Every module's state changes reach the bus (LAW-10), and a module that
+// joins must not mean a code change (ISSUE-34). A type qualifies by its
 // register entry alone (registry/<tenant>.yaml: subject_from and
 // change_from), so the next state type (a database, a market-data feed) is
 // served here with no Go. The ledger keeps only changes, so a subject that

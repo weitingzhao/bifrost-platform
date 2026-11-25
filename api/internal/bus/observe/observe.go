@@ -1,7 +1,6 @@
 // Package observe is the bus's picture of the team at work, for the Bus
-// page's nerve map (the Owner, 2026-11-17, as the coordinator relayed it: the
-// map is for watching how the seats work together, where they wait and
-// where they stall; cards and approvals are decided elsewhere, in words).
+// page's nerve map: how the seats work together, where they wait and where
+// they stall; cards and approvals are decided elsewhere (ISSUE-29).
 // Everything is computed from the platform's own records when asked: the
 // letters between seats and the seats' status reports (coordination's
 // messages, read through coord.ReadLetters, which the server hands the

@@ -11,8 +11,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
-// The roster (2026-11-16, the Owner: the bus must recognise users coming and
-// going). Who uses the bus is read from what it already has: the gate's own
+// The roster: the bus recognises users coming and going (ISSUE-34). Who uses the bus is read from what it already has: the gate's own
 // requests (each reader names itself with client=), the receipt stream
 // (readers and durable consumers leave one per event they get) and the
 // subscription table's declared clients. Nothing reports in separately.

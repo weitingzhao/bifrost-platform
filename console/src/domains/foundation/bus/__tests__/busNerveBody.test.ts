@@ -33,7 +33,7 @@ describe('buildBody', () => {
     expect(ids).not.toContain('s:owner')
     expect(ids).not.toContain('r:headrelease')
   })
-  // Origin: 2026-11-17, the Owner: an event nobody hears was sent for nothing. A topic that published
+  // Origin: an event nobody hears was sent for nothing (LAW-8 五). A topic that published
   // and got no receipt says so by name; one that was heard does not.
   it('names a topic no one listens to, and only that one', () => {
     const listening = { hours: 24, topics: [

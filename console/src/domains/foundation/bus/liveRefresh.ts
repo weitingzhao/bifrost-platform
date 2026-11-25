@@ -1,6 +1,6 @@
 /**
- * Live refresh (bus step 4, 2026-11-19; the Owner: "if every page polls, it
- * polls you to death"). One stream per Console tab says what changed; the
+ * Live refresh (bus step 4, ISSUE-74): every page polling on its own timer
+ * multiplies reads with open tabs. One stream per Console tab says what changed; the
  * queries that read it are refreshed then, and their own polling slows to a
  * fallback while the stream is live. The data is still read from the same
  * routes: an event only says "read again" (it carries no data).
@@ -44,7 +44,7 @@ export const LIVE_REFRESH: LiveRefreshRow[] = [
 ]
 
 // --- the register's rows (2026-11-20) -----------------------------------------
-// The Owner: a module that joins or leaves must not mean a code change. Which
+// A module that joins or leaves must not mean a code change (ISSUE-34). Which
 // queries an event makes stale is written in the bus register (console_keys,
 // console_settle_ms) and read from /api/v1/bus/contract when the stream starts;
 // LIVE_REFRESH above is only the fallback until it has been read, and a new

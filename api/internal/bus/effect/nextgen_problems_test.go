@@ -9,8 +9,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
-// The register behind "Problem channels" on the Bus page (the Owner,
-// 2026-11-18: first make sure problems can be seen). A row that names a channel
+// The register behind "Problem channels" on the Bus page (ISSUE-29). A row that names a channel
 // the table does not have, a topic nobody registered or no receiver would make
 // the count claim something the system does not do.
 func TestProblemChannelsNameRealThings(t *testing.T) {

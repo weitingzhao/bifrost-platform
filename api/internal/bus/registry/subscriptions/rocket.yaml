@@ -1,6 +1,5 @@
-# Who is woken by which event, for tenant rocket (2026-11-16, the coordinator
-# for the Owner: one declarative table, one generic dispatcher; new reactions
-# are new rows, not new code). A row decides who is told, never what may be
+# Who is woken by which event, for tenant rocket: one declarative table, one
+# generic dispatcher; new reactions are new rows, not new code (ISSUE-34). A row decides who is told, never what may be
 # done: an action row only asks for its action, which keeps its own tier,
 # rules and approval (checked at registration, registry.CheckSubscriptions).
 #
@@ -17,7 +16,7 @@ tenant: rocket
 # A wake whose recipient is not a registered thread here goes to the duty
 # seat, naming the address (2026-11-16, the tenant drill).
 undeliverable_to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a
-# 2026-11-19, the Owner: the coordinator also keeps the duty; the duty seat's
+# ISSUE-41: the coordinator also keeps the duty; the duty seat's
 # session is no longer used, so its rows and the undeliverable notices go there.
 subscriptions:
   - id: card-concluded-to-requester

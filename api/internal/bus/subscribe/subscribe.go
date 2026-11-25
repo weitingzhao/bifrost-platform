@@ -310,7 +310,7 @@ func (c Consumer) Name(streamTenant string) string {
 
 // Consumers is every row of every tenant the dispatcher delivers in env, in
 // tenant then table order. A tenant comes and goes with its files: nothing
-// here names one (2026-11-16, the Owner: users come and go by configuration).
+// here names one (ISSUE-34).
 func Consumers(subs map[string]registry.Subscriptions, env string) []Consumer {
 	names := make([]string, 0, len(subs))
 	for n := range subs {

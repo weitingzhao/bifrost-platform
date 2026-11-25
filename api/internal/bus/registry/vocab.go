@@ -8,8 +8,7 @@ import (
 )
 
 // The ledger's vocabulary for the types whose body is written in the
-// register (2026-11-20, the Owner: a module that joins or leaves must not
-// mean a code change). The register is compiled in and parsed at start; a
+// register (ISSUE-34). The register is compiled in and parsed at start; a
 // type with a body here is declared to the ledger here, so a new topic is a
 // register entry, not Go. The tests hold that no type is declared both here
 // and in Go (eventlog panics on a second declaration).

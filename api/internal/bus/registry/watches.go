@@ -14,8 +14,7 @@ import (
 )
 
 // Watches are the cluster objects gate-cluster watches and says on the bus
-// when their state changes (2026-11-20, the Owner: a module that joins or
-// leaves must not mean a code change). One row is one kind of object: which
+// when their state changes (ISSUE-34). One row is one kind of object: which
 // resource, which namespaces, which fields make its state, and the event it
 // is said as. Adding a module's state to the bus is a row here and its
 // topic's entry (with its body) in <tenant>.yaml; no Go.

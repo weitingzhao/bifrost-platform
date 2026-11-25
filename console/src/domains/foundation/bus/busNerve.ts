@@ -176,8 +176,8 @@ export async function fetchBusObserve(): Promise<BusObserve> {
 }
 
 /**
- * A warm colour for a domain (the Owner's reference, 2026-11-17: nebulae of
- * small lights in orange, pink and white): a hue between magenta and amber
+ * A warm colour for a domain, nebulae of small lights in orange, pink and
+ * white (ISSUE-53): a hue between magenta and amber
  * fixed by the id, so domains differ but share one warm range.
  */
 export function warmColor(id: string, light = 0.66): string {

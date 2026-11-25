@@ -11,8 +11,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// The bus's two streams measured, not only bounded (2026-11-19, the Owner: data
-// that grows keeps a fixed size). Their limits are set in EnsureEventStream and
+// The bus's two streams measured, not only bounded (LAW-12). Their limits are set in EnsureEventStream and
 // EnsureReceiptStream; this says how full they are.
 
 var streamSizes = struct {

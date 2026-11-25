@@ -7,7 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
-// 2026-11-16 (the Owner: recognise users coming and going): a declared user
+// ISSUE-34 (users coming and going are recognised): a declared user
 // that came within its lost_after is active, one that did not is lost (also
 // one never seen), and a name that came without being declared is new.
 func TestRosterSeesComingAndGoing(t *testing.T) {

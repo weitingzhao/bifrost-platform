@@ -10,8 +10,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Owner 2026-11-22: verify a persisted letter round trip, keeping inbox arrival,
-// reading, ACK and the independent reply distinct. Uses only the disposable test DB.
+// Verify a persisted letter round trip, keeping inbox arrival, reading, ACK
+// and the independent reply distinct (ISSUE-61). Uses only the disposable test DB.
 func TestLetterRoundTripEvidencePG(t *testing.T) {
 	t.Parallel()
 	_, db, sender := conclusionDB(t)

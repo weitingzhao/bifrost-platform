@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { contractGraph, generationSegments, problemProofText, shortAddress, topicState, weekCounts } from '../busNextgen'
 
-// 2026-11-17 (the Owner: the Bus page must show the layer as it is, with
-// pictures; nothing kept by hand). The bar's segments come from the
+// ISSUE-29, ISSUE-18 (the Bus page shows the layer as it is, with pictures;
+// nothing kept by hand). The bar's segments come from the
 // register's counts, and the contract graph from the registers' topics and
 // subscription rows.
 describe('generation bar', () => {

@@ -85,8 +85,8 @@ describe('refresh batch', () => {
   })
 })
 
-// 2026-11-20, the Owner: a module that joins or leaves must not mean a code
-// change. The register (rocket.yaml console_keys) says which queries an event
+// ISSUE-34: a module that joins or leaves must not mean a code change. The
+// register (rocket.yaml console_keys) says which queries an event
 // makes stale; the table in liveRefresh.ts is only the fallback until the
 // contract is read, and must not say anything the register does not.
 describe('live refresh from the register', () => {

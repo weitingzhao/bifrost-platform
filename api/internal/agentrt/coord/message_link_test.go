@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Owner 2026-11-22: observe explicit reply evidence without exposing message bodies or inventing a link.
+// Observe explicit reply evidence without exposing message bodies or inventing a link (ISSUE-61).
 func TestReplyReference(t *testing.T) {
 	id := "m_01M82M4JYZ0CBW1S3SHS68KTM5"
 	good := `{"v":1,"type":"note","summary":"reply","reply_to":"` + id + `","text":"private body"}`

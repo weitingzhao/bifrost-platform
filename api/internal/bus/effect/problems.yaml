@@ -1,5 +1,5 @@
 # Every channel that sends an alert, a failure, an anomaly, a call for help or
-# work waiting for a person (the Owner, 2026-11-18: first make problems visible).
+# work waiting for a person (ISSUE-29).
 # state: connected (an event on the bus, seen in one place, with a receiver),
 # todo (plan: connect, the default, or delete), deleted (done: no longer used to
 # report problems) or pending (being decided).

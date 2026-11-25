@@ -3,7 +3,7 @@ import { MIN_APART, alongAxis, arcCurve, arcsOf, cubicAt, funnelOf, funnelRadius
 import type { BusContract } from '../busNextgen'
 import type { BusListening } from '../busNerve'
 
-// Origin: 2026-11-17, the Owner via the coordinator: everything ran into the
+// Origin (ISSUE-53): everything ran into the
 // bus and out of it, and nobody could see who listens to whom. Domains stand
 // on floors by their tier (from the ownership table), a topic one domain
 // sends and another's reader takes is one arc between them, the bus is not
@@ -62,7 +62,7 @@ describe('layerPositions', () => {
     }
     expect(layerPositions([...domains].reverse())).toEqual(p)
   })
-  // 2026-11-17, the Owner: the big bang is a trumpet with an outline over everything, sized from where things are.
+  // ISSUE-53: the big bang is a trumpet with an outline over everything, sized from where things are.
   it('wraps every domain in a funnel that only widens going out, with a ring at each tier', () => {
     const p = layerPositions(domains)
     const f = funnelOf(p, new Map(domains.map(d => [d.id, d.tier])))!

@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// The Owner, 2026-11-20: a module that joins or leaves must not mean a code
-// change. This adds a kind of cluster object to the bus with configuration
+// A module that joins or leaves must not mean a code change (ISSUE-34).
+// This adds a kind of cluster object to the bus with configuration
 // only, in a directory that overrides the compiled register (as a mounted
 // ConfigMap would): one topic with its body in rocket.yaml, one watch row.
 func TestANewWatchedTopicIsConfigurationOnly(t *testing.T) {

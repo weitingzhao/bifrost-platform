@@ -8,8 +8,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
 
-// Problems the platform records about itself, said as alerts (the Owner,
-// 2026-11-18: first make sure problems can be seen). Until then they stayed in
+// Problems the platform records about itself, said as alerts (ISSUE-29).
+// Until then they stayed in
 // the ledger under types the bus does not carry: 1,125 policy_alert records that
 // nobody was told of. As alerts they reach the duty seat by the row every alert
 // uses, and repeats share a letter.

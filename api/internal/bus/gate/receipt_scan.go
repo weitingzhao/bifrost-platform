@@ -12,8 +12,7 @@ import (
 )
 
 // The Bus page opens with two reads that each scanned a day of the receipt
-// stream: /bus/observe 1.8 s and /bus/clients 1.2 s (2026-11-19, the Owner:
-// performance problems are fixed when found). They share one scan, kept for
+// stream: /bus/observe 1.8 s and /bus/clients 1.2 s (LAW-7 四). They share one scan, kept for
 // receiptScanFor. Once a day is read, a refresh reads only what came after it
 // and drops what fell out of the day, and Warm keeps it fresh in the
 // background, so a cold page load no longer waits for a day's scan.

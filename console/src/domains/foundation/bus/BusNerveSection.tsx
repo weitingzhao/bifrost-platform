@@ -124,7 +124,7 @@ export function BusNerveSection({ stream, onSelect }: { stream: BusStreamState; 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [spin, setSpin] = useState(true)
   const [help, setHelp] = useState(false)
-  // The default is who listens to whom, straight (the Owner, 2026-11-17); the old view through the bus stays behind "?".
+  // The default is who listens to whom, straight (ISSUE-53); the old view through the bus stays behind "?".
   const [byBus, setByBus] = useState(false)
   const domains = useQuery({ queryKey: ['ci-domains', TIER_REPO], queryFn: () => fetchCiDomains(TIER_REPO), staleTime: 300_000, retry: false })
   const tiers = useMemo(() => (domains.data?.domains ?? []).map(d => ({ id: d.id, tier: d.tier })), [domains.data])
@@ -439,8 +439,8 @@ const dot = (color: string, ring = false) => (
 )
 
 /**
- * Everything that explains the map, kept off the page until asked (the Owner,
- * 2026-11-17: explanations go behind a "?"): the legend, how to move it, and
+ * Everything that explains the map, kept off the page until asked behind a
+ * "?" (ZONE-1 五): the legend, how to move it, and
  * what is not measured and why.
  */
 function HelpPanel({ unmeasured, onClose, byBus, onByBus }: { unmeasured: { what: string; why: string }[]; onClose: () => void; byBus: boolean; onByBus: () => void }) {

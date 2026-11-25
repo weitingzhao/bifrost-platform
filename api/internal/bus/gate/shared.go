@@ -1,7 +1,6 @@
 package gate
 
-// Shared reads (bus step 4, 2026-11-19, the Owner: "every page polling will
-// poll you to death"). Before this, each open stream and each long poll read
+// Shared reads (bus step 4, ISSUE-74). Before this, each open stream and each long poll read
 // the ledger on its own: every event woke every waiter and each read once,
 // and every waiter re-read on its own timer while nothing happened. Reads
 // grew with the number of open Consoles. Now:

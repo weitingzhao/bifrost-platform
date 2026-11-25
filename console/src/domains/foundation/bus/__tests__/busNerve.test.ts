@@ -111,7 +111,7 @@ describe('labels', () => {
   })
 })
 
-// Origin: 2026-11-17, the Owner: nebulae of small warm lights, not balls.
+// Origin: nebulae of small warm lights, not balls (ISSUE-53).
 // Each domain a warm hue fixed by its id; an event's dust dims with age.
 describe('warmColor and dustBrightness', () => {
   it('gives each domain its own fixed warm colour, and dims dust over a day', () => {

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// 2026-11-17 (the Owner cannot see what the bus's work does): "main moved →
+// ISSUE-29 (what the bus's work does must be visible): "main moved →
 // STG delivery started" pairs each platform landing with the first delivery
 // created at or after it, within 30 minutes, inside the window; this is the
 // same pairing the 51-second baseline of 2026-11-16 was measured with.

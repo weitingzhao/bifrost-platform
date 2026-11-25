@@ -2,8 +2,7 @@ import type { BusContract } from './busNextgen'
 import type { BusListening } from './busNerve'
 
 /**
- * The nerve map's default view (the Owner via the coordinator, 2026-11-17):
- * who listens to whom, drawn straight. A domain sits at the height of its
+ * The nerve map's default view (ISSUE-53): who listens to whom, drawn straight. A domain sits at the height of its
  * tier (the ownership table's own field: base at the bottom, the Owner on
  * top), on that tier's disc at an angle fixed by name. A topic one domain
  * publishes and another's reader takes is an arc between the two domains,
@@ -16,7 +15,7 @@ import type { BusListening } from './busNerve'
 export type Vec = { x: number; y: number; z: number }
 
 /**
- * The big bang (the Owner via the coordinator, 2026-11-17): the base is the
+ * The big bang (ISSUE-53): the base is the
  * core at the origin and the body opens forward from it into a cone. A
  * domain's distance from the core along the cone's axis is its tier; the
  * tiers' sections widen as they go out. Dependence runs from the core out:
@@ -108,8 +107,8 @@ export function layerPositions(domains: readonly DomainTier[]): Map<string, Vec>
 }
 
 /**
- * The funnel round the body (the Owner, 2026-11-17: the big bang is a
- * trumpet from a point, an outline over everything): from just behind the
+ * The funnel round the body, a trumpet from a point that outlines every
+ * domain (ISSUE-53): from just behind the
  * core out past the front, its radius widening as the square of the
  * distance out, the least such trumpet that holds every domain with a
  * margin. A ring marks each tier where its domains stand (their mean

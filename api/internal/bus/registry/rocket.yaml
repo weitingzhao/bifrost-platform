@@ -672,8 +672,7 @@ channels:
       reconcile: "the ledger is the truth; the evaluation readout counts the day's events (owner_privilege_uses)"
       on_unread: stale
       retention: 400d
-      # 2026-11-21 (the Owner, as the coordinator relayed it; LAW-6 in the
-      # coordinator's notes, not yet in OWNER_LAW): each time the Owner steps in
+      # LAW-6 六: each time the Owner steps in
       # to push work that lines wait on, or that no contract gives to anyone, is
       # one use of privilege; the fewer the better, counted every day as a
       # fixed reference (system archive, LAW-8). The coordinator records the
@@ -703,8 +702,8 @@ channels:
       reconcile: "the ledger is the truth; the producer re-reads the platform and posts again"
       on_unread: stale
       retention: 400d
-      # 2026-11-21 (the Owner, in the Foundation thread): Foundation's state goes
-      # on the coordination bus, whoever consumes it. One reading of the
+      # Foundation's state goes on the coordination bus, whoever consumes it
+      # (LAW-10 四). One reading of the
       # decoupling acceptance (benchmark/decoupling_acceptance.py) per post, with
       # the ruler's version: the ruler is Foundation's own script and changed
       # three times that day (POST /api/v1/bus/acceptance, bus/acceptance).
@@ -733,8 +732,8 @@ channels:
       reconcile: "the ledger is the truth; each machine's local block log (~/.bifrost-dev/logs/agent-guard-blocks.log) is the source a reporter replays"
       on_unread: stale
       retention: 400d
-      # 2026-11-21 (the Owner, in the Foundation thread): how often each agent
-      # guard rule (preflight.js) refuses whom goes on the bus; it was read only
+      # LAW-10 四: how often each agent guard rule
+      # (preflight.js) refuses whom goes on the bus; it was read only
       # from one Mac's transcripts. One refusal per post: the rule and the
       # session, never the command, which can hold paths and names that must not
       # leave the machine (POST /api/v1/bus/guard-blocks, bus/guardblock).

@@ -14,8 +14,7 @@ import (
 )
 
 // GET /api/v1/bus/effect: what the bus's work does, each reading computed
-// from its source when asked (2026-11-17, the Owner: he cannot
-// see where the communication work stands or what it actually does). A
+// from its source when asked (ISSUE-29). A
 // reading that cannot be taken here says so instead of a number.
 
 type effectItem struct {

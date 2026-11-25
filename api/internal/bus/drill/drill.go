@@ -1,6 +1,5 @@
 // Package drill gives the problem channels that never fire in normal life a
-// controlled proof that their event can be written (the Owner, 2026-11-18:
-// first make problems visible). Once a day per channel it appends one event of
+// controlled proof that their event can be written (ISSUE-82). Once a day per channel it appends one event of
 // the channel's own type to its own stream, drill:<channel id>, with the
 // quiet value of that type: an alert resolved in the namespace drill, a state
 // ok from the source drill, a loop healthy, a job succeeded, each on a subject

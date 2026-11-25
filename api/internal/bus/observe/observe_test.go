@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// Origin: 2026-11-17, the nerve map as a watch on the team (the Owner via
-// the coordinator, 14:5x): who writes to whom, how fast a letter is taken,
+// Origin: the nerve map as a watch on the team (ISSUE-29): who writes to whom, how fast a letter is taken,
 // what waits. A letter to the status board is a report, not a link; an
 // unacked letter is counted open with its age; the cards wait on the owner.
 func TestBuildCountsLinksWaitsAndReports(t *testing.T) {
@@ -63,8 +62,7 @@ func TestNewRateCountsByTypeAndMinute(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-17, the Owner: an event nobody hears was sent for nothing;
-// a loop is someone sending, someone hearing, and the hearer acting. Per
+// Origin: an event nobody hears was sent for nothing (LAW-8 五); a loop is someone sending, someone hearing, and the hearer acting. Per
 // topic: published, heard (a receipt from anyone but the page itself), and
 // followed (an event names it as its cause); shares over all published; and
 // the reasons a share is missing.

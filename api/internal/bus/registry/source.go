@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 )
 
-// Where the register is read from (2026-11-20, the Owner: a module that joins
-// or leaves must not mean a code change, nor wait for a release). The files
+// Where the register is read from: a module that joins or leaves must not
+// mean a code change, nor wait for a release (ISSUE-34). The files
 // compiled in are the default; BUS_REGISTRY_DIR, when set, names a directory
 // laid out the same way (<tenant>.yaml, subscriptions/, watches/), typically a
 // ConfigMap mounted from the same Git files, and each part found there wins

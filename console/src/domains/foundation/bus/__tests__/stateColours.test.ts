@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { C } from '../busNerveBody'
 
 // Origin (2026-11-23, Console line's design-system inventory, Bus: 19 fixed hex colours). The observatory keeps its
-// own ground and text (the Owner's reference, a terminal look), but a colour that means a state is the engine's, so
+// own ground and text (a terminal look, ISSUE-53), but a colour that means a state is the engine's, so
 // "no receipt" is the same red here as on every view.
 describe('bus state colours', () => {
   it('are the engine STATUS colours', () => {

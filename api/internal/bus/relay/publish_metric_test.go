@@ -57,8 +57,8 @@ func TestADrillIsCountedUnderItsOwnStream(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-19, the Owner: data that grows keeps a fixed size; the two
-// streams had limits but no reading of how full they are.
+// Origin: data that grows keeps a fixed size (LAW-12); the two streams had
+// limits but no reading of how full they are.
 func TestStreamSizesAreWritten(t *testing.T) {
 	recordStreamSize("EV_ROCKET_TEST", 2048, 7)
 	var b strings.Builder

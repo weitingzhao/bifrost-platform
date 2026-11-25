@@ -55,8 +55,7 @@ type Channel struct {
 	// reading leaves it out of "heard" and does not call it deaf. Not a
 	// contract field.
 	DisplayOnly bool `yaml:"display_only"`
-	// Body is the closed body the ledger keeps for this type (2026-11-20,
-	// the Owner: a module that joins must not mean a code change). A type
+	// Body is the closed body the ledger keeps for this type (ISSUE-34). A type
 	// whose body is written here is declared to the ledger from this file
 	// (vocab.go) and needs no Go; a type declared in Go has no body here.
 	// SubjectFrom and ChangeFrom tie the body's subject and change to its

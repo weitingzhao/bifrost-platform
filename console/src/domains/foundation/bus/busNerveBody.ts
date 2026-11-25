@@ -7,8 +7,8 @@ import { arcCurve, arcsOf, cubicAt, funnelOf, halosOf, layerPositions, median, t
 
 /**
  * The observatory's own palette: a dark glass the body lives in, whatever the
- * Console's theme (the Owner's reference, 2026-11-17: a black ground, terminal
- * panels, a living picture in the middle). Fixed on purpose, not theme tokens.
+ * Console's theme: a black ground, terminal panels, a living picture in the
+ * middle (ISSUE-53). Fixed on purpose, not theme tokens.
  */
 export const C = {
   ground: '#020305',

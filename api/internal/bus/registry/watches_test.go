@@ -8,8 +8,7 @@ import (
 )
 
 // The watch rows and the registered bodies are the configuration a module's
-// state needs to reach the bus (2026-11-20, the Owner: a module that joins
-// or leaves must not mean a code change).
+// state needs to reach the bus (ISSUE-34).
 func TestTheWatchRowsParseAgainstTheRegister(t *testing.T) {
 	rows, err := Watches()
 	if err != nil {

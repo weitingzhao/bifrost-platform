@@ -220,8 +220,7 @@ func TestUnregisteredTypeIsRefused(t *testing.T) {
 	}
 }
 
-// 2026-11-19, bus step 4 (the Owner: "every page polling will poll you to
-// death"): before, each of N open streams read the ledger itself when an
+// Bus step 4 (ISSUE-74): before, each of N open streams read the ledger itself when an
 // event woke them, so reads grew with open Consoles. Twenty waiters woken by
 // one event now cost at most a few ledger reads, not twenty.
 // settledReads waits at least min, then until the ledger's read count has not

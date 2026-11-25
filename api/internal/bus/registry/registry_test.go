@@ -17,8 +17,7 @@ func TestRegisteredTenantsPass(t *testing.T) {
 		t.Fatal("no rocket tenant registered")
 	}
 	// The count was pinned here until 2026-11-20 (29, then 30); a new topic
-	// is now configuration only (the Owner: a module that joins must not mean
-	// a code change), so only a loss is caught: 30 on 2026-11-20.
+	// is now configuration only (ISSUE-34), so only a loss is caught: 30 on 2026-11-20.
 	if n := len(rocket.Channels); n < 30 {
 		t.Fatalf("rocket registers %d types: some were lost (30 on 2026-11-20)", n)
 	}

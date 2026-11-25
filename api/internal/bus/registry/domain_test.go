@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// Origin: 2026-11-17, the Bus page's map zooms from domains to their parts
-// (the Owner via the coordinator): which domain an event tells of is read
+// Origin: the Bus page's map zooms from domains to their parts (ISSUE-53):
+// which domain an event tells of is read
 // from here, so every channel names one, and it must be a domain of
 // config/domain-ownership.json (a name not there would be a domain the map
 // invents).
@@ -28,7 +28,7 @@ func TestEveryChannelNamesAnOwnedDomain(t *testing.T) {
 	known := map[string]bool{}
 	for _, d := range own.Domains {
 		known[d.ID] = true
-		// 2026-11-17, the Owner via the coordinator: the map stands each
+		// ISSUE-53: the map stands each
 		// domain on the floor of its tier (base at the bottom, the Owner on
 		// top), read from this table and not placed by hand.
 		if d.Tier == nil || *d.Tier < 0 {
@@ -142,8 +142,7 @@ func TestLedgerTypesAndTopicsAreTheClosedVocabulary(t *testing.T) {
 	clause = clause[:strings.Index(clause, ";")]
 	// Since 0041 the ledger's own types are listed one by one and the bus
 	// topics are allowed by their shape (event_type ~ '...'): the register is
-	// their closed set, so a new topic needs no migration (the Owner,
-	// 2026-11-20: a module that joins must not mean a code change).
+	// their closed set, so a new topic needs no migration (ISSUE-34).
 	shapeAt := strings.Index(clause, "event_type ~ '")
 	if shapeAt < 0 {
 		t.Fatal("event_type_closed has no shape for the bus topics")

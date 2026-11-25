@@ -5,7 +5,7 @@ import { AXIS, funnelRadius, type Funnel } from './busNerveDirect'
 
 /**
  * The nerve map's renderer, loaded only on the Bus page (a chunk of its own).
- * Its look follows the Owner's reference (2026-11-17): not balls but nebulae,
+ * Its look (ISSUE-53): not balls but nebulae,
  * thousands of small warm lights of different sizes that brighten where they
  * overlap, joined by faint silk. A domain is a cloud of points: one for each
  * of its parts and a dust point for each event of the last day, fading with
@@ -163,8 +163,8 @@ function driftForce(nodes: () => SimNode[], dims: 2 | 3, live: () => boolean) {
 }
 
 /**
- * Where a node starts, from its id alone (the Owner: the clouds must be where
- * they were last time, so he knows his way): a domain on a ring at an angle
+ * Where a node starts, from its id alone (ISSUE-53: the clouds stay where
+ * they were last time, so the reader knows the way): a domain on a ring at an angle
  * fixed by its name; a part near the middle. Same input, same layout.
  */
 function homeStart(n: GNode, dims: 2 | 3): { x: number; y: number; z: number } {
@@ -573,7 +573,7 @@ export default function BusNerveGraph({ nodes, links, arcs = [], funnel, flat, s
             }
             b.sig = cloudSig(n)
           }
-          // The direct view: arcs between domains in two halves (sender to the bus, the bus to the reader), no floors: the tiers show by height (the Owner, 11-17).
+          // The direct view: arcs between domains in two halves (sender to the bus, the bus to the reader), no floors: the tiers show by height (ISSUE-53).
           class Part extends THREE.Curve<import('three').Vector3> {
             constructor(private c: import('three').Curve<import('three').Vector3>, private a: number, private b: number) { super() }
             getPoint(t: number, target = new THREE.Vector3()) { return this.c.getPoint(this.a + (this.b - this.a) * t, target) }

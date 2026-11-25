@@ -97,7 +97,7 @@ func TestRowsAreTheDispatchers(t *testing.T) {
 	}
 }
 
-// 2026-11-16 (the Owner: users come and go by configuration): a tenant's
+// ISSUE-34 (users come and go by configuration): a tenant's
 // rows are dispatched because its file is there, a row limited to STG is not
 // dispatched in PROD, and when a row or a tenant leaves, its consumer is
 // named stale so the dispatcher removes it.
