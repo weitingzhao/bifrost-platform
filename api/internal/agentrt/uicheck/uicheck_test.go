@@ -112,3 +112,38 @@ func TestAnUnwiredCheckDoesNothing(t *testing.T) {
 		t.Fatal(did, err)
 	}
 }
+
+// Origin: R0E de-duplication (2026-11-25): the ui push's own platform run is
+// taken as the check; a red one of those may be a flake, so the commit is
+// checked again with a run of the loop's own before it is kept off the pin.
+func TestARedPushRunIsCheckedAgainBeforeTheCommitIsBlocked(t *testing.T) {
+	w := &world{ui: uiA, platform: plt, pin: uicheck.Pin{Commit: uiB}, has: true, status: map[string]string{}}
+	c := w.check()
+	pushed := true
+	c.Ensure = func(_ context.Context, platform, ui string) (string, error) {
+		if pushed {
+			w.ensured = append(w.ensured, "ci-platform-push")
+			return "ci-platform-push", nil
+		}
+		name := "ui-check-" + ui[:12] + "-" + platform[:8]
+		w.ensured = append(w.ensured, name)
+		return name, nil
+	}
+	c.Own = func(run string) bool { return strings.HasPrefix(run, "ui-check-") }
+	pass(t, c)
+	w.status["ci-platform-push"] = "Failed"
+	pushed = false
+	if did := pass(t, c); did != "" || w.pin.BlockedCommit != "" {
+		t.Fatalf("a red push run blocks nothing: %q %+v", did, w.pin)
+	}
+	pass(t, c)
+	own := w.ensured[len(w.ensured)-1]
+	if !strings.HasPrefix(own, "ui-check-") {
+		t.Fatalf("the commit is checked again with an own run: %v", w.ensured)
+	}
+	// Positive control: the own run's red does block.
+	w.status[own] = "Failed"
+	if did := pass(t, c); did != "blocked "+own || w.pin.BlockedCommit != uiA {
+		t.Fatalf("an own red run blocks: %q %+v", did, w.pin)
+	}
+}

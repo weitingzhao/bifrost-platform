@@ -110,6 +110,7 @@ func wireUICheck(c *controller.Controller, lent *CILent) {
 			return s, err
 		},
 		Logf: c.Logf,
+		Own:  func(run string) bool { return strings.HasPrefix(run, "ui-check-") },
 	}
 	c.Loops = append(c.Loops, controller.Loop{Name: "agentrt-ui-check", Every: uicheck.Every, Run: func(ctx context.Context) error {
 		passCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)

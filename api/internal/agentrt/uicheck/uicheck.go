@@ -45,6 +45,10 @@ type Check struct {
 	Status func(ctx context.Context, run string) (string, error)
 	Now    func() time.Time
 	Logf   func(format string, args ...any)
+	// Own says whether a run is one Ensure created; nil, every run is. A red
+	// run that is not (the ui push's own run, taken as the check) is checked
+	// again with one that is before the commit is kept off the pin.
+	Own func(run string) bool
 
 	mu      sync.Mutex
 	ui, run string // the ui commit under check and its run
@@ -124,6 +128,11 @@ func (c *Check) Pass(ctx context.Context) (string, error) {
 		c.ui, c.run = "", ""
 		return "moved " + short(head), nil
 	case "Failed":
+		if c.Own != nil && !c.Own(c.run) {
+			c.logf("agentrt-ui-check: %s failed; checking ui %s again with a run of its own", c.run, short(head))
+			c.ui, c.run = "", "" // Ensure passes over a failed push run
+			return "", nil
+		}
 		next := pin
 		next.BlockedCommit, next.BlockedRun, next.BlockedAt = head, c.run, c.now().UTC().Format(time.RFC3339)
 		if err := c.SetPin(ctx, next); err != nil {
