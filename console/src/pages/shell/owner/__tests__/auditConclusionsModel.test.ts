@@ -1,9 +1,9 @@
 // 2026-11-24 箭10: the audit-conclusions page (the Owner: 「审计基于立法的标准出结果，来监督行政」), built to the
 // audit line's brief (domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). The shapes are PROD's as read that
-// day: law 96 (R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
+// day: law 96 (then law 83; R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
 import { describe, expect, it } from 'vitest'
 import type { RegisterLaw } from '@/api/lawRegister'
-import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, dailyCards, ordered, readingOf, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
+import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, approvalsReading, ordered, periodOf, readingOf, readsApprovals, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
 
 const law = (n: string, grades: string[], counts = { reached: 0, missed: 0, unmeasured: 0 }): RegisterLaw => ({
   law: n, version: 2, op: 'amend', text: 'Law ' + n, status: '已批', source: 'card', at: '2026-11-24T00:00:00Z', plan_item: 'R6:6.' + n, counts,
@@ -93,12 +93,20 @@ describe('audit conclusions', () => {
     expect(refsOf('标准版本 appr_648987184f28813a，无别的')).toEqual([])
   })
 
-  it('counts law 91 s1 from the approvals readings, only the days since the law was said', () => {
-    const readings = { days: [{ day: '2026-11-24', to_owner: { daily: [1, 2] } }, { day: '2026-11-23', to_owner: { daily: [1, 2, 3] } }] }
-    expect(dailyCards(readings, '2026-11-24')).toMatch(/^2026-11-24: 2 daily cards/)
-    expect(dailyCards(readings, '2026-11-24')).not.toContain('2026-11-23')
-    // Controls: not read, and the law's date not read, are said so.
-    expect(dailyCards(undefined, '2026-11-24')).toBe('not read')
-    expect(dailyCards(readings, undefined)).toContain('not known')
+  // 2026-11-24 the legislation line (#749): law 85 is archived and its standard moves into law 91 s1 ("每周为 0"). The
+  // reading was tied to "law 85 s1" and would have hung on nothing; it now follows the standard that declares the read.
+  it('gives the approvals readings to the standard that declares them, per week or per day as it says', () => {
+    const readings = { days: [{ day: '2026-11-25', to_owner: { daily: [1] } }, { day: '2026-11-24', to_owner: { daily: [1, 2] } }, { day: '2026-11-23', to_owner: { daily: [1, 2, 3] } }] }
+    const weekly = { standard: '推到 Owner 手机上的卡里，既不是修法票也不属于六类的，每周为 0', method: 'GET /api/v1/readings/approvals 的 days[].to_owner.daily', saidOn: '2026-11-24' }
+    expect(readsApprovals(weekly)).toBe(true)
+    expect(periodOf(weekly)).toBe('week')
+    expect(approvalsReading(weekly, readings)).toMatch(/^3 cards in the last 2 day\(s\) · 2026-11-25: 1 · 2026-11-24: 2/)
+    const daily = { ...weekly, standard: '日常卡每天为 0' }
+    expect(periodOf(daily)).toBe('day')
+    expect(approvalsReading(daily, readings)).toMatch(/^2026-11-25: 1 · 2026-11-24: 2 \(/)
+    // Controls: another standard has no such reading; not read and no law date are said so.
+    expect(readsApprovals({ standard: '整套 CI 照过', method: '每日 13:30Z 整套 CI' })).toBe(false)
+    expect(approvalsReading(weekly, undefined)).toBe('not read')
+    expect(approvalsReading({ ...weekly, saidOn: undefined }, readings)).toContain('not known')
   })
 })

@@ -9,7 +9,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
-import { engineAuditOn, auditDetail, auditTable, auditVerdict, auditWord, dailyCards, standardsOf, unmeasuredList, withEvents, type ApprovalReadings, type PlanEvent } from './auditConclusionsModel'
+import { engineAuditOn, auditDetail, auditTable, auditVerdict, auditWord, approvalsReading, readsApprovals, standardsOf, unmeasuredList, withEvents, type ApprovalReadings, type PlanEvent, type StandardRow } from './auditConclusionsModel'
 
 const LAMP = { ok: 'ok', warn: 'degraded', unknown: 'unknown', pending: 'unknown' } as const
 const AGENTS = '/engine/v1/agents'
@@ -36,7 +36,7 @@ const stepEvents = (viaEngine: boolean, node: string, signal: AbortSignal) => (v
   ? readAgents<{ events?: PlanEvent[] }>({ read: 'plan-step', node }, signal)
   : readDirect<{ events?: PlanEvent[] }>('Plan step', `/api/v1/agentrt/plan/${encodeURIComponent(node)}`, signal)).then(d => d.events ?? [])
 
-/** The approvals readings (law 91 s1), either way. */
+/** The approvals readings, either way (for the standard that declares them). */
 const approvalReadings = (viaEngine: boolean, signal: AbortSignal) => viaEngine
   ? readAgents<ApprovalReadings>({ read: 'approval-readings' }, signal)
   : readDirect<ApprovalReadings>('Approval readings', '/api/v1/readings/approvals', signal)
@@ -76,15 +76,15 @@ export function AuditConclusions() {
     })),
   })
   const rows = useMemo(() => base.map((r, i) => withEvents(r, steps[i]?.data)), [base, steps])
-  // Law 91 s1 is read from the approvals readings (the audit line, 2026-11-24): only when the register has that standard.
-  const wants85 = base.some(r => r.law === '85' && r.label === 's1')
+  // The approvals readings go to whichever standard declares them in how it is measured (never a law number).
+  const wantsReadings = base.some(readsApprovals)
   const readings = useQuery({
     queryKey: viaEngine ? engineQueryKey(AGENTS, { read: 'approval-readings' }) : ['readings', 'approvals'],
     queryFn: ({ signal }) => approvalReadings(viaEngine, signal),
-    enabled: ready && wants85, staleTime: 60_000, retry: false,
+    enabled: ready && wantsReadings, staleTime: 60_000, retry: false,
   })
-  const extraFor = (r: { law: string; label: string } | undefined) => r && r.law === '85' && r.label === 's1'
-    ? { label: 'Daily cards to the Owner', text: readings.isError ? `not read: ${readings.error instanceof Error ? readings.error.message : ''}` : dailyCards(readings.data, laws?.find(l => l.law === '85')?.said_on) }
+  const extraFor = (r: StandardRow | undefined) => r && readsApprovals(r)
+    ? { label: 'Cards to the Owner (not law cards, not the six classes)', text: readings.isError ? `not read: ${readings.error instanceof Error ? readings.error.message : ''}` : approvalsReading(r, readings.data) }
     : undefined
   const lacks = useMemo(() => unmeasuredList(rows), [rows])
   const byStep = useMemo(() => new Map(rows.map(r => [r.step, r])), [rows])

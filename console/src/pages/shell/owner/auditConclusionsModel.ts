@@ -13,7 +13,7 @@ import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
  * Everything is read through the UI engine:
  * - /engine/v1/agents?read=laws for the register;
  * - read=plan-step for a step's events;
- * - read=approval-readings for law 91 s1.
+ * - read=approval-readings for the standard that declares that read (law 91 s1 now).
  */
 
 /**
@@ -59,6 +59,8 @@ export type StandardRow = {
   grade: string
   result: Result
   card?: string
+  /** The law's said_on (GET /laws): from when a reading of it counts. */
+  saidOn?: string
   attribution: Attribution | null | undefined
   /** undefined: the step's events are not read (yet); else what they say. */
   reading?: Reading | null
@@ -133,6 +135,7 @@ export function standardsOf(laws: readonly RegisterLaw[]): StandardRow[] {
         // A structured attribution is read with the register; otherwise the step's notes are read (undefined until they are).
         attribution: structured ?? undefined,
         ...(s.version ? { card: s.version } : {}),
+        ...(l.said_on ? { saidOn: l.said_on } : {}),
       }
     }))
 }
@@ -274,14 +277,28 @@ export function auditDetail(r: StandardRow | undefined, extra?: { label: string;
 }
 
 /**
- * Law 91 s1 (the audit line): the daily cards pushed to the Owner, per day, newest first; only the days since the law
- * was said count (its said_on from GET /laws; the cards before it declared no class).
+ * The approvals readings (GET /api/v1/readings/approvals): the cards pushed to the Owner that are neither a law card nor
+ * one of the six classes ("daily"). They belong to whichever standard declares that read in how it is measured, not to
+ * a law number: law 85's standard moved to law 91 (the legislation line, 2026-11-24, #749), and the next move needs no
+ * change here. Counted per day or per week as the standard's own words say, only from the law's said_on.
  */
 export type ApprovalReadings = { days?: { day: string; to_owner?: { daily?: unknown[] } }[] }
-export function dailyCards(r: ApprovalReadings | undefined, from: string | undefined): string {
-  if (!r?.days) return 'not read'
+export const readsApprovals = (r: Pick<StandardRow, 'method' | 'standard'>): boolean => /readings\/approvals/.test(r.method + ' ' + r.standard)
+export const periodOf = (r: Pick<StandardRow, 'method' | 'standard'>): 'week' | 'day' => /每周|按周|per week|weekly/i.test(r.standard + ' ' + r.method) ? 'week' : 'day'
+
+export function approvalsReading(r: Pick<StandardRow, 'method' | 'standard' | 'saidOn'>, data: ApprovalReadings | undefined): string {
+  if (!data?.days) return 'not read'
+  const from = r.saidOn
   if (!from) return 'the law’s date is not read, so the days that count are not known'
-  const days = r.days.filter(d => d.day >= from.slice(0, 10))
+  const days = data.days.filter(d => d.day >= from.slice(0, 10))
   if (days.length === 0) return `no day since ${from} yet`
-  return days.map(d => `${d.day}: ${d.to_owner?.daily?.length ?? 0} daily cards`).join(' · ') + ` (GET /api/v1/readings/approvals, kept by the system; days since ${from})`
+  const n = (d: { to_owner?: { daily?: unknown[] } }) => d.to_owner?.daily?.length ?? 0
+  const perDay = days.map(d => `${d.day}: ${n(d)}`).join(' · ')
+  const source = ` (GET /api/v1/readings/approvals, kept by the system; days since ${from}; the first day may hold cards from before the law)`
+  if (periodOf(r) === 'week') {
+    // The standard counts per week: the newest seven days held, summed, and each day shown.
+    const week = days.slice(0, 7)
+    return `${week.reduce((t, d) => t + n(d), 0)} cards in the last ${week.length} day(s) · ${perDay}` + source
+  }
+  return perDay + source
 }
