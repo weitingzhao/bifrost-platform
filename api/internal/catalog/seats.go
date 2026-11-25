@@ -2,9 +2,14 @@ package catalog
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"path"
+	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Which thread sits which seat of which domain (2026-11-25, UI / Engine for
@@ -28,6 +33,10 @@ type Seat struct {
 	Charter     string   `json:"charter,omitempty"`
 	Started     string   `json:"started,omitempty"`
 	Ended       string   `json:"ended,omitempty"`
+	Account     string   `json:"account,omitempty"`
+	RunKey      string   `json:"run_key,omitempty"`
+	InvitedBy   string   `json:"invited_by,omitempty"`
+	Note        string   `json:"note,omitempty"`
 }
 
 // SeatsDoc is GET /catalog/seats.
@@ -41,7 +50,65 @@ type SeatsDoc struct {
 	Seats  []Seat    `json:"seats"`
 	// Domains are the table's domains, id to name.
 	Domains map[string]string `json:"domains"`
-	Note    string            `json:"note,omitempty"`
+	// Roster is the roster's sections as written (seats, temporary,
+	// outside_seats, humans, accounts, every field), and Cards each seat's
+	// identity card beside it (cards/<seat>.yaml) as written, by file name
+	// (Crew 2026-11-23: one read for the City and Agents, with the cards).
+	Roster map[string]any `json:"roster,omitempty"`
+	Cards  map[string]any `json:"cards,omitempty"`
+	Note   string         `json:"note,omitempty"`
+}
+
+const keptRosterRaw = "seats-as-written"
+
+type rosterAsWritten struct {
+	Roster map[string]any `json:"roster"`
+	Cards  map[string]any `json:"cards"`
+}
+
+// RosterSections are the roster's sections served as written.
+var RosterSections = []string{"seats", "temporary", "outside_seats", "humans", "accounts"}
+
+// keepRosterAsWritten keeps the roster's sections and the cards beside it as
+// written; a card that does not parse is left out and logged.
+func (s *Scanner) keepRosterAsWritten(repo string, t Tree, file string, raw []byte) {
+	var all map[string]any
+	if err := yaml.Unmarshal(raw, &all); err != nil {
+		return
+	}
+	k := rosterAsWritten{Roster: map[string]any{}, Cards: map[string]any{}}
+	for _, sec := range RosterSections {
+		if v, ok := all[sec]; ok && v != nil {
+			k.Roster[sec] = v
+		} else {
+			k.Roster[sec] = []any{}
+		}
+	}
+	dir := path.Join(path.Dir(file), "cards")
+	var cards []string
+	for _, f := range t.Files {
+		if path.Dir(f) == dir && strings.HasSuffix(f, ".yaml") {
+			cards = append(cards, f)
+		}
+	}
+	sort.Strings(cards)
+	for _, f := range cards {
+		b, ok, err := t.Read(f)
+		if err != nil || !ok {
+			continue
+		}
+		var card any
+		if err := yaml.Unmarshal(b, &card); err != nil {
+			slog.Warn("catalog: seat card", "repo", repo, "file", f, "err", err)
+			continue
+		}
+		k.Cards[path.Base(f)] = card
+	}
+	if out, err := json.Marshal(k); err == nil {
+		if err := s.kept().Write(keptRosterRaw, out); err != nil {
+			slog.Warn("catalog: keep roster as written", "err", err)
+		}
+	}
 }
 
 const keptSeatsAt = "seats-at"
@@ -76,9 +143,16 @@ func (s *Scanner) seatsDoc() SeatsDoc {
 	if at, err := s.kept().Read(keptSeatsAt); err == nil && at != nil {
 		_ = json.Unmarshal(at, &doc.At)
 	}
-	for _, r := range k.Rows {
+	if raw, err := s.kept().Read(keptRosterRaw); err == nil && raw != nil {
+		var w rosterAsWritten
+		if json.Unmarshal(raw, &w) == nil {
+			doc.Roster, doc.Cards = w.Roster, w.Cards
+		}
+	}
+	for _, r := range append(append([]seatRow{}, k.Rows...), k.Outside...) {
 		x := Seat{Seat: r.ID, Name: r.Name, Thread: thread(r.Session), AlsoDomains: r.AlsoDomainIDs, Kind: r.Kind,
-			Harness: r.Harness, Mailbox: r.Mailbox, Charter: r.Charter, Started: r.Started, Ended: r.Ended}
+			Harness: r.Harness, Mailbox: r.Mailbox, Charter: r.Charter, Started: r.Started, Ended: r.Ended,
+			Account: r.Account, RunKey: r.RunKey, InvitedBy: r.InvitedBy, Note: r.Note}
 		if r.DomainID != nil {
 			x.Domain, x.DomainName = *r.DomainID, doc.Domains[*r.DomainID]
 		}

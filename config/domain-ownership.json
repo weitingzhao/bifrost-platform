@@ -594,6 +594,7 @@
       "name": "Workshop",
       "tier": 1,
       "source": "domains/11-station/charter.md",
+      "self": "bifrost-trade-infra:scripts/agent-host/admission.yaml",
       "contracts": {}
     },
     {

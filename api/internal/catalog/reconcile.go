@@ -129,6 +129,9 @@ type keptSeatRoster struct {
 	Path     string    `json:"path"`
 	Charters []string  `json:"charters"`
 	Rows     []seatRow `json:"rows"`
+	// Outside are the threads that sit no seat but send and receive
+	// (outside_seats); not compared with the charter pages.
+	Outside []seatRow `json:"outside,omitempty"`
 }
 
 // seatSource is where the index says the seat roster is ("<repo>:<path>").
@@ -169,11 +172,13 @@ func (s *Scanner) keepSeats(repo string, t Tree) {
 	var doc struct {
 		SeatRows  []seatRow `yaml:"seats"`
 		Temporary []seatRow `yaml:"temporary"`
+		Outside   []seatRow `yaml:"outside_seats"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		slog.Warn("catalog: seats", "err", err)
 		return
 	}
+	s.keepRosterAsWritten(repo, t, file, raw)
 	k := keptSeatRoster{Repo: repo, Commit: t.Commit, Path: file, Charters: []string{}}
 	dir := path.Dir(file)
 	for _, f := range t.Files {
@@ -183,6 +188,7 @@ func (s *Scanner) keepSeats(repo string, t Tree) {
 	}
 	sort.Strings(k.Charters)
 	k.Rows = append(append([]seatRow{}, doc.SeatRows...), doc.Temporary...)
+	k.Outside = doc.Outside
 	if out, err := json.Marshal(k); err == nil {
 		if err := s.kept().Write(keptSeats, out); err != nil {
 			slog.Warn("catalog: keep seats", "err", err)
@@ -211,6 +217,9 @@ type seatRow struct {
 	Mailbox string `json:"mailbox,omitempty" yaml:"mailbox"`
 	Started string `json:"started,omitempty" yaml:"started"`
 	Ended   string `json:"ended,omitempty" yaml:"ended"`
+	Account string `json:"account,omitempty" yaml:"account"`
+	RunKey  string `json:"run_key,omitempty" yaml:"run_key"`
+	Note    string `json:"note,omitempty" yaml:"note"`
 }
 
 // seatCheck compares the roster with its charter pages and the domains
