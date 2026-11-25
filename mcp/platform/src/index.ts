@@ -44,7 +44,7 @@ import { registerMessageTools } from './registerMessages.js'
 import { getReleaseWindow, holdReleaseWindow, releaseReleaseWindow } from './windowTools.js'
 import { presenceSkip, registerPresence } from './presence.js'
 import { registerPlanImportTools } from './registerPlanImport.js'
-import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION, packageUsersPath, GET_PACKAGE_USERS_DESCRIPTION, taskPath, FIND_BY_TASK_DESCRIPTION, SEATS_PATH, GET_SEATS_DESCRIPTION } from './catalogTools.js'
+import { CATALOG_INDEX_PATH, GET_CATALOG_INDEX_DESCRIPTION, GET_OWNER_DESCRIPTION, GET_UNPERCEIVED_DESCRIPTION, ownerPath, unperceivedPath, CATALOG_STATUS_PATH, GET_DOMAIN_STATUS_DESCRIPTION, domainPath, GET_DOMAIN_DESCRIPTION, packageUsersPath, GET_PACKAGE_USERS_DESCRIPTION, taskPath, FIND_BY_TASK_DESCRIPTION, SEATS_PATH, GET_SEATS_DESCRIPTION, repoUsersPath, GET_REPO_USERS_DESCRIPTION } from './catalogTools.js'
 import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopePath } from './unitsTools.js'
 import { BUS_WAIT_MAX_SECONDS, GET_BUS_STATES_DESCRIPTION, LIST_REGRESSIONS_DESCRIPTION, MARK_REGRESSION_FIXED_DESCRIPTION, RECORD_PRIVILEGE_USE_DESCRIPTION, REPORT_REGRESSION_DESCRIPTION, WAIT_FOR_EVENT_DESCRIPTION, busEventsPath, busStatesPath, regressionsPath } from './busTools.js'
 
@@ -627,6 +627,13 @@ reg(
   GET_SEATS_DESCRIPTION,
   {},
   async () => jsonResult(await platformGet(SEATS_PATH)),
+)
+
+reg(
+  'get_repo_users',
+  GET_REPO_USERS_DESCRIPTION,
+  { repo: z.string().min(1).max(100).optional().describe('A repository name as Gitea has it; leave out for every repository') },
+  async ({ repo }) => jsonResult(await platformGet(repoUsersPath(repo))),
 )
 
 reg(

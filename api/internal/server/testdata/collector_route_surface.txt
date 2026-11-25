@@ -241,3 +241,4 @@ deny	GET /api/v1/catalog/status
 deny	GET /api/v1/catalog/domain
 deny	GET /api/v1/catalog/users
 deny	GET /api/v1/catalog/seats
+deny	GET /api/v1/catalog/repo-users

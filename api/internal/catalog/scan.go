@@ -233,6 +233,9 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 				s.keepRepoRegistry(repo, t)
 				s.keepSelf(repo, t)
 			}
+			if repo != DatabaseRepo {
+				s.keepRepoRefs(repo, t, now)
+			}
 		}
 	}
 	p.ScannedAt = now
