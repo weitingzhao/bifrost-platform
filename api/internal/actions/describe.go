@@ -69,6 +69,7 @@ var notifySafeKeys = map[string][]string{
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 	"agentrt_rule_approve":       {"env", "rule_id", "rule_version"},
 	LawAmendAction:               {"op", "law"},
+	OwnerDecisionAction:          {"law", "source"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -123,6 +124,8 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Env, d.Summary = p("env"), describeRuleApprove(ctx, params)
 	case LawAmendAction:
 		d.Env, d.Summary = "law", lawAmendSummary(ctx, params)
+	case OwnerDecisionAction:
+		d.Env, d.Summary = "law", ownerDecisionSummary(params)
 	case "trigger_cnpg_backup":
 		d.Env, d.Summary = "data", "On-demand CNPG backup"
 	case "repair_cnpg_wal_store":

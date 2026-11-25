@@ -241,6 +241,7 @@ func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
 	actions.RegisterExecutor(RuleApproveAction, s.ruleApprove)
 	actions.RegisterExecutor(actions.LawAmendAction, actions.ExecuteLawAmend)
+	actions.RegisterExecutor(actions.OwnerDecisionAction, actions.ExecuteOwnerDecision)
 	actions.RegisterExecutor(migrationActionID, s.runAgentrtMigration)
 	if s.work != nil {
 		svc := s.work.Svc

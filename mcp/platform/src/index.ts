@@ -659,7 +659,7 @@ reg(
 
 reg(
   'get_approval_readings',
-  'The approval readings (read-only, viewer): what the approval records say, counted by day in the Owner\'s zone. Returns {as_of, zone, retained, oldest, days: [{day, groups: [{requester, requests, approved, executed, failed, ...}], to_owner: {law, six, daily}}], open: [cards not finished, whose move and since when], wait_timeouts}. to_owner splits each day\'s cards that reached the Owner: law (a change of law), six (the requester named one of the six classes, owner_class H1-H6) and daily (everything else: the gap LAW-6 closes to 0). Each list holds card numbers. Days before oldest are not kept, not zero.',
+  'The approval readings (read-only, viewer): what the approval records say, counted by day in the Owner\'s zone. Returns {as_of, zone, retained, oldest, days: [{day, groups: [{requester, requests, approved, executed, failed, ...}], to_owner: {law, six, hardware, decision, daily}}], open: [cards not finished, whose move and since when], wait_timeouts}. to_owner splits each day\'s cards that reached the Owner: law (a change of law), six (the requester named one of the six classes, owner_class H1-H6), hardware (a hardware, network or architecture change: owner_class HW, or an action that always is one), decision (decision cards, owner_decision) and daily (everything else: the gap LAW-6 二 closes to 0). Each list holds card numbers. Days before oldest are not kept, not zero.',
   {},
   async () => jsonResult(await platformGet('/api/v1/readings/approvals')),
 )
@@ -902,7 +902,7 @@ reg(
     work_id: z.string().optional().describe('Work item this request belongs to: W-n, TD-n or LANE-name'),
     requester_thread: z.string().optional().describe('One line naming the requesting thread'),
     drill: z.boolean().optional().describe('A drill: shown on the pages and in the notice as one, never approved, nothing runs'),
-    owner_class: z.enum(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']).optional().describe('Only when this request is one of the six classes that stay the Owner\'s: H1 trading and money, H2 credentials and secrets, H3 deleting or changing data, H4 Trade PROD release, H5 signed rules and the trust root, H6 auto mode rules. Leave it out otherwise: the readings count such a card as daily, a card that should not have reached the Owner'),
+    owner_class: z.enum(['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HW']).optional().describe('Only when this request is one of the six classes that stay the Owner\'s: H1 trading and money, H2 credentials and secrets, H3 deleting or changing data, H4 Trade PROD release, H5 signed rules and the trust root, H6 auto mode rules; or HW, a hardware, network or architecture change (LAW-6 二 3). Leave it out otherwise: the readings count such a card as daily, a card that should not have reached the Owner'),
   },
   async ({ action, params, reason, rollback, work_id, requester_thread, drill, owner_class }) =>
     jsonResult(await requestAction({ action, params, reason, rollback, work_id, requester_thread, drill, owner_class })),

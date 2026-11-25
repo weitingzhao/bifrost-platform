@@ -51,18 +51,23 @@ type Day struct {
 	Day    string  `json:"day"`
 	Groups []Group `json:"groups"`
 	// ToOwner is every card of the day that reached the Owner, split by
-	// whether it should have (LAW-6: only a change of law and the six
-	// classes). Daily is the gap
-	// the approvals line closes to 0. Six is the requester's own claim
-	// (owner_class); drills are left out.
+	// whether it should have (LAW-6 二: a change of law, the six classes,
+	// hardware/network/architecture at this stage, and decision cards).
+	// Daily is the gap the approvals line closes to 0. Six is the
+	// requester's own claim (owner_class); drills are left out.
 	ToOwner ToOwner `json:"to_owner"`
 }
 
 // ToOwner lists request numbers, ascending.
 type ToOwner struct {
-	Law   []int `json:"law"`
-	Six   []int `json:"six"`
-	Daily []int `json:"daily"`
+	Law []int `json:"law"`
+	Six []int `json:"six"`
+	// Hardware is LAW-6 二 3: hardware, network and architecture changes
+	// (owner_class HW, or an action that always is one).
+	Hardware []int `json:"hardware"`
+	// Decision is the decision cards (owner_decision, LAW-6 三).
+	Decision []int `json:"decision"`
+	Daily    []int `json:"daily"`
 	// SixByClass is Six split by the class the requester named (H1-H6);
 	// every class is present, empty when none.
 	SixByClass map[string][]int `json:"six_by_class"`
@@ -70,7 +75,7 @@ type ToOwner struct {
 
 // newToOwner has every list and every class present.
 func newToOwner() *ToOwner {
-	t := &ToOwner{Law: []int{}, Six: []int{}, Daily: []int{}, SixByClass: map[string][]int{}}
+	t := &ToOwner{Law: []int{}, Six: []int{}, Hardware: []int{}, Decision: []int{}, Daily: []int{}, SixByClass: map[string][]int{}}
 	for c := range approvals.SixClasses {
 		t.SixByClass[c] = []int{}
 	}
@@ -250,11 +255,15 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 			toOwner[d] = t
 		}
 		switch {
+		case a.Action == approvals.OwnerDecisionAction:
+			t.Decision = append(t.Decision, a.Number)
 		case approvals.TrackOf(a.Action) == approvals.TrackLaw:
 			t.Law = append(t.Law, a.Number)
-		case a.OwnerClass != "":
+		case approvals.SixClasses[a.OwnerClass] != "":
 			t.Six = append(t.Six, a.Number)
 			t.SixByClass[a.OwnerClass] = append(t.SixByClass[a.OwnerClass], a.Number)
+		case approvals.IsHardware(a):
+			t.Hardware = append(t.Hardware, a.Number)
 		default:
 			t.Daily = append(t.Daily, a.Number)
 		}
@@ -294,6 +303,8 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 		}
 		sort.Ints(t.Law)
 		sort.Ints(t.Six)
+		sort.Ints(t.Hardware)
+		sort.Ints(t.Decision)
 		sort.Ints(t.Daily)
 		out.Days = append(out.Days, Day{Day: day, Groups: list, ToOwner: *t})
 	}

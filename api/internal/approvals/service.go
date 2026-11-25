@@ -197,8 +197,8 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	if work != "" && (len(work) > 40 || !workIDPattern.MatchString(work)) {
 		return fail(400, "work_id must look like W-n, TD-n or LANE-name")
 	}
-	if ownerClass != "" && SixClasses[ownerClass] == "" {
-		return fail(400, "owner_class must be one of H1-H6 (the six classes that stay the Owner's)")
+	if ownerClass != "" && ownerClass != OwnerClassHardware && SixClasses[ownerClass] == "" {
+		return fail(400, "owner_class must be one of H1-H6 (the six classes that stay the Owner's) or HW (a hardware, network or architecture change, LAW-6 二 3)")
 	}
 	act, ok := actions.ByID(action)
 	if !ok {

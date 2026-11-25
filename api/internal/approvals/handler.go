@@ -133,6 +133,23 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		}
 		list = kept
 	}
+	// item: the executed owner_decision cards whose scope names it
+	// (ISSUE-105), whatever status was asked for.
+	if item := strings.TrimSpace(r.URL.Query().Get("item")); item != "" {
+		if status != "all" {
+			if list, code, body = s.list("all"); code != http.StatusOK {
+				writeJSON(w, code, body)
+				return
+			}
+		}
+		kept := list[:0:0]
+		for _, a := range list {
+			if namesItem(a, item) {
+				kept = append(kept, a)
+			}
+		}
+		list = kept
+	}
 	ids := make([]string, 0, len(list))
 	for _, a := range list {
 		if a.Number > 0 {

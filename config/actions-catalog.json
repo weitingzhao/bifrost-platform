@@ -22,6 +22,7 @@
     "mark_regression_fixed",
     "market_data_delete",
     "market_data_heal",
+    "owner_decision",
     "owner_run_command",
     "plan_manifest",
     "poweroff_compute_node",

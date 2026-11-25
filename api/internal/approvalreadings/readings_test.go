@@ -127,13 +127,19 @@ func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
 		// 2026-11-25, #740 and #742: the Owner's own Console shutdown of the
 		// 4090 was counted as a daily card that reached him; he started it.
 		{Number: 6, Action: "poweroff_compute_node", Status: approvals.StatusExecuted, CreatedAt: at, InlineGPUShutdown: true},
+		// LAW-6 二 3 and 三 (#782, 2026-11-25): hardware/network/architecture
+		// changes and decision cards reach the Owner by law, not as daily.
+		{Number: 7, Action: "drain_node", Status: approvals.StatusExecuted, CreatedAt: at},
+		{Number: 8, Action: "owner_run_command", OwnerClass: "HW", Status: approvals.StatusExecuted, CreatedAt: at},
+		{Number: 9, Action: "owner_decision", Status: approvals.StatusPending, CreatedAt: at},
 	}
 	r := Compute(items, time.UTC, now)
 	if len(r.Days) != 1 {
 		t.Fatalf("days = %+v", r.Days)
 	}
 	got := r.Days[0].ToOwner
-	if fmt.Sprint(got.Law) != "[1]" || fmt.Sprint(got.Six) != "[2]" || fmt.Sprint(got.Daily) != "[3 4]" {
+	if fmt.Sprint(got.Law) != "[1]" || fmt.Sprint(got.Six) != "[2]" || fmt.Sprint(got.Daily) != "[3 4]" ||
+		fmt.Sprint(got.Hardware) != "[7 8]" || fmt.Sprint(got.Decision) != "[9]" {
 		t.Fatalf("to_owner = %+v", got)
 	}
 	// 2026-11-24, the UI line: a page counts each of the six classes and

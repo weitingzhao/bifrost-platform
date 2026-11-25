@@ -80,7 +80,9 @@ type Approval struct {
 	RequesterThread string `json:"requester_thread,omitempty"`
 	WorkID          string `json:"work_id,omitempty"`
 	// OwnerClass is the requester's claim that this card is one of the six
-	// classes that stay the Owner's (SixClasses); empty for a daily card.
+	// classes that stay the Owner's (SixClasses), or HW for a hardware,
+	// network or architecture change (OwnerClassHardware); empty for a daily
+	// card.
 	// Only a change of law and the six classes should reach the Owner
 	// (LAW-6); the readings count the rest as the gap.
 	OwnerClass string `json:"owner_class,omitempty"`
@@ -212,6 +214,26 @@ var SixClasses = map[string]string{
 	"H6": "auto mode rules",
 }
 
+// OwnerClassHardware is the requester's claim that a card is a hardware,
+// network or architecture change, the third kind of card LAW-6 二 still
+// sends to the Owner at this stage (LAW-15 一). Not one of the six classes.
+const OwnerClassHardware = "HW"
+
+// HardwareActions are the catalog actions that are always that third kind:
+// taking a machine down or restarting it, the home network, and installing
+// a cluster add-on (a new external dependency).
+var HardwareActions = map[string]bool{
+	"drain_node": true, "poweroff_compute_node": true, "rolling_reboot": true,
+	"unifi_firewall_apply": true, "unifi_client_fixed_ip": true,
+	"ensure_metrics_server": true, "ensure_kube_prometheus_stack": true,
+}
+
+// IsHardware says whether a card is a hardware, network or architecture
+// change: claimed so, or an action that always is.
+func IsHardware(a Approval) bool {
+	return a.OwnerClass == OwnerClassHardware || HardwareActions[a.Action]
+}
+
 // The two tracks of cards.
 const (
 	TrackLaw   = "law"
@@ -220,10 +242,38 @@ const (
 
 // TrackOf names the track of an action's cards.
 func TrackOf(action string) string {
-	if action == "law_amend" {
+	if action == "law_amend" || action == OwnerDecisionAction {
 		return TrackLaw
 	}
 	return TrackDaily
+}
+
+// OwnerDecisionAction is the card that keeps one decision of the Owner as a
+// record (actions.OwnerDecisionAction; ISSUE-105). It goes with the law
+// tickets: it is the Owner's decision, not a daily card.
+const OwnerDecisionAction = "owner_decision"
+
+// namesItem says whether an executed owner_decision card lists item in its
+// scope (params.items).
+func namesItem(a Approval, item string) bool {
+	if a.Action != OwnerDecisionAction || a.Status != StatusExecuted {
+		return false
+	}
+	switch v := a.Params["items"].(type) {
+	case []any:
+		for _, x := range v {
+			if s, _ := x.(string); s == item {
+				return true
+			}
+		}
+	case []string:
+		for _, s := range v {
+			if s == item {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // DailyCardNote is what the requesting thread reads back when it builds a
@@ -238,7 +288,7 @@ const DailyCardNote = "daily card: it goes to the Owner's phone although it is n
 // toOwnerNote is empty for law tickets, six-class cards, drills and the
 // Owner's own inline shutdown; DailyCardNote otherwise.
 func toOwnerNote(a Approval) string {
-	if a.Drill || a.InlineGPUShutdown || a.OwnerClass != "" || TrackOf(a.Action) == TrackLaw {
+	if a.Drill || a.InlineGPUShutdown || a.OwnerClass != "" || IsHardware(a) || TrackOf(a.Action) == TrackLaw {
 		return ""
 	}
 	return DailyCardNote

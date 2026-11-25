@@ -13,6 +13,9 @@ func (s *Server) approvalCreateCheck(ctx context.Context, action string, params 
 	if action == actions.LawAmendAction {
 		return actions.CheckLawAmend(ctx, params)
 	}
+	if action == actions.OwnerDecisionAction {
+		return actions.CheckOwnerDecision(ctx, params)
+	}
 	if action == RuleApproveAction {
 		return s.ruleApproveCreateCheck(ctx, params)
 	}
