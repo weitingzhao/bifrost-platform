@@ -60,6 +60,7 @@ types:
   - {type: mission_proposed, domain: foundation}
   - {type: mission_state_changed, domain: foundation}
   - {type: note, domain: plan, note: "a free note on a plan node or an architecture row; planstore (2026-11-17, TD-583: every other record that was a note has its own type)"}
+  - {type: owner_said, domain: plan, note: "what the Owner said in a thread, recorded once (owner-said:<transcript>): his own words as the session transcript holds them, posted by the session hook; planstore ownersaid (migration 0048, 2026-11-25)"}
   - {type: owner_signoff, domain: plan}
   - {type: owner_wait_closed, domain: approvals}
   - {type: owner_wait_opened, domain: approvals}

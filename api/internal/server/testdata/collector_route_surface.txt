@@ -45,6 +45,8 @@ deny	GET /api/v1/agentrt/plan
 deny	GET /api/v1/agentrt/plan-view
 deny	GET /api/v1/agentrt/plan-pace
 deny	GET /api/v1/agentrt/laws
+deny	POST /api/v1/agentrt/owner-said
+deny	GET /api/v1/agentrt/owner-said
 deny	POST /api/v1/agentrt/plan/imports
 deny	POST /api/v1/agentrt/plan/proposals
 deny	GET /api/v1/agentrt/plan/{id}

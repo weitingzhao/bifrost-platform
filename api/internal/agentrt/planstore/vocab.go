@@ -33,6 +33,8 @@ var planTypes = []string{
 	"plan_step_attributed",
 	// A purged law's tombstone (lawpurge.go; migration 0047).
 	"law_purged",
+	// What the Owner said in a thread, recorded once (ownersaid.go; migration 0048).
+	"owner_said",
 	// note: a free note on a plan node (plannote) or an architecture row's
 	// note (planimport). The plan's since 2026-11-17 (TD-583); every other
 	// record that was a note has its own type now, and their old rows stay.
@@ -70,6 +72,8 @@ var planBodies = map[string][]eventlog.Field{
 		field("note_event_id", eventlog.Int, false), field("cause", eventlog.Str, true), field("destination", eventlog.Str, true), field("version", eventlog.Str, true)},
 	"plan_step_judged": {field("step", eventlog.Str, false), field("standard", eventlog.Str, false), field("grade", eventlog.Str, false),
 		field("note_event_id", eventlog.Int, false), field("version", eventlog.Str, true)},
+	"owner_said": {field("message_id", eventlog.Str, false), field("transcript", eventlog.Str, false), field("said_at", eventlog.Str, false),
+		field("text", eventlog.Str, false), field("thread", eventlog.Str, true), field("host", eventlog.Str, true), field("truncated", eventlog.Bool, true)},
 	"law_purged": {field("law", eventlog.Str, false), field("events", eventlog.Int, false), field("reason", eventlog.Str, false),
 		field("repealed_at", eventlog.Str, false), field("approval_ids", eventlog.IDs, true), field("code", eventlog.Str, true)},
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),

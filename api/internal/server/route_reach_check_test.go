@@ -41,6 +41,10 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
+	// 2026-11-25 (the Owner chose automatic collection of what he says): the
+	// session hook posts with a reporter token; every reader reads.
+	"POST /api/v1/agentrt/owner-said": {"reporter", "operator", "admin", "trade-satellite"},
+	"GET /api/v1/agentrt/owner-said":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/harness-preview/grants": {"admin"},
 	// 2026-11-22 (LAW-8, seen and felt; the CI line): why the PROD head-release
 	// loop released or held PROD, from the ledger, read-only, like the delivery reads.

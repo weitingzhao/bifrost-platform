@@ -53,6 +53,7 @@ var routeExpect = map[string]string{
 	"POST plan/proposals": expectWrites, "POST plan/imports": expectWrites, "POST plan/{id}/notes": expectWrites,
 	"POST plan/{id}/signoff": expectWrites,
 	"POST external-work":     expectWrites, "POST external-work/{id}/events": expectWrites,
+	"POST owner-said":        expectWrites,
 	"POST rules/{rule_id}/check": expectAnswers, "POST rules/{rule_id}/proposals": expectWrites,
 	"POST rules/{rule_id}/sign": expectWrites, "POST rules/{rule_id}/tighten": expectWrites,
 	// A report names branches the cleanup offered, the attempt branches of
@@ -167,6 +168,9 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(extSpec), extSpec, "X-Artifact-Kind", "other")
 	ext := ok("POST external-work", "operator", "POST", "external-work", map[string]any{"idempotency_key": "ext", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "fuzz-run", "artifact_id": artifactID(extSpec)})
 	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-start", "seq": 1, "type": "started"})
+	// What the Owner said, posted by the session hook (2026-11-25).
+	ok("POST owner-said", "operator", "POST", "owner-said", map[string]any{"messages": []any{map[string]any{"message_id": "11111111-1111-4111-8111-111111111111",
+		"transcript": "7274b722-9792-4ba2-bd5c-2dd8aff76cb5", "said_at": "2026-11-25T13:00:00Z", "text": "我觉得B好，需要自动收集"}}})
 	// Without a seq the server gives the next one; a heartbeat may name the commits pushed so far.
 	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-pushed", "type": "heartbeat", "commit_shas": []string{commitA}})
 
@@ -465,6 +469,9 @@ func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) ma
 			e["commit_shas"] = []string{commitA}
 		}
 		return e
+	case rt.pattern == "owner-said":
+		return map[string]any{"messages": []any{map[string]any{"message_id": "22222222-2222-4222-8222-22222222222" + key[len(key)-1:],
+			"transcript": "7274b722-9792-4ba2-bd5c-2dd8aff76cb5", "said_at": "2026-11-25T13:00:00Z", "text": "fuzz"}}}
 	case rt.pattern == "plan/{id}/notes":
 		return map[string]any{"idempotency_key": key, "text": "fuzz"}
 	case rt.pattern == "plan/{id}/signoff":

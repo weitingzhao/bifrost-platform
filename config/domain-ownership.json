@@ -174,6 +174,8 @@
         "request_response": [
           {"method": "GET", "path": "/api/v1/agentrt/plan", "handler": "api/internal/agentrt/planapi.HandleGetPlan", "consumers": ["console", "mcp"]},
           {"method": "GET", "path": "/api/v1/agentrt/laws", "handler": "api/internal/agentrt/planapi.HandleGetLaws", "consumers": ["console", "mcp"]},
+          {"method": "POST", "path": "/api/v1/agentrt/owner-said", "handler": "api/internal/agentrt/planapi.HandlePostOwnerSaid", "consumers": ["hook"]},
+          {"method": "GET", "path": "/api/v1/agentrt/owner-said", "handler": "api/internal/agentrt/planapi.HandleGetOwnerSaid", "consumers": ["audit", "plan"]},
           {"method": "GET", "path": "/api/v1/agentrt/plan-pace", "handler": "api/internal/agentrt/planapi.HandleGetPlanPace", "consumers": ["console"]},
           {"method": "GET", "path": "/api/v1/agentrt/plan-view", "handler": "api/internal/agentrt/planapi.HandleGetPlanView", "consumers": ["console", "mcp"]},
           {"method": "POST", "path": "/api/v1/agentrt/plan/proposals", "handler": "api/internal/agentrt/planapi.HandleProposePlanChange", "consumers": ["console", "mcp"]},

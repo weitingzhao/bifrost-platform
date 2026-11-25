@@ -128,6 +128,9 @@ func init() {
 		"POST /api/v1/agentrt/rules/{rule_id}/sign",
 		"POST /api/v1/agentrt/rules/{rule_id}/tighten",
 	)
+	exempt("what the Owner says (his choice of automatic collection): the session hook posts the Owner's own messages from a transcript with a reporter token; each is recorded once as owner_said, information for the legislation and audit lines that grants nothing and starts nothing; not a cluster write",
+		"POST /api/v1/agentrt/owner-said",
+	)
 	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
 	)
