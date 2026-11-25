@@ -25,6 +25,7 @@ type Criteria struct {
 	// OverCap (LAW-79): the domains with more buildings than MaxPerLayer,
 	// and the most buildings a domain has before the cap.
 	OverCap       []string `json:"over_cap"`
+	OverCapCount  int      `json:"over_cap_count"`
 	MostBuildings int      `json:"most_buildings"`
 }
 
@@ -49,6 +50,9 @@ type CriteriaSelf struct {
 	WithAbout int      `json:"with_about"`
 	WithTasks int      `json:"with_tasks"`
 	Without   []string `json:"without"`
+	// WithoutCount is len(Without): the plan's reading atom compares
+	// numbers, and an empty list reaches no value to compare.
+	WithoutCount int `json:"without_count"`
 }
 
 func (s *Scanner) criteria(domains []contractDomain, inventory []RepoCount) Criteria {
@@ -99,6 +103,7 @@ func (s *Scanner) criteria(domains []contractDomain, inventory []RepoCount) Crit
 	}
 	sort.Strings(c.SelfDescribed.Without)
 	sort.Strings(c.OverCap)
+	c.SelfDescribed.WithoutCount, c.OverCapCount = len(c.SelfDescribed.Without), len(c.OverCap)
 	return c
 }
 
