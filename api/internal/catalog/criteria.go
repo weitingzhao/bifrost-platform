@@ -19,10 +19,10 @@ type Criteria struct {
 	// one and how many only a namespace's row covers; the platform
 	// database's tables listed; the repositories with no table counted.
 	BlindSpots CriteriaBlindSpots `json:"blind_spots"`
-	// SelfDescribed (LAW-77): the domains that wrote what they are (about)
+	// SelfDescribed (LAW-10 item 5): the domains that wrote what they are (about)
 	// and what one comes to them for (tasks), and those that did not.
 	SelfDescribed CriteriaSelf `json:"self_described"`
-	// OverCap (LAW-79): the domains with more buildings than MaxPerLayer,
+	// OverCap (LAW-11): the domains with more buildings than MaxPerLayer,
 	// and the most buildings a domain has before the cap.
 	OverCap       []string `json:"over_cap"`
 	OverCapCount  int      `json:"over_cap_count"`
