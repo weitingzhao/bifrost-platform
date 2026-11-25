@@ -26,7 +26,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/gitread"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planloop"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planpace"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/questionbridge"
+	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
@@ -140,8 +142,16 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		}
 		s.startBus(ctx, pool, env, role)
 		// The reading atom's sources, in both roles: the API checks a proposed
-		// rule with them, the workers' plan loop evaluates with them.
-		s.wirePlanReadings()
+		// rule with them, the workers' plan loop evaluates with them. The map's
+		// kept status (catalog.StatusSource) is the one served; any other
+		// source is unknown, so a rule naming it never holds.
+		planstore.SetReadings(func(_ context.Context, source string) ([]byte, bool) {
+			if source != catalog.StatusSource {
+				return nil, false
+			}
+			raw, err := s.catalogScanner().KeptStatus()
+			return raw, err == nil && len(raw) > 0
+		})
 		if !role.RunsWorkers() {
 			<-ctx.Done()
 			pool.Close()

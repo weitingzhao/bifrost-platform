@@ -660,6 +660,9 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 // (source catalog.status), the same contract the route answers.
 func (s *Scanner) KeptStatus() ([]byte, error) { return s.kept().Read(keptStatus) }
 
+// StatusSource names the kept status as a source of the plan's reading atom.
+const StatusSource = "catalog.status"
+
 // StatusRoute is GET /catalog/status: the status last kept.
 type StatusRoute struct{ Scanner *Scanner }
 
