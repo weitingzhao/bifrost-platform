@@ -224,6 +224,22 @@ func TestUnregisteredTypeIsRefused(t *testing.T) {
 // death"): before, each of N open streams read the ledger itself when an
 // event woke them, so reads grew with open Consoles. Twenty waiters woken by
 // one event now cost at most a few ledger reads, not twenty.
+// settledReads waits at least min, then until the ledger's read count has not
+// moved for 100 ms (at most max), and returns it.
+func settledReads(l *fakeLedger, min, max time.Duration) int {
+	time.Sleep(min)
+	last, quiet, deadline := l.count(), 0, time.Now().Add(max)
+	for quiet < 10 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		if c := l.count(); c != last {
+			last, quiet = c, 0
+		} else {
+			quiet++
+		}
+	}
+	return last
+}
+
 func TestWaitersWokenTogetherShareOneRead(t *testing.T) {
 	l := &fakeLedger{horizon: 50}
 	g := newGate(t, l)
@@ -245,8 +261,13 @@ func TestWaitersWokenTogetherShareOneRead(t *testing.T) {
 			got <- len(a.Events)
 		}()
 	}
-	time.Sleep(300 * time.Millisecond) // all waiting, each after its first read
-	before := l.count()
+	// All waiting, each after its first read. A fixed 300 ms was not enough on a
+	// loaded node: a waiter that had not made its first read yet made it after
+	// the event, outside the shared read.
+	// Origin: 2026-11-25 nightly unit run unit-ce63dadc-71 (platform da20be1c)
+	// failed here once in 0.32 s while the full CI of the same commit was green;
+	// 70 local runs (with -race, under CPU load) did not repeat it.
+	before := settledReads(l, 300*time.Millisecond, 3*time.Second)
 	l.add(gitRow(7, 60, "bifrost-platform"))
 	g.Wake.Notify()
 	wg.Wait()
