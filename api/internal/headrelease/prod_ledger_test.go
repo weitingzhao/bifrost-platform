@@ -62,7 +62,7 @@ func TestProdJudgementsGoToTheLedgerWithTheirReasons(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-22, law 93 (seen and felt): the judgements were in the ledger
+// Origin: 2026-11-22, LAW-8 (seen and felt): the judgements were in the ledger
 // and nothing showed them; the route is the read. A limit out of range is a
 // 400, and with no database it says so (503), never an empty list.
 func TestProdJudgementsRouteRefusesWhatItCannotAnswer(t *testing.T) {

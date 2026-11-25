@@ -10,7 +10,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks() })
 
 const show = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ProdJudgement /></QueryClientProvider>)
 
-// Origin: 2026-11-22, law 93: the PROD loop held releases for hours and its reasons were only in a pod's log;
+// Origin: 2026-11-22, LAW-8: the PROD loop held releases for hours and its reasons were only in a pod's log;
 // the page shows the newest judgement, each failing condition with its reason.
 it('shows why PROD is held, condition by condition', async () => {
   vi.mocked(fetchProdJudgements).mockResolvedValue({ mode: 'on', judgements: [{ at: '2026-11-22T05:03:34Z', result: 'wait',

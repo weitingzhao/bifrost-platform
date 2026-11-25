@@ -21,7 +21,7 @@ import (
 // route keeps its path, its handler and the same gate.
 func (s *Server) mountFoundation(r chi.Router) {
 	// The probe's reads and the ops context are foundation's handlers;
-	// assembly only registers them (law 94: assembly only wires).
+	// assembly only registers them (LAW-9: assembly only wires).
 	pr := s.probeRoutes()
 	r.Get("/environments", pr.HandleEnvironments)
 	r.Get("/matrix", pr.HandleMatrix)

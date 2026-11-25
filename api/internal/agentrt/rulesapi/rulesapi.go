@@ -3,7 +3,7 @@
 // /agentrt/rules/{rule_id}/check, /proposals, /sign and /tighten.
 //
 // The handlers were agentrtapi's (rules.go) and are the same code
-// (OWNER_LAW #95, 2026-11-19: a domain's routes sit in its own package, so
+// (LAW-10, 2026-11-19: a domain's routes sit in its own package, so
 // its contract can say what it offers). agentrtapi still mounts them, behind
 // the same abilities, and lends them what every /agentrt route shares
 // (Host). The signature check a signed rule is verified with is the release

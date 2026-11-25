@@ -154,7 +154,7 @@ func (g *historyGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Origin: 2026-11-20, domain wall (OWNER_LAW #95): lineage's plan history
+// Origin: 2026-11-20, domain wall (LAW-10): lineage's plan history
 // reader imported verification's landinggit to judge main's history; now it
 // takes the rules through lineage.HistoryRules and server binds landinggit
 // there (planHistoryRules). This is the PV2 table and the borrowed-Change-Id

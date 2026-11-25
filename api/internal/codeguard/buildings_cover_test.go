@@ -73,7 +73,7 @@ func TestADomainsBuildingsHoldAllItsPackages(t *testing.T) {
 			continue
 		}
 		for _, p := range outsideBuildings(o, d, pkgs) {
-			t.Errorf("%s is %s's but in none of the buildings %s declared in config/domain-ownership.json: add its path to one, or declare a new one (at most 16, law 96)", p, d.ID, d.ID)
+			t.Errorf("%s is %s's but in none of the buildings %s declared in config/domain-ownership.json: add its path to one, or declare a new one (at most 16, LAW-11)", p, d.ID, d.ID)
 		}
 	}
 }

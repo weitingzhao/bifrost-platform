@@ -511,7 +511,7 @@ City 是一种监控程序，用游戏来呈现。做法和 Prometheus 一样反
 
 ## 告警：读指标线的判断，不自己判（Owner 2026-11-21「公用设施改读评估读口」）
 
-- 查下来：指标线的评估读口（`/api/v1/readings/evaluation`）只有按天结算的评估数（CI、发布、告警次数、总线），没有硬件实时读数，所以「改读评估读口」照字面做不了。照法 93 的本意改成：City 画指标线的判断，不画自己的判断。
+- 查下来：指标线的评估读口（`/api/v1/readings/evaluation`）只有按天结算的评估数（CI、发布、告警次数、总线），没有硬件实时读数，所以「改读评估读口」照字面做不了。照LAW-8 的本意改成：City 画指标线的判断，不画自己的判断。
 - **告警角接通**：读 `/api/v1/telemetry/alerts`（Prometheus 自己的告警规则，归指标线），只取 firing；severity 为 none 的（Watchdog 这类死人开关）不算判断，不列。角上写触发几条、最严重的颜色；点开是卡片，最严重的在前，能落位的行点了直接去那个地方。读失败写原因，不当成「没有告警」。
 - **落位只认精确匹配**：告警的 node 标签 = 设备的集群节点；host 标签 = 设备 id；不在命名空间里的（主机自己的告警）instance 地址 = 设备地址。命名空间里的告警说的是工作负载，它的 instance 只是被抓取的目标（kubelet、exporter），不拿来落到机器上。对不上的列「not placed」。
 - **楼上亮灯**：有告警的楼，头顶一个最严重颜色的「!」，名牌上写几条；城里按街区汇总（下面所有的）。
@@ -536,10 +536,10 @@ City 是一种监控程序，用游戏来呈现。做法和 Prometheus 一样反
 
 - 楼来自地图线：`GET /catalog/domain` 的 `buildings`（Go 根目录和 internal 下第一层目录为一栋，f2c674e8）。City 每 5 分钟读一次各领域，街区里照画，不自己分。
 - 大小按包数，用标准件：≤7 包 4×4，8–19 包 4×8，≥20 包 8×8。状态跟街区（地图读到灯才实）。
-- 放不下（一层最多 16 样、16 个单元）：最大的先放，留一格给 Other，其余并进「Other · N」，它的说明里点名每一栋；不丢。Other 画成**工地**（引擎地标 site），街区卡片「Too fine to fit」写明超了多少。Owner 2026-11-22：「每一层超过十六个，就是分得太碎……写不进去就应该让他们去解耦，或者聚合合并起来」。16 是 City 的尺子；把它变成合入检查是改裁判规则，按法 94 另提，City 不自己加。2026-11-22 Foundation 30 栋、Approvals 20 栋会进 Other。
+- 放不下（一层最多 16 样、16 个单元）：最大的先放，留一格给 Other，其余并进「Other · N」，它的说明里点名每一栋；不丢。Other 画成**工地**（引擎地标 site），街区卡片「Too fine to fit」写明超了多少。Owner 2026-11-22：「每一层超过十六个，就是分得太碎……写不进去就应该让他们去解耦，或者聚合合并起来」。16 是 City 的尺子；把它变成合入检查是改裁判规则，按LAW-9 另提，City 不自己加。2026-11-22 Foundation 30 栋、Approvals 20 栋会进 Other。
 - 楼的样子先用通用楼；楼这一层的图库（服务、后台任务、存储、工具库……）下一步做，同样由引擎出、各线认领。楼之间的线等 CI 线的 `inner`。
 - 默认，Owner 可否决：尺寸分档、Other 的做法。
 
 ## 硬件读数按名字读（2026-11-22）
 
-- 指标线的记录规则在 PROD 生效（卡 #678，13:49Z）：`hardwareQueries.json` 的 busy、memUsed、diskUsed、pods 换成 `bifrost_node:cpu_busy_cores_5m`、`memory_used_bytes`、`filesystem_used_bytes`、`pods_running`，口径归指标线（法 93）。外面包一层 `max by (原标签)`：值不变，也满足引擎「数从查询来」的规则（它认函数或选择器）。标签与原查询相同（instance / instance+mountpoint / node），读数不变。其余 13 条是原始序列的 max/count，照读原始。13:49Z 以前没有这四条的数，回看历史仍要用旧查询。
+- 指标线的记录规则在 PROD 生效（卡 #678，13:49Z）：`hardwareQueries.json` 的 busy、memUsed、diskUsed、pods 换成 `bifrost_node:cpu_busy_cores_5m`、`memory_used_bytes`、`filesystem_used_bytes`、`pods_running`，口径归指标线（LAW-8）。外面包一层 `max by (原标签)`：值不变，也满足引擎「数从查询来」的规则（它认函数或选择器）。标签与原查询相同（instance / instance+mountpoint / node），读数不变。其余 13 条是原始序列的 max/count，照读原始。13:49Z 以前没有这四条的数，回看历史仍要用旧查询。

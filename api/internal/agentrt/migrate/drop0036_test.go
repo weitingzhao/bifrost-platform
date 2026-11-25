@@ -130,7 +130,7 @@ const old0036 = `
     VALUES ('p1', 'codex', 'short', '2026-11-13 03:00:00+00', '2026-12-01 00:00:00+00');
   INSERT INTO agentrt.budget_ledger (unit, amount, measured, at) VALUES ('wall_s', 1, true, '2026-11-13 14:00:00+00');`
 
-// Origin: 2026-11-18, OWNER_LAW #95/#38: these tables hold data and no
+// Origin: 2026-11-18, LAW-10/#38: these tables hold data and no
 // production code reads or writes them any more. "Nobody writes" was a
 // measurement, and it must still hold when 0036 runs: a row written since, or
 // more rows than either environment had, means a writer nobody found. Each
@@ -205,7 +205,7 @@ func TestUpgradeTo0036RefusesTablesStillWritten(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-18, OWNER_LAW #95/#38: 0036 removes the seven tables nothing
+// Origin: 2026-11-18, LAW-10/#38: 0036 removes the seven tables nothing
 // uses. The events stay and stay readable: no event row changes, the closed
 // vocabulary is the same (budget_charged is one of the old types), the two
 // shared functions answer as before for every table that remains, and the

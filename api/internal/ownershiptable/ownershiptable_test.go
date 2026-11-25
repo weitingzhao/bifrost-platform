@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 2026-11-22, the map line (law 95 proposal section 3): the ownership table
+// 2026-11-22, the map line (LAW-10 proposal section 3): the ownership table
 // changed in 190 commits in seven days and lines collided on it; it is split
 // into one file per domain, read back as one document. The control: with no
 // parts the main file comes back byte for byte, so nothing changes until a

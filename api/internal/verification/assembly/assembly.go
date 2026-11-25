@@ -3,7 +3,7 @@
 // plan, scope, configuration, runs and full-CI notes, the scorecard, the
 // domain graph, and the request for unit evidence). Moved out of server
 // (mount_verification.go) on 2026-11-19, unchanged: the same paths, gates,
-// handlers and order (OWNER_LAW #95: a domain's routes sit in its own
+// handlers and order (LAW-10: a domain's routes sit in its own
 // package, so the platform's assembly root wires domains instead of holding
 // them).
 //

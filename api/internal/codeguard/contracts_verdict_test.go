@@ -8,7 +8,7 @@ import (
 
 )
 
-// The contract check (OWNER_LAW #95: domains speak only through their
+// The contract check (LAW-10: domains speak only through their
 // contracts). A domain's Go contract is the list of its exported names other
 // domains may use, registered in config/domain-ownership.json under
 // domains[].contracts.go_surface, each with the packages that use it. Every

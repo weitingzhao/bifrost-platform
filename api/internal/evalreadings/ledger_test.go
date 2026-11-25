@@ -107,7 +107,7 @@ func TestLedgerReadingsFromRows(t *testing.T) {
 }
 
 // 2026-11-20, the metrics line: how often the Owner's phone was pushed about a
-// card had no system record across "relax cards into records" (law 91); the
+// card had no system record across "relax cards into records" (LAW-6); the
 // comm line put each push on the ledger as approval.card.notified from the
 // PROD release of 16:20:43Z. Shape from PROD: kind created, one kind failed
 // (#662, 17:22:42Z). 2026-11-23: "failed" was read as an undelivered push, so
@@ -144,7 +144,7 @@ func TestOwnerInterruptions(t *testing.T) {
 	}
 }
 
-// Law 91 (the Owner, 2026-11-21, relayed by the coordinator): privilege uses
+// LAW-6 (the Owner, 2026-11-21, relayed by the coordinator): privilege uses
 // are the fixed before-and-after reference. Until something writes
 // owner.privilege.used to the ledger every window is unmeasured, not 0: a
 // zero nobody counted would read as "he never had to step in". Once the start

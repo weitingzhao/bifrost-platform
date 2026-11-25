@@ -51,7 +51,7 @@ func groupQueries() []QuerySpec {
 	}
 }
 
-// Origin: 2026-11-20 the compute group (law 97); 2026-11-22 the group moved to
+// Origin: 2026-11-20 the compute group (LAW-12); 2026-11-22 the group moved to
 // the compute domain and telemetry serves what is registered: a registered
 // group runs only its readings (control: TestOverviewWithoutAGroupIsUnchanged).
 func TestOverviewARegisteredGroupRunsOnlyItsReadings(t *testing.T) {

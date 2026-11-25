@@ -10,7 +10,7 @@ import (
 // Origin: 2026-11-21, the metrics line's owner_privilege_uses counts
 // owner.privilege.used in the ledger, and the uses were only in the
 // coordinator's note (duty/privilege-log-2026-11-21.md), which is no system
-// archive (law 93). A use's body passes the register; a cause outside the
+// archive (LAW-8). A use's body passes the register; a cause outside the
 // three kinds, an empty what or a two-line what is refused.
 func TestAUseIsABodyTheRegisterAccepts(t *testing.T) {
 	ok := Body(Use{What: "pushed the bus/observe hand-over", StuckBecause: "two lines waited on each other"})

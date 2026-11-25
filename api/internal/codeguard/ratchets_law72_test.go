@@ -13,10 +13,10 @@ import (
 	"testing"
 )
 
-// The ratchets of law 94 (the Owner in the Foundation thread, 2026-11-22:
+// The ratchets of LAW-9 (the Owner in the Foundation thread, 2026-11-22:
 // decoupling that is cleared but not held is temporary). Each holds one end
 // point of the decoupling plan; a baseline only shrinks, and loosening one is
-// the Owner's (law 94).
+// the Owner's (LAW-9).
 
 func loadOwnership(t *testing.T) ownership {
 	t.Helper()
@@ -88,7 +88,7 @@ func TestUnlistedNamesAPackageWithoutARow(t *testing.T) {
 // registers it there. 34 of server's functions on 2026-11-22 were still
 // handlers of other domains (the decoupling plan, step 2).
 //
-// Origin: law 94, 2026-11-22. Code has flowed into the assembly root before:
+// Origin: LAW-9, 2026-11-22. Code has flowed into the assembly root before:
 // on 2026-11-20 agentrt/agentrtapi folded into server with its handlers, the
 // day after 2026-11-18 had moved the question bridge (about 330 lines) out
 // of it. Nothing held the size of the root, so a domain's code could land
@@ -135,7 +135,7 @@ func assemblyErrors(asm []string, count map[string]int, baseline map[string]int)
 		case !ok:
 			out = append(out, fmt.Sprintf("%s is a new assembly package (%d functions): add it to assemblyFuncs with its count", p, n))
 		case n > held:
-			out = append(out, fmt.Sprintf("%s has %d functions and the baseline is %d: assembly only wires (routes, ports, start and stop); put the handler or rule in the package of the domain it serves and register it here (law 94; the baseline only shrinks, raising it is the Owner's, law 94)", p, n, held))
+			out = append(out, fmt.Sprintf("%s has %d functions and the baseline is %d: assembly only wires (routes, ports, start and stop); put the handler or rule in the package of the domain it serves and register it here (LAW-9; the baseline only shrinks, raising it is the Owner's, LAW-9)", p, n, held))
 		case n < held:
 			out = append(out, fmt.Sprintf("%s has %d functions, fewer than the baseline %d: lower assemblyFuncs to %d (the list only shrinks)", p, n, held, n))
 		}

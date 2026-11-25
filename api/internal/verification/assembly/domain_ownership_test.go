@@ -62,7 +62,7 @@ func TestDomainOwnershipCatalog(t *testing.T) {
 		t.Fatalf("inventory: %d packages, want %d", len(got.Domains.Packages), len(packages))
 	}
 	// Every package the table does not give to one domain stays visible as
-	// unresolved, and no more. Origin: 2026-11-21, law 95 — the last three
+	// unresolved, and no more. Origin: 2026-11-21, LAW-10 — the last three
 	// mixed packages became the assembly domain and the count reached 0; the
 	// check used to be "is not 0", which that would have failed for a truth.
 	var table struct {

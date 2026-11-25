@@ -125,7 +125,7 @@ describe('versionCell', () => {
     expect(versionCell({ records: [], lane: 'platform', env: 'stg', runningImages }).text).toBe('Unknown')
   })
 
-  // 2026-11-17, OWNER_LAW #93: Platform and Trade without a record fell back to the Argo revision of a namespace that a
+  // 2026-11-17, LAW-8: Platform and Trade without a record fell back to the Argo revision of a namespace that a
   // hand-kept target list (deliveryTargets.ts) named; with that list gone the version is unknown, and the cell says why.
   it('says Unknown and why when Platform or Trade has no deploying record', () => {
     const cell = versionCell({ records: [], lane: 'platform', env: 'prod' })

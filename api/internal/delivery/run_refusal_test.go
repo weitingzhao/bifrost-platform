@@ -760,7 +760,7 @@ func TestAPlatformCIRunIsKeptOffTheExcludedNodes(t *testing.T) {
 	}
 }
 
-// 2026-11-18 (Law 88): migration 0035 held every PROD delivery until someone asked
+// 2026-11-18 (LAW-3): migration 0035 held every PROD delivery until someone asked
 // for the run by hand, though the signed policy covered it. The hook runs before a
 // platform PROD delivery and no other. Positive control: dropping the pipeline
 // check makes the second start call it.

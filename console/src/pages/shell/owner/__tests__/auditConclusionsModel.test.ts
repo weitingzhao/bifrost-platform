@@ -1,6 +1,6 @@
 // 2026-11-24 箭10: the audit-conclusions page (the Owner: 「审计基于立法的标准出结果，来监督行政」), built to the
 // audit line's brief (domains/2-lineage/audit/ui-brief-audit-page-2026-11-24.md). The shapes are PROD's as read that
-// day: law 96 (then law 83; R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
+// day: LAW-11 (then law 83; R6:6.11, seven standards) and its step R6:6.11-4 graded 没达到 with note 195123.
 import { describe, expect, it } from 'vitest'
 import type { RegisterLaw } from '@/api/lawRegister'
 import { attributionOf, auditDetail, auditTable, auditVerdict, auditWord, approvalsReading, ordered, periodOf, readingOf, startOf, readsApprovals, refsOf, resultOf, splitStandard, standardsOf, unmeasuredList, withEvents, type PlanEvent } from '../auditConclusionsModel'
@@ -105,7 +105,7 @@ describe('audit conclusions', () => {
     expect(refsOf('标准版本 appr_648987184f28813a，无别的')).toEqual([])
   })
 
-  // 2026-11-24 the legislation line (#749): law 85 is archived and its standard moves into law 91 s1 ("每周为 0"). The
+  // 2026-11-24 the legislation line (#749): law 85 is archived and its standard moves into LAW-6 s1 ("每周为 0"). The
   // reading was tied to "law 85 s1" and would have hung on nothing; it now follows the standard that declares the read.
   it('gives the approvals readings to the standard that declares them, per week or per day as it says', () => {
     const readings = { days: [{ day: '2026-11-25', to_owner: { daily: [1] } }, { day: '2026-11-24', to_owner: { daily: [1, 2] } }, { day: '2026-11-23', to_owner: { daily: [1, 2, 3] } }] }
@@ -122,7 +122,7 @@ describe('audit conclusions', () => {
     expect(approvalsReading({ ...weekly, saidOn: undefined }, readings)).toContain('not known')
   })
 
-  // 2026-11-24 the legislation line: law 91 s1's method says 「从 2026-11-25 起计」 while the law was said on 11-24; the
+  // 2026-11-24 the legislation line: LAW-6 s1's method says 「从 2026-11-25 起计」 while the law was said on 11-24; the
   // page counted from said_on and would have added 11-24.
   it('counts from the start the method writes, and from the law’s date only when it writes none', () => {
     const readings = { days: [{ day: '2026-11-25', to_owner: { daily: [1] } }, { day: '2026-11-24', to_owner: { daily: [1, 2] } }] }

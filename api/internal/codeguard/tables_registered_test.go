@@ -15,7 +15,7 @@ import (
 // schema) before a migration creates it.
 //
 // Origin: 2026-11-22, the Owner in the Foundation thread ("register with me
-// before you do the next thing, or many people lose track"; law 95). That
+// before you do the next thing, or many people lose track"; LAW-10). That
 // day the ownership table had no tables section at all and the map found the
 // platform's tables only by scanning the database afterwards; 18 tables were
 // live on PROD and 2 were named anywhere in the table. They were registered

@@ -52,7 +52,7 @@ type Link struct {
 	// OpenAsks are the asks on this link that nobody answered: no letter
 	// came back from To to From after them (read or not). OldestAsk is when
 	// the oldest of them was sent. 2026-11-21 (the main line "seen and
-	// felt", law 93): which line waits on whose answer was not discoverable;
+	// felt", LAW-8): which line waits on whose answer was not discoverable;
 	// an unread letter (Unacked) said nothing of a read one left unanswered.
 	OpenAsks  int    `json:"open_asks,omitempty"`
 	OldestAsk string `json:"oldest_ask,omitempty"`

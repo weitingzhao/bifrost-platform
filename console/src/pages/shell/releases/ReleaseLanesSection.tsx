@@ -28,7 +28,7 @@ export type ReleaseLanesProps = {
 }
 
 /**
- * One release line, read from release-rules.yaml (OWNER_LAW #93, 2026-11-17: no hand-kept list): `stg` and `prod` are the
+ * One release line, read from release-rules.yaml (LAW-8, 2026-11-17: no hand-kept list): `stg` and `prod` are the
  * pipelines whose runs deploy that environment, `prefixes` the run-name rules of an environment (runs no pipeline label
  * finds), `builds` the image builds a pin or GitOps sync deploys later. A line with neither STG nor PROD shows live images.
  */

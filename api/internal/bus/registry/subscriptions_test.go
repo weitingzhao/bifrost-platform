@@ -63,7 +63,7 @@ func TestCheckSubscriptionsRefuses(t *testing.T) {
 		"needs params.title":               {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverNotify, To: NotifyTo},
 		"not one of params.detail's names": {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "requester", Params: map[string]string{"detail": DetailOpenRegressions, "require": "tripwire"}},
 		"names no run":                     {ID: "x", On: []string{"seat.mail.arrived"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"detail": "task-result:land/refusal"}},
-		// 2026-11-18, OWNER_LAW #93: params.ask_verdict names a kind of problem; any other word is refused.
+		// 2026-11-18, LAW-8: params.ask_verdict names a kind of problem; any other word is refused.
 		"params.ask_verdict": {ID: "x", On: []string{"ci.run.finished"}, Deliver: DeliverWake, To: "seat:ci", Params: map[string]string{"ask_verdict": "maybe"}},
 	}
 	for want, r := range refused {

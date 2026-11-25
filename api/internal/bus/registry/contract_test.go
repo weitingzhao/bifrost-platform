@@ -9,7 +9,7 @@ import (
 
 const lockPath = "contract.lock.json"
 
-// 2026-11-16 (Owner, OWNER_LAW #95: a contract does not change silently):
+// 2026-11-16 (Owner, LAW-10: a contract does not change silently):
 // contract.lock.json holds, per tenant and type, the version and the
 // fingerprint of the fields subscribers rely on. A changed fingerprint with
 // the same version, a removed type, or a lowered version is red. Raising

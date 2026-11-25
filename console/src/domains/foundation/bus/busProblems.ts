@@ -1,7 +1,7 @@
 import { authedFetch } from '@/api/client'
 
 /**
- * GET /api/v1/bus/problems: the problem loop (OWNER_LAW #93), each case a
+ * GET /api/v1/bus/problems: the problem loop (LAW-8), each case a
  * letter of a row that asks for a verdict, the counts computed from those
  * cases by the platform. Nothing here is typed in on the page.
  */

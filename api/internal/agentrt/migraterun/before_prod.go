@@ -11,7 +11,7 @@ import (
 const ActionID = "run_agentrt_migration"
 
 // BeforeProd runs a commit's pending migrations when a platform PROD delivery
-// is about to start, if the signed policy covers them (Law 91, Law 88,
+// is about to start, if the signed policy covers them (LAW-6, LAW-3,
 // 2026-11-18: the delivery's schema check refused and someone had to ask for the
 // same run by hand; 0035 held PROD for hours). Same judgement and same Job as
 // run_agentrt_migration. Anything else is left to that check, which refuses.

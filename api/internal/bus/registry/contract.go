@@ -8,7 +8,7 @@ import (
 )
 
 // ContractFields are the parts of a channel a subscriber relies on (RULES.md,
-// the contract; Owner 2026-11-16 OWNER_LAW #95): changing one without raising
+// the contract; Owner 2026-11-16 LAW-10): changing one without raising
 // version breaks someone silently. publisher, reconcile, consumers, exports
 // and replaces are the publisher's own business.
 func (c Channel) ContractFields() map[string]string {

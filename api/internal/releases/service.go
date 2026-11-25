@@ -355,7 +355,7 @@ type Status struct {
 	Namespace string      `json:"namespace"`
 	LastTick  *TickResult `json:"last_tick,omitempty"`
 	// RuleList is release-rules.yaml's rules as loaded, in order: the
-	// Releases page builds its release lines from them (OWNER_LAW #93).
+	// Releases page builds its release lines from them (LAW-8).
 	RuleList []Rule `json:"rule_list"`
 }
 

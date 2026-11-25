@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bifrost agent host tooling — single entry (mirrors run_platform.py).
 
-The remediation runner and Hermes gateway are retired (OWNER_LAW #95); there is
+The remediation runner and Hermes gateway are retired (LAW-10); there is
 no `start` subcommand any more. A subcommand is required.
 
 Subcommands:

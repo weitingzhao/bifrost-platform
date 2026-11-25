@@ -34,14 +34,14 @@ func TestLawAmendGateUsesLegislationsRules(t *testing.T) {
 	refused := errors.New("refused by legislation")
 	SetLawCard(&LawCard{
 		Check:   func(context.Context, map[string]any) error { return refused },
-		Summary: func(context.Context, map[string]any) string { return "Law add: will become law 90" },
+		Summary: func(context.Context, map[string]any) string { return "Law add: will become LAW-5" },
 		Read:    func(map[string]any) (any, error) { return "read", nil },
 	})
 	t.Cleanup(func() { SetLawCard(nil) })
 	if err := CheckLawAmend(context.Background(), add); !errors.Is(err, refused) {
 		t.Fatalf("check = %v; want legislation's answer", err)
 	}
-	if got := lawAmendSummary(context.Background(), add); got != "Law add: will become law 90" {
+	if got := lawAmendSummary(context.Background(), add); got != "Law add: will become LAW-5" {
 		t.Fatalf("summary = %q", got)
 	}
 	out, _ := ExecuteLawAmend(context.Background(), add)

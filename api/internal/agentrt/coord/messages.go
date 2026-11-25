@@ -51,7 +51,7 @@ var matterRE = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 // ("" for none): it goes on message_posted, so the
 // ledger can count, per day, asks about a matter of the sender's own domain
 // and hand-overs of the receiver's own (2026-11-21, Audit's privilege
-// readings, law 91 in the coordinator's notes). It grants and checks nothing.
+// readings, LAW-6 in the coordinator's notes). It grants and checks nothing.
 func SendMessage(ctx context.Context, db eventlog.DB, w writer.Writer, to, kind string, body []byte, matter string) (string, error) {
 	switch {
 	case matter != "" && !matterRE.MatchString(matter):

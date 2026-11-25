@@ -163,7 +163,7 @@ func DaysWithSubject(ctx context.Context, tx pgx.Tx, eventType, subject string, 
 // of one type written since a time: a fact recorded again on every
 // reconciliation pass (pipeline_seen by uid, approval_seen by approval) read
 // once, as it stands. Events without the key are left out. Asked by the
-// evaluation readout (2026-11-20, law 93), which reads the ledger only through
+// evaluation readout (2026-11-20, LAW-8), which reads the ledger only through
 // this package.
 func LatestByKey(ctx context.Context, tx pgx.Tx, eventType, key string, since time.Time) ([]Row, error) {
 	return scanRows(tx.Query(ctx, `SELECT DISTINCT ON (body_json->>$2) event_stream_id, event_id, seq, event_type, actor_id, at, body_json

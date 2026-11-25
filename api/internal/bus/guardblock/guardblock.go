@@ -2,7 +2,7 @@
 // (guard.block.recorded, 2026-11-21). The guard (preflight.js, run on the
 // Owner's machines before every tool call) refuses actions; how often each
 // rule refuses whom was read only from session transcripts on one Mac, which
-// is no system archive (law 93), and the wall list the law-reform seat reads
+// is no system archive (LAW-8), and the wall list the law-reform seat reads
 // needs it. A block carries the rule and the session, never the command:
 // a command can hold paths and names that must not leave the machine.
 //

@@ -1,5 +1,5 @@
 // Package ownershiptable reads the ownership table as one document from its
-// files (2026-11-22, the map line, law 95 proposal section 3): the table
+// files (2026-11-22, the map line, LAW-10 proposal section 3): the table
 // config/domain-ownership.json changed in 190 commits in seven days and
 // lines that edit it collide. It is being split into one file per domain,
 // config/domains/<domain>.json, each holding that domain's row and the rows

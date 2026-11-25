@@ -9,7 +9,7 @@ import (
 )
 
 // Assembly reaches each domain only through what that domain made public
-// (law 95: "it reaches each domain through what that domain offers"). A
+// (LAW-10: "it reaches each domain through what that domain offers"). A
 // domain names its public packages in its row,
 // domains[].contracts.public_packages; an import by an assembly package of a
 // domain package that is not public is held in
@@ -19,7 +19,7 @@ import (
 // other domains, none registered, and registering names one by one with
 // nothing holding them had already been dropped once (2026-11-21: they drift
 // at once). Counted by package it is 87 domain packages (foundation, the
-// base, not counted). Foundation decided this by first principles (law 90):
+// base, not counted). Foundation decided this by first principles (LAW-5):
 // the return is efficiency, one line per domain instead of a thousand names.
 
 var assemblyReachHeld = map[string]bool{}
@@ -84,7 +84,7 @@ func assemblyReachErrors(got []string, held map[string]bool) []string {
 	for _, e := range got {
 		now[e] = true
 		if !held[e] {
-			out = append(out, e+": assembly imports a package its domain did not make public; reach it through the domain's public package, or have the domain list it under contracts.public_packages (law 95)")
+			out = append(out, e+": assembly imports a package its domain did not make public; reach it through the domain's public package, or have the domain list it under contracts.public_packages (LAW-10)")
 		}
 	}
 	for e := range held {

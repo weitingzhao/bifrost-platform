@@ -60,9 +60,9 @@ describe('compute readings', () => {
     expect(readingValues(broken)).toBe('Could not be read: prometheus: timeout')
     expect(readingValues(empty)).toBe('No series')
   })
-  // 2026-11-20 law 97 rows: the home register, crossed pain lines and guests on the database homes
+  // 2026-11-20 LAW-12 rows: the home register, crossed pain lines and guests on the database homes
   // were only in the compute seat's notes, not on Ops (ledger step 6). Shapes read from PROD Prometheus 11-21 00:26Z.
-  it('shows the home register as a list and the law 97 counts with their node or alert', () => {
+  it('shows the home register as a list and the LAW-12 counts with their node or alert', () => {
     const home: TelemetryMetricResult = {
       id: 'compute_node_home_now', title: 'Whose home each node is', unit: 'home', target: 'every cluster node listed', note: '', status: 'ok',
       points: [
@@ -117,7 +117,7 @@ describe('compute readings', () => {
     expect(readingValues(disks)).toBe('ubt-k3s-05 nvme1: NVME SSD 512GB (VC400618)')
     expect(readingValues(tail)).toBe('ubt-k3s-07 nvme0n1 689 ms · ubt-k3s-08 nvme0n1 4.4 ms')
   })
-  // 2026-11-17 OWNER_LAW #93: the hand-written "not measured" list is gone; a reading without a series is
+  // 2026-11-17 LAW-8: the hand-written "not measured" list is gone; a reading without a series is
   // known only from the API's own status (audit row #31).
   it('shows each reading with its target and note, a failed one as failed, and an empty one as no series', async () => {
     fetchComputeReadings.mockResolvedValue({ namespace: 'bifrost-stg', metrics: [pending, load, broken, empty], generated_at: '2026-11-13T07:00:00Z' })

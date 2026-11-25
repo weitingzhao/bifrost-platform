@@ -18,7 +18,7 @@ const laws: RegisterLaw[] = [{
   counts: { reached: 2, missed: 4, unmeasured: 1 },
   steps: [
     step(1, 's1：加新的：载荷和试验层交一页需求当天能用｜量法：提交时间到第一次 ci-* Succeeded。现在：领域级量得了', '达到'),
-    step(4, 's4：升级：每层的升级条件写明、系统能判｜量法：check_repo_registry.py 判。现在：量不了：拦的检查 CI 线未排', '没达到', { category: '法', cause: '改成拦人属改裁判规则（法 94），批准算不算批示没写清', destination: '立法线' }),
+    step(4, 's4：升级：每层的升级条件写明、系统能判｜量法：check_repo_registry.py 判。现在：量不了：拦的检查 CI 线未排', '没达到', { category: '法', cause: '改成拦人属改裁判规则（LAW-9），批准算不算批示没写清', destination: '立法线' }),
     step(5, 's5：淘汰：系统能回答还有谁在用｜量法：get_package_users。现在：部分量得了：Secret 只能列名', '部分'),
     step(7, 's7：不弄坏别人：任何一次结构变动之后整套 CI 照过｜量法：每日 13:30Z 整套 CI。现在：缺每日 13:30Z 整套 CI 的结果', '没核'),
   ],
@@ -36,7 +36,7 @@ for (const [node, ev] of Object.entries(events)) client.setQueryData(engineQuery
 if (import.meta.env.DEV) createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}>
     <main className="@container mx-auto flex max-w-6xl flex-col gap-3 bg-background p-4 text-foreground" style={{ minHeight: '100vh' }}>
-      <p className="m-0 rounded border border-dashed border-[var(--border)] p-2 text-sm font-semibold">SAMPLE · the audit line’s sample of 2026-11-24 (law 96, four of its seven standards). Not a conclusion: the real page reads the UI engine.</p>
+      <p className="m-0 rounded border border-dashed border-[var(--border)] p-2 text-sm font-semibold">SAMPLE · the audit line’s sample of 2026-11-24 (LAW-11, four of its seven standards). Not a conclusion: the real page reads the UI engine.</p>
       <AuditConclusions />
     </main>
   </QueryClientProvider>,

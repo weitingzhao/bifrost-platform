@@ -184,7 +184,7 @@ func Body(row registry.Subscription, ev Event) string {
 
 // WithAsk is a letter that ends, for a row with params.ask_verdict, with the
 // exact message the receiver sends to give its verdict on the event
-// (OWNER_LAW #93); any other row's letter is unchanged.
+// (LAW-8); any other row's letter is unchanged.
 func WithAsk(row registry.Subscription, ev Event, letter string) string {
 	if !problemloop.KnownKind(row.Params[problemloop.ParamAskVerdict]) {
 		return letter

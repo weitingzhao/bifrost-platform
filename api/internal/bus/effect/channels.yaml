@@ -169,7 +169,7 @@ channels:
   - {id: X-C3, class: K8, disposition: kept, step: none, what: duty/decisions.md：值班追加一行一个决定, by: 例外：人读文档，今天还在写}
   - {id: X-C4, class: K8, disposition: kept, step: none, what: daily-readings.md、owner-two-things-watch.md：每日读数与 Owner 要知道的两件事, by: 例外：人读文档}
   - {id: X-C5, class: K12, disposition: kept, step: none, what: 各线 state.md：现在停在哪、下一个动作（覆写，第一屏最新）, by: 例外：人读文档，各线在写}
-  - {id: X-C6, class: K12, disposition: deleted, step: any, what: 席位台账 Artifact（手写数据生成）, by: 待删：手写席位台账，各线停止维护，已发布页面不删。沟通的 11-19 已停；只剩算力的 compute/ledger，等法 97 第 1 段读数规则落地、Cluster 页能读到实测记录和模块表后冻结（算力 11-19 定）}
+  - {id: X-C6, class: K12, disposition: deleted, step: any, what: 席位台账 Artifact（手写数据生成）, by: 待删：手写席位台账，各线停止维护，已发布页面不删。沟通的 11-19 已停；只剩算力的 compute/ledger，等LAW-12 第 1 段读数规则落地、Cluster 页能读到实测记录和模块表后冻结（算力 11-19 定）}
   - {id: X-C7, class: K1, disposition: deleted, step: any, what: snapshot.sh：主统筹一次读出此刻事实（kubectl 读窗口 ConfigMap、git 读分支）, by: tools/snapshot.sh 已由主统筹删除, retired: {at: '2026-11-18', change: coordinator-notes, outside: 共享笔记里的工具，不在本仓库}}
   - {id: X-C8, class: K13, disposition: merged, step: "3", what: "平台收件箱+信封 type/topic/about/refs（席位 ↔ 席位）", by: "同 N09；信封词表两套（ask/answer/help/handover/note 与 fact/ask/decide/deliver/status/note）需收成一套", cut: {at: "2026-11-19", evidence: ["topic:seat.mail.arrived"]}}
   - {id: X-C9, class: K3, disposition: merged, step: "3", what: "门铃 doorbell.ts：后台命令退出即叫醒会话（实测 4–7 秒）", by: "同 W05", cut: {at: "2026-11-18", evidence: ["reader:inbox-waiters"]}}

@@ -156,7 +156,7 @@ func (w *world) tickets(id, host string, until time.Time, mac string) *httptest.
 }
 
 var cases = []mustRefuse{
-	{"a host card is claimed by nobody without a ticket", "law 91 (2026-11-21): a Console click must not let a machine run a command; the one-time code is the lock", func(w *world) string {
+	{"a host card is claimed by nobody without a ticket", "LAW-6 (2026-11-21): a Console click must not let a machine run a command; the one-time code is the lock", func(w *world) string {
 		hostCard(w)
 		for _, token := range []string{"host-mini-1-tok", "host-mini-2-tok", "executor-tok", "admin-tok"} {
 			if rec := w.claimWith(token); rec.Code == http.StatusOK {

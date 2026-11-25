@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// One domain's whole page of the map (2026-11-20, law 95: the domains, what
+// One domain's whole page of the map (2026-11-20, LAW-10: the domains, what
 // each owns and what it opens are in one small module): what it owns in the
 // table's repository and in the cluster, its contract as written, and its
 // lights. Everything comes from what the scan kept; nothing is listed at
@@ -22,7 +22,7 @@ type Domain struct {
 	Commit  string `json:"commit"`
 	// Owns: Go packages, console groups and other paths of the table's
 	// repository whose row names the domain; Shared marks a row that names
-	// more than one domain (law 95 wants one).
+	// more than one domain (LAW-10 wants one).
 	Packages  []Row `json:"packages"`
 	Groups    []Row `json:"groups"`
 	Paths     []Row `json:"paths"`
@@ -31,15 +31,15 @@ type Domain struct {
 	// Buildings group its Go packages by the first directory under the Go
 	// root and its internal directory (api/internal/bus/... is building bus,
 	// api/cmd/x is cmd): computed from the paths, typed by nobody (2026-11-21,
-	// City draws a district's buildings; law 93: nothing in Ops is kept by
+	// City draws a district's buildings; LAW-8: nothing in Ops is kept by
 	// hand). A domain that wants other buildings can declare them later; this
 	// is the default.
 	Buildings []Building `json:"buildings"`
 	// BuildingsOver is how many buildings did not fit in MaxPerLayer and
-	// were drawn as one "other" (law 96, 2026-11-22: more than 16 in a layer
+	// were drawn as one "other" (LAW-11, 2026-11-22: more than 16 in a layer
 	// is split too fine; it is shown, not merged for the domain).
 	BuildingsOver int `json:"buildings_over"`
-	// About and Tasks are the domain's own account of itself (law 95,
+	// About and Tasks are the domain's own account of itself (LAW-10,
 	// 2026-11-22: each domain explains itself; the standard is in the
 	// content, read on demand through this route): one line on what it is,
 	// and the tasks someone comes to it for, each with what to use (a route,
@@ -74,7 +74,7 @@ type TaskMatch struct {
 type domainRow struct {
 	ID string `json:"id"`
 	// Buildings, when the domain writes them, group its packages its own
-	// way: each a name and the path prefixes it holds (2026-11-22, law 96:
+	// way: each a name and the path prefixes it holds (2026-11-22, LAW-11:
 	// a domain merges buildings without moving code). Packages none names
 	// are grouped by directory as before.
 	Buildings []declaredBuilding `json:"buildings"`
@@ -135,7 +135,7 @@ type Building struct {
 	Declared bool `json:"declared,omitempty"`
 }
 
-// MaxPerLayer is how many things one layer of the map holds (law 96).
+// MaxPerLayer is how many things one layer of the map holds (LAW-11).
 const MaxPerLayer = 16
 
 // capBuildings keeps the largest MaxPerLayer-1 buildings and folds the rest

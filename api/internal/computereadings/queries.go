@@ -1,7 +1,7 @@
 // Package computereadings is the compute domain's readings of "is the
 // compute fully used", as Prometheus queries. They were written in
 // foundation's telemetry package until 2026-11-22; the compute line asked for
-// them back (its contract, law 95), and telemetry now serves any group a
+// them back (its contract, LAW-10), and telemetry now serves any group a
 // domain registers (telemetry.Handler.SetGroup, bound in assembly).
 package computereadings
 
@@ -142,7 +142,7 @@ func Queries() []telemetry.QuerySpec {
 			Note:   "Share of time some process waited for memory (PSI), worst 5 minutes.",
 			Build:  fixed(perHost(`max_over_time(rate(node_pressure_memory_waiting_seconds_total[5m])[` + w + `:5m])`)),
 		},
-		// Law 97 (home / borrow / reclaim), read now rather than over the
+		// LAW-12 (home / borrow / reclaim), read now rather than over the
 		// window: which node is whose home, which pain lines are crossed, and
 		// how many CI guests run on the database homes. The home register is
 		// the recording rule bifrost_node:home_info, kept in infra

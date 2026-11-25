@@ -72,7 +72,7 @@ func ownerRefusal(o ownership, f testFile) string {
 	if o.domainOf(f.Pkg) == assembly {
 		// A test of the assembly domain checks the wiring of some domain's
 		// behaviour; its owner line keeps saying which one, so the test can
-		// move there with that domain's code (law 95, 2026-11-21: server and
+		// move there with that domain's code (LAW-10, 2026-11-21: server and
 		// integration were shared packages, and 67 of their test files carry
 		// the line). It holds when it names a domain of the table.
 		for _, d := range o.Domains {
@@ -217,7 +217,7 @@ func ownerBaselineErrors(without, baseline map[string]int, pkgs map[string]bool)
 // by moving to a package of one domain (usually with the code it checks,
 // when the package is split), or by its file becoming a declared flow test.
 var testsWithoutOwner = map[string]int{
-	// 2026-11-21, law 95: integration (40) and server (80) became the assembly
+	// 2026-11-21, LAW-10: integration (40) and server (80) became the assembly
 	// domain, a package of one domain; nothing shared with tests is left.
 }
 

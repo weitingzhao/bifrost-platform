@@ -13,7 +13,7 @@ import (
 )
 
 // A host card (params.host: the card runs on one named machine, such as a Mac
-// mini) is claimed only with a ticket (TD-578, law 91, 2026-11-21). The
+// mini) is claimed only with a ticket (TD-578, LAW-6, 2026-11-21). The
 // Owner's one-time code is the lock of every owner card, and only the cluster's
 // owner-exec checks it. A host card is therefore never claimable on the
 // strength of a Console click: owner-exec checks the code and then tells the

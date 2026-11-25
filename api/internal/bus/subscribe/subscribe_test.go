@@ -351,7 +351,7 @@ func TestReleaseStarterIsWokenWithOpenRegressions(t *testing.T) {
 	}
 }
 
-// 2026-11-18, OWNER_LAW #93: a letter of a row with params.ask_verdict ends
+// 2026-11-18, LAW-8: a letter of a row with params.ask_verdict ends
 // with the exact verdict message for its event, so nobody looks it up; a row
 // without the param (or with a word that is no kind) keeps its letter as it
 // was, and the letter still reads as a wake (the dispatcher's wake counts
@@ -376,7 +376,7 @@ func TestWithAskOnlyOnRowsThatAsk(t *testing.T) {
 	}
 }
 
-// 2026-11-19, law 97 (compute chose): a pain crossing wakes the compute seat
+// 2026-11-19, LAW-12 (compute chose): a pain crossing wakes the compute seat
 // alone. The duty row hears every alert, so without except it would wake the
 // coordinator too; the guest-load reading is info and wakes no one.
 func TestPainAlertsWakeComputeAloneAndGuestLoadNoOne(t *testing.T) {
@@ -492,7 +492,7 @@ func TestBusAlertsAreDeliveredWithoutTheBus(t *testing.T) {
 	}
 }
 
-// 2026-11-20: the compute seat's pain row (law 97, 11-19) said by:
+// 2026-11-20: the compute seat's pain row (LAW-12, 11-19) said by:
 // alert-letters, whose consumer delivers the duty row only, so no pain alert
 // ever woke compute. Every alert row other than duty's must be delivered by
 // someone: the dispatcher, or the webhook.

@@ -16,7 +16,7 @@ import (
 // An exported name that only other packages' tests use is a door left open
 // for tests into a package's insides (2026-11-17).
 //
-// Origin: the same rule as tests_reach_test.go (OWNER_LAW #95; the CI line's
+// Origin: the same rule as tests_reach_test.go (LAW-10; the CI line's
 // page duty/from-ci-w1-2026-11-17-test-standard.md). The decoupling line
 // moved the plan code out of agentrt/store into agentrt/planstore and found
 // 21 names planstore exports for the store tests that still assert the plan
@@ -219,7 +219,7 @@ func TestNoNewNameIsExportedForAnotherPackagesTests(t *testing.T) {
 	for _, k := range got {
 		now[k] = true
 		if !held[k] {
-			t.Errorf("%s is exported and only other packages' tests use it: a test reaches a package through its contract (OWNER_LAW #95). Test through what the package offers, move the test into the package, or unexport the name. The list exportedForOtherTests only shrinks.", k)
+			t.Errorf("%s is exported and only other packages' tests use it: a test reaches a package through its contract (LAW-10). Test through what the package offers, move the test into the package, or unexport the name. The list exportedForOtherTests only shrinks.", k)
 		}
 	}
 	for k := range held {

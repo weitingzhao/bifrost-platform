@@ -4,7 +4,7 @@
 // GET /agentrt/external-work/{id}).
 //
 // The handlers were agentrtapi's (externalwork.go) and are the same code
-// (OWNER_LAW #95, 2026-11-19: a domain's routes sit in its own package, so
+// (LAW-10, 2026-11-19: a domain's routes sit in its own package, so
 // its contract can say what it offers). agentrtapi still mounts them, behind
 // the same abilities, and lends them what every /agentrt route shares (Host).
 // The plan import route went to planapi (2026-11-19); the recorder log it

@@ -13,7 +13,7 @@ import (
 // Tests that reach into another domain are debt, counted apart and held to
 // what there is (2026-11-17).
 //
-// Origin: OWNER_LAW #95 (2026-11-16: domains speak only through contracts;
+// Origin: LAW-10 (2026-11-16: domains speak only through contracts;
 // judging and testing go only through the contract, black box) and the
 // Owner's word of 2026-11-17 12:1x, through the coordinator: the standard
 // for where a test sits and what it may touch is software engineering's, and
@@ -40,13 +40,13 @@ import (
 // reaching sorts the test files: across is, by file, the packages of other
 // domains (or shared) it imports; shared the files in shared packages. The
 // assembly roots under api/cmd wire every domain and are left out, and so are
-// the tests of the assembly domain (law 95, 2026-11-21): integration is its
+// the tests of the assembly domain (LAW-10, 2026-11-21): integration is its
 // system test, and its tests reach every domain as its code does.
 //
 // A package another domain made public (contracts.public_packages, the E5
 // gate's list) is its contract: a test that imports it is the black box
-// test of what that domain offers, the kind OWNER_LAW #95 asks for, and is
-// not counted (2026-11-23, Foundation, law 90: once coordination and
+// test of what that domain offers, the kind LAW-10 asks for, and is
+// not counted (2026-11-23, Foundation, LAW-5: once coordination and
 // delivery named their public packages, 9 of the 13 held lines were tests
 // using exactly those, and counting them as debt asked the testing domain
 // to work around a contract the provider had just committed to).
@@ -95,7 +95,7 @@ func reachErrors(o ownership, across map[string][]string, shared []string, baseA
 		for _, d := range deps {
 			now[f+" -> "+d] = true
 			if !held[f+" -> "+d] {
-				out = append(out, fmt.Sprintf("%s imports %s (%s), a package of another domain or one several domains share: a test reaches another domain only through its contract (OWNER_LAW #95). Make it a unit test of %s, a black box test of what %s offers, or a flow test (%s owner=<domain> contracts=<name>...). The list testsReachingAcross only shrinks.", f, d, o.domainOf(d), o.domainOf(filepath.Dir(f)), o.domainOf(d), flowMark))
+				out = append(out, fmt.Sprintf("%s imports %s (%s), a package of another domain or one several domains share: a test reaches another domain only through its contract (LAW-10). Make it a unit test of %s, a black box test of what %s offers, or a flow test (%s owner=<domain> contracts=<name>...). The list testsReachingAcross only shrinks.", f, d, o.domainOf(d), o.domainOf(filepath.Dir(f)), o.domainOf(d), flowMark))
 			}
 		}
 	}
@@ -112,7 +112,7 @@ func reachErrors(o ownership, across map[string][]string, shared []string, baseA
 	for _, f := range shared {
 		inTree[f] = true
 		if !inBase[f] {
-			out = append(out, fmt.Sprintf("%s is a new test file in %s, a package several domains share: it reaches every domain's insides there (OWNER_LAW #95). Put it in the package of the domain it tests, make it a black box test of a contract, or a flow test (%s owner=<domain> contracts=<name>...); an owner line names who answers for it and is not enough. The list testFilesInShared only shrinks.", f, filepath.Dir(f), flowMark))
+			out = append(out, fmt.Sprintf("%s is a new test file in %s, a package several domains share: it reaches every domain's insides there (LAW-10). Put it in the package of the domain it tests, make it a black box test of a contract, or a flow test (%s owner=<domain> contracts=<name>...); an owner line names who answers for it and is not enough. The list testFilesInShared only shrinks.", f, filepath.Dir(f), flowMark))
 		}
 	}
 	for f := range inBase {

@@ -21,7 +21,7 @@ func items(passes int) []string {
 
 // Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the
 // decoupling acceptance lived only in the Foundation seat's notes (no system
-// archive, law 93), and its ruler changed three times that day, so a reading
+// archive, LAW-8), and its ruler changed three times that day, so a reading
 // carries its version. A reading whose score matches its items passes the
 // register; the controls: a score that does not match the items, a wrong
 // item count, an unknown status and a short commit are refused.

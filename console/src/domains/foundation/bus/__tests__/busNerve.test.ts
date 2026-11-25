@@ -91,7 +91,7 @@ describe('seatState', () => {
     expect(seatState(seat, [{ from: 'seat:a', to: 'seat:b', kind: 'letter', count: 2, unacked: 1, oldest_open: '2026-11-17T20:40:00Z' }], now)).toBe('stuck')
     expect(seatState(seat, [{ from: 'seat:a', to: 'seat:b', kind: 'letter', count: 2, unacked: 1, oldest_open: '2026-11-17T20:55:00Z' }], now)).toBe('ok')
   })
-  // 2026-11-21, the main line "seen and felt" (law 93): an ask read but left unanswered was not on the page.
+  // 2026-11-21, the main line "seen and felt" (LAW-8): an ask read but left unanswered was not on the page.
   it('is stuck while an ask to it goes unanswered past the ask limit, ok before', () => {
     const read = { from: 'seat:a', to: 'seat:b', kind: 'letter' as const, count: 1, unacked: 0, open_asks: 1 }
     expect(seatState(seat, [{ ...read, oldest_ask: '2026-11-17T19:30:00Z' }], now)).toBe('stuck')
@@ -138,7 +138,7 @@ describe('isDeaf', () => {
   })
 })
 
-// 2026-11-21, the main line "seen and felt" (law 93): the unanswered asks were only in the map's hover notes.
+// 2026-11-21, the main line "seen and felt" (LAW-8): the unanswered asks were only in the map's hover notes.
 describe('waitingAsks', () => {
   it('lists the links with an unanswered ask, oldest first, stuck past the ask limit', () => {
     const now = Date.parse('2026-11-21T22:00:00Z')

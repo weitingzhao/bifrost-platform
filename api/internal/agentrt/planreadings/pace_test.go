@@ -111,7 +111,7 @@ func spansFromTx(ctx context.Context, tx pgx.Tx, _, _ time.Time) ([][2]time.Time
 }
 
 // Origin: 2026-11-19, planreadings stopped importing lineage's workregistration
-// (domain wall, law 95) and takes the reader as an argument; an unbound
+// (domain wall, LAW-10) and takes the reader as an argument; an unbound
 // reader must refuse, not read the pace as if no work was registered.
 func TestPaceRefusesWithoutAReaderOfRegisteredWork(t *testing.T) {
 	t.Parallel()

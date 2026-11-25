@@ -41,7 +41,7 @@ type Subscription struct {
 	On    []string `yaml:"on"`
 	Match string   `yaml:"match"`
 	// Except: an event whose subject holds it is not this row's, though it
-	// matches the rest (2026-11-19, law 97: a line's own alerts wake that
+	// matches the rest (2026-11-19, LAW-12: a line's own alerts wake that
 	// line, not the duty row that hears every alert).
 	Except    string            `yaml:"except"`
 	Change    string            `yaml:"change"`

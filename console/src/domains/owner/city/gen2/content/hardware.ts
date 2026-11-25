@@ -16,7 +16,7 @@ export type PromPoint = { labels?: Record<string, string>; value: number }
 
 /**
  * What is read, and how (the PromQL is the reading's source, shown with every number). The queries are
- * configuration, kept as data in hardwareQueries.json, not written into the source (code-health law 93).
+ * configuration, kept as data in hardwareQueries.json, not written into the source (code-health LAW-8).
  */
 export const HARDWARE_QUERIES = QUERIES
 export type HardwareReads = { topology: TopoNode[] | null; prom: { [K in keyof typeof HARDWARE_QUERIES]: PromPoint[] | null } }

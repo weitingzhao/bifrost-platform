@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// 2026-11-20, law 93: "the same window read on any day gives the same value".
+// 2026-11-20, LAW-8: "the same window read on any day gives the same value".
 // The window must be the same for two reads on different times of the same
 // day, and must end at the Owner's midnight, including across the DST change
 // (2026-11-01 in America/Chicago).
@@ -31,7 +31,7 @@ func TestClosedWindowIsTheSameAllDayAndEndsAtChicagoMidnight(t *testing.T) {
 	}
 }
 
-// Law 93 floor: fewer samples than the floor gives no percentile
+// LAW-8 floor: fewer samples than the floor gives no percentile
 // (the brief: "样本数低于口径写的下限：不给高分位，显示样本太少").
 func TestFinishDropsAPercentileUnderTheFloorAndMarksNoRecordsUnmeasured(t *testing.T) {
 	v := 12.0
@@ -95,7 +95,7 @@ func TestPromReadings(t *testing.T) {
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
 
 // Without the ledger every ledger reading is still listed, as unmeasured with
-// the reason (law 93: "读口里没有的数写没量"), and the days parameter is checked.
+// the reason (LAW-8: "读口里没有的数写没量"), and the days parameter is checked.
 func TestHandlerWithoutLedger(t *testing.T) {
 	h := Handler(nil, nil, nil, func() time.Time { return time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC) })
 	rec := httptest.NewRecorder()

@@ -116,7 +116,7 @@ export type BusObserve = {
 export const STUCK_AFTER_MIN = 10
 /**
  * Minutes an ask may go unanswered (read or not) before the seat it waits on
- * is drawn as stuck. 2026-11-21, the main line "seen and felt" (law 93): who
+ * is drawn as stuck. 2026-11-21, the main line "seen and felt" (LAW-8): who
  * waits on whose answer was not on the page; an unread letter was, a read
  * one left unanswered was not.
  */
@@ -126,7 +126,7 @@ export type WaitingAsk = { from: string; to: string; asks: number; since: string
 
 /**
  * The links with an unanswered ask, oldest first (2026-11-21: on the map they were only in hover notes,
- * so who waits on whom could not be read at a glance; the main line "seen and felt", law 93).
+ * so who waits on whom could not be read at a glance; the main line "seen and felt", LAW-8).
  */
 export function waitingAsks(links: readonly ObserveLink[], now: number): WaitingAsk[] {
   return links

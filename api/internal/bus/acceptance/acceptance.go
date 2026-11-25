@@ -2,7 +2,7 @@
 // the bus (foundation.acceptance.measured, 2026-11-21). The Owner wanted
 // Foundation's state on the coordination bus, whoever consumes it: the ten
 // items' reading lived only in the Foundation seat's notes and its script's
-// output, which is no system archive (law 93). The reading carries the
+// output, which is no system archive (LAW-8). The reading carries the
 // ruler's version, because the ruler is Foundation's own script and changed
 // three times on 2026-11-21; a score without its version is not comparable.
 //

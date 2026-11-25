@@ -125,7 +125,7 @@ func (s *Service) SupplyChain(ctx context.Context) SupplyChainResponse {
 
 	// What the cluster's Pipelines and Tasks name, read now: the repositories
 	// the Pipelines clone, and the Dockerfile ConfigMaps they and the Tasks
-	// mount (OWNER_LAW #93, 2026-11-17: no hand-kept list).
+	// mount (LAW-8, 2026-11-17: no hand-kept list).
 	var unread []string
 	dyn, dynErr := s.buildDynamicClient()
 	if dynErr != nil {

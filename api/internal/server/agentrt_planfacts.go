@@ -25,7 +25,7 @@ func (s *Server) agentRuntimePlanSources() planstore.PlanSources {
 
 // planHistoryRules binds verification's landing rules (verification/ports,
 // over landinggit) into the lineage reader's port: lineage reads main's
-// history from Gitea and does not import verification (OWNER_LAW #95,
+// history from Gitea and does not import verification (LAW-10,
 // 2026-11-20). The commits are copied field by field; the rules are
 // landinggit's, unchanged.
 func planHistoryRules() lineageassembly.HistoryRules {

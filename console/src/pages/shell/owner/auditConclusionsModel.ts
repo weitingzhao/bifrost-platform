@@ -13,7 +13,7 @@ import { gradeTone, lawHref, planNodeHref } from './lawRegisterModel'
  * Everything is read through the UI engine:
  * - /engine/v1/agents?read=laws for the register;
  * - read=plan-step for a step's events;
- * - read=approval-readings for the standard that declares that read (law 91 s1 now).
+ * - read=approval-readings for the standard that declares that read (LAW-6 s1 now).
  */
 
 /**
@@ -288,7 +288,7 @@ export function auditDetail(r: StandardRow | undefined, extra?: { label: string;
 /**
  * The approvals readings (GET /api/v1/readings/approvals): the cards pushed to the Owner that are neither a law card nor
  * one of the six classes ("daily"). They belong to whichever standard declares that read in how it is measured, not to
- * a law number: law 85's standard moved to law 91 (the legislation line, 2026-11-24, #749), and the next move needs no
+ * a law number: law 85's standard moved to LAW-6 (the legislation line, 2026-11-24, #749), and the next move needs no
  * change here. Counted per day or per week as the standard's own words say, only from the law's said_on.
  */
 export type ApprovalReadings = { days?: { day: string; to_owner?: { daily?: unknown[] } }[] }
@@ -303,7 +303,7 @@ export const periodOf = (r: Pick<StandardRow, 'method' | 'standard'>): 'week' | 
 
 export function approvalsReading(r: Pick<StandardRow, 'method' | 'standard' | 'saidOn'>, data: ApprovalReadings | undefined): string {
   if (!data?.days) return 'not read'
-  // The standard's own start when its method writes one (the legislation line, 2026-11-24: law 91 s1 「从 2026-11-25
+  // The standard's own start when its method writes one (the legislation line, 2026-11-24: LAW-6 s1 「从 2026-11-25
   // 起计」), else the law's said_on.
   const start = startOf(r)
   if (!start) return 'the law’s date is not read, so the days that count are not known'

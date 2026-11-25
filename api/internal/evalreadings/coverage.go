@@ -11,7 +11,7 @@ import (
 // namespace's running workloads that have their own metrics (a scrape target
 // of their own) at the end of the window, with the ones that have none named
 // in the note. Origin: the metrics line's list of what the system cannot see
-// (2026-11-21, law 93): 45 workloads had no metrics of their own, and the
+// (2026-11-21, LAW-8): 45 workloads had no metrics of their own, and the
 // coverage record said so only as two numbers (bifrost, infra) that no page
 // read. By namespace, because the map already says which domain each
 // namespace belongs to (config/domain-ownership.json, workloads); a second

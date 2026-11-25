@@ -7,7 +7,7 @@ import (
 
 // notedType is the event type of an external work's record on its stream
 // (external-work:<id>): the note of its registration, each heartbeat and each
-// event, as ExternalNote. One owning domain per event type (OWNER_LAW #95;
+// event, as ExternalNote. One owning domain per event type (LAW-10;
 // migration 0032, 2026-11-17): it was a note with an external_work field,
 // whose shape the plan's note check held through a port; the lineage
 // declares and checks its own record now. The old rows stay and every reader

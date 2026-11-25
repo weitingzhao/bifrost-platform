@@ -4,7 +4,7 @@
 // questions, builds the question runtime and wires the action catalog and
 // the generic write actions. Moved out of server (mount_owner.go and
 // questions_wire.go) on 2026-11-19, unchanged: the same paths, gates,
-// handlers, order and log lines (OWNER_LAW #95: a domain's routes sit in its
+// handlers, order and log lines (LAW-10: a domain's routes sit in its
 // own package, so the platform's assembly root wires domains instead of
 // holding them).
 //

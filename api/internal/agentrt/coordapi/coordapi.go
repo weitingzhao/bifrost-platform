@@ -3,7 +3,7 @@
 // POST /messages/ack), the seats' statuses (GET /seats) and the controls
 // (GET and POST /controls, DELETE /controls/{id}). The handlers were
 // agentrtapi's (messages.go, seats.go and the controls of controls.go) and
-// are the same code (OWNER_LAW #95, 2026-11-19: a domain's routes sit in its
+// are the same code (LAW-10, 2026-11-19: a domain's routes sit in its
 // own package, so its contract can say what it offers). agentrtapi still
 // mounts them, behind the same abilities (stop, lift, propose, read), and
 // lends them what every /agentrt route shares (Host). They call coord's

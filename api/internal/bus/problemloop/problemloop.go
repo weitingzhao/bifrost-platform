@@ -1,5 +1,5 @@
 // Package problemloop is what the bus's problem letters say about judging
-// them (2026-11-18, OWNER_LAW #93: a problem is sent, seen, judged true or
+// them (2026-11-18, LAW-8: a problem is sent, seen, judged true or
 // false, then a real one handled and a false one fixed at the source). A
 // letter of a row with params.ask_verdict ends with the exact message the
 // receiver sends to give its verdict; the runtime reads those messages back

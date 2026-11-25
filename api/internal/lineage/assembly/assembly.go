@@ -1,7 +1,7 @@
 // Package assembly is the lineage domain's assembly: it builds the lineage
 // handler around the thread titles and mounts the lineage's routes under
 // /api/v1. Moved out of server (mount_lineage.go) on 2026-11-19, unchanged:
-// the same paths, gates, handlers and order (OWNER_LAW #95: a domain's routes
+// the same paths, gates, handlers and order (LAW-10: a domain's routes
 // sit in its own package, so the platform's assembly root wires domains
 // instead of holding them).
 //

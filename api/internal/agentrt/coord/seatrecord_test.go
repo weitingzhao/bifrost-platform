@@ -82,7 +82,7 @@ func TestTheSeatEventsKeepTheirContract(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-21, Audit's privilege readings (law 91 in the coordinator's
+// Origin: 2026-11-21, Audit's privilege readings (LAW-6 in the coordinator's
 // notes): asks about a matter of the sender's own domain, and hand-overs of
 // the receiver's own, could not be counted, since no letter said whose its
 // matter was. The sender may say it (a domain id or unknown); it goes on

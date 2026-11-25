@@ -18,7 +18,7 @@ describe('Foundation network display', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plugin → Network' }))
     expect(open).toHaveBeenCalledOnce()
   })
-  // 2026-11-17 OWNER_LAW #93 (audit rows 21-23): stream progress comes only from the spine; without it the page says unknown instead of a hand-written 6/6.
+  // 2026-11-17 LAW-8 (audit rows 21-23): stream progress comes only from the spine; without it the page says unknown instead of a hand-written 6/6.
   it('shows spine network streams, and unknown without a fallback when the spine is not loaded', () => {
     render(<NetworkHealthPanel context={undefined} />)
     expect(screen.queryByText('Stream')).toBeNull()

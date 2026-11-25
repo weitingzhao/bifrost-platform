@@ -9,7 +9,7 @@ import (
 
 // Origin: 2026-11-21, the wall list for the law-reform seat needed how often
 // each guard rule refuses whom, and that was read only from one Mac's session
-// transcripts (no system archive, law 93). A block of a known rule passes the
+// transcripts (no system archive, LAW-8). A block of a known rule passes the
 // register with or without a host; the controls: an unknown rule, a session
 // with a space and a host with a slash are refused, and nothing in the body
 // can carry the command.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ActionRecord } from '@/api/actionRecords'
 import { doneForYou, doneSummary, undoText } from '../doneForYou'
 
-// 2026-11-19, law 91: what can be undone runs without a card and is recorded; Command shows it as
+// 2026-11-19, LAW-6: what can be undone runs without a card and is recorded; Command shows it as
 // Done for you. Rows copied from PROD's list_records the same day (ids 815-823): every one then had
 // regret_state undeclared and an empty check_result, which the column must say rather than hide.
 const NOW = Date.parse('2026-11-19T14:40:00Z')
