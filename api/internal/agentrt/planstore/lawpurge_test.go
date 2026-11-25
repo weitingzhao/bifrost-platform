@@ -76,7 +76,7 @@ func TestRepealedLawIsPurgedAfterSevenDays(t *testing.T) {
 	if next != "4" {
 		t.Fatalf("next number after purging law 3 = %q, want 4", next)
 	}
-	// Laws in force and material are untouched.
+	// Laws in force are untouched.
 	for _, n := range []string{"1", "2"} {
 		if _, have, _ := planstore.CurrentLaw(ctx, w.rt, n); !have {
 			t.Fatalf("law %s went with the purge", n)

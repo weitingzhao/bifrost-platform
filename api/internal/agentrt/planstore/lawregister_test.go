@@ -3,6 +3,7 @@ package planstore_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -157,8 +158,9 @@ func TestLawRegister(t *testing.T) {
 
 // 2026-11-24, the framework of laws v1: an approved card's frame is recorded
 // with the law, what it supersedes is repealed with it, and the register
-// reads each law's state (a transcribed row is 素材, a framed card's law
-// 现行, a superseded one 废止).
+// reads each law's state (a framed card's law 现行, a superseded one 废止;
+// 2026-11-25, LAW-1 四 / ISSUE-104: a transcribed row without a frame is
+// 现行 with fields missing).
 func TestLawFrameRecorded(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -197,7 +199,7 @@ func TestLawFrameRecorded(t *testing.T) {
 	}
 	// The superseded law 1 is repealed and gone from the view (Owner
 	// 2026-11-24: a repealed law must not linger as poison).
-	if _, seen := state["1"]; seen || state["2"] != planstore.StateMaterial || state["3"] != planstore.StateInForce {
+	if _, seen := state["1"]; seen || state["2"] != planstore.StateInForce || state["3"] != planstore.StateInForce {
 		t.Fatalf("states = %v", state)
 	}
 	w.chainHolds(t, "law:1")
@@ -271,4 +273,32 @@ func TestRepealedLawLeavesThePlan(t *testing.T) {
 		}
 	}
 	w.chainHolds(t, planstore.PlanStream(root))
+}
+
+// Origin: 2026-11-25, LAW-1 四 / ISSUE-104: the register no longer reads
+// absorbs, but older records in the ledger still carry it (the data is not
+// changed). Such a record reads as it stands, its other frame fields kept,
+// and is in force.
+func TestOldAbsorbsIsIgnored(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	ok(t, eventlog.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		_, err := eventlog.Append(ctx, tx, eventlog.Event{Stream: planstore.LawStream("90"), Type: "law_recorded", Actor: "controller",
+			Body: map[string]any{"law": "90", "version": 1, "op": "add", "text": "an old law", "status": "已批", "source": "law_amend appr_x",
+				"frame": map[string]any{"level": 2, "subject": "立法", "absorbs": []any{"1", "2"}}}})
+		return err
+	}))
+	l, have, err := planstore.CurrentLaw(ctx, w.rt, "90")
+	ok(t, err)
+	if !have || l.Frame == nil || l.Frame.Level == nil || *l.Frame.Level != 2 || l.Frame.Subject != "立法" {
+		t.Fatalf("an old record with absorbs = %+v (frame %+v)", l, l.Frame)
+	}
+	if st := planstore.LawState(l, time.Now()); st != planstore.StateInForce {
+		t.Fatalf("its state = %s", st)
+	}
+	view, err := planstore.LawsView(ctx, w.rt)
+	ok(t, err)
+	if len(view) != 1 || view[0].Law.Law != "90" {
+		t.Fatalf("view = %+v", view)
+	}
 }

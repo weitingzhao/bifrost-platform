@@ -1,21 +1,20 @@
 import type { FrameworkField, FrameworkLevel, LawFramework, PurgeQueue, RegisterLaw } from '@/api/lawRegister'
 
 /*
- * The framework of laws on Command → Laws (ISSUE-17: one entry in the Console is enough;
- * step one is a frame that can hold laws, shown with no law in it). Five blocks: the five levels, the
- * fields, the rules between laws and what refuses a card, the states' counts, and the material and repealed laws
- * behind a switch. What the platform does not send is "unknown", never filled in.
+ * The framework of laws on Command → Laws (ISSUE-17: one entry in the Console is enough). The blocks: the levels with
+ * the laws in force under them, the fields, the rules between laws and what refuses a card, and the count in force.
+ * The register holds laws only (LAW-1 四, ISSUE-104): two states, 现行 and 废止, and the page draws only 现行.
+ * What the platform does not send is "unknown", never filled in.
  */
 
 export const IN_FORCE = '现行'
-export const MATERIAL = '素材'
 export const REPEALED = '废止'
 /** The states in the framework's order; a state the platform adds later is shown after them. */
-export const STATE_ORDER = [IN_FORCE, MATERIAL, REPEALED] as const
+export const STATE_ORDER = [IN_FORCE, REPEALED] as const
 
 export const UNKNOWN = 'unknown'
 
-/** "v1 · 5 levels · 现行 0 · 素材 85 · 废止 0"; a framework not sent says so. */
+/** "framework v1 · 4 levels · 现行 22"; a framework not sent says so. */
 export function frameworkLine(fw: LawFramework | null | undefined): string {
   if (!fw) return 'framework not sent by this platform: unknown'
   const levels = fw.levels ? `${fw.levels.length} levels` : `levels ${UNKNOWN}`
@@ -46,15 +45,20 @@ export function requiredLabels(level: FrameworkLevel, fields: readonly Framework
 export const inForceAt = (laws: readonly RegisterLaw[], level: number): RegisterLaw[] =>
   laws.filter(l => l.state === IN_FORCE && l.frame?.level === level)
 
-/** The laws behind the switch: material, repealed, and any law whose state the platform did not say. */
-export const behindSwitch = (laws: readonly RegisterLaw[]): RegisterLaw[] => laws.filter(l => l.state !== IN_FORCE)
+/** The laws in force that lack a level (LAW-1 四: a law without its frame is a law with fields missing, said so). */
+export const inForceWithoutLevel = (laws: readonly RegisterLaw[]): RegisterLaw[] =>
+  laws.filter(l => l.state === IN_FORCE && typeof l.frame?.level !== 'number')
+
+/** The laws in force, by register number: the only rows the page draws. */
+export const inForceLaws = (laws: readonly RegisterLaw[]): RegisterLaw[] =>
+  laws.filter(l => l.state === IN_FORCE).sort((a, b) => (Number(a.law) || 0) - (Number(b.law) || 0))
 
 /** The page's word: the framework read is ok; not sent or not read is unknown. */
 export const frameworkWord = (fw: LawFramework | null | undefined): 'ok' | 'unknown' => (fw && fw.levels ? 'ok' : 'unknown')
 
 /**
- * The register's entries counted by state (立法线 2026-11-24, after the Owner read "85 laws" as 85 laws in the
- * framework): only 现行 is a law; 素材 is material, 废止 repealed. A row without a state is counted as unknown.
+ * The register's entries counted by state (立法线 2026-11-24, after "85 laws" was read as 85 laws in the framework):
+ * 现行, and 废止 only while the platform still sends such rows. A row without a state is counted as unknown.
  */
 export function stateTally(laws: readonly RegisterLaw[]): string {
   const n = (s: string) => laws.filter(l => l.state === s).length
@@ -63,23 +67,6 @@ export function stateTally(laws: readonly RegisterLaw[]): string {
   return [...shown.map(s => `${s} ${n(s)}`), ...(unknown > 0 ? [`state unknown ${unknown}`] : [])].join(' · ')
 }
 export const inForceCount = (laws: readonly RegisterLaw[]): number => laws.filter(l => l.state === IN_FORCE).length
-
-/**
- * Step two (ISSUE-17): the material is distilled into laws in force one by one; once every piece is absorbed
- * the material is repealed in one go. The platform counts it (framework.coverage); this only says it.
- */
-export function coverageLine(fw: LawFramework | null | undefined): string {
-  const c = fw?.coverage
-  if (!c) return `material covered: ${UNKNOWN}`
-  return `material covered ${c.covered} / ${c.material}` + (c.material > 0 && c.covered === c.material ? ' · all covered: ready to repeal the material' : '')
-}
-
-/** The material rows first those no law absorbs yet, then the absorbed; each group by number. */
-export function materialOrder(laws: readonly RegisterLaw[]): RegisterLaw[] {
-  const num = (l: RegisterLaw) => Number(l.law) || 0
-  const open = (l: RegisterLaw) => (l.state === MATERIAL && !(l.absorbed_by && l.absorbed_by.length > 0) ? 0 : 1)
-  return [...laws].sort((a, b) => open(a) - open(b) || num(a) - num(b))
-}
 
 /**
  * "awaiting deletion 16 · overdue 0 · next 2026-12-01" (LAW-1 s5: a repealed law is deleted seven days on). Not sent by

@@ -60,7 +60,7 @@ func LawTitle(c LawCard) string {
 	if c.Op == "add_many" {
 		return fmt.Sprintf("新增 %d 条法（标准版本 %s #%d）", len(c.Adds), c.ApprovalID, c.Number)
 	}
-	if c.Op == "repeal_many" || c.Op == "purge" || c.Op == "archive" {
+	if c.Op == "repeal_many" || c.Op == "purge" {
 		ns := make([]string, 0, len(c.Repeals))
 		for _, rp := range c.Repeals {
 			ns = append(ns, rp.Law)
@@ -119,7 +119,7 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 		}
 		// A repealed law leaves the plan too: the steps of its items that are
 		// not done are dropped, so it is no longer measured or enforced.
-		if c.Op == "repeal" || c.Op == "repeal_many" || c.Op == "archive" {
+		if c.Op == "repeal" || c.Op == "repeal_many" {
 			if err := dropRepealedSteps(ctx, db, c); err != nil {
 				errs = append(errs, fmt.Errorf("law_amend %s: plan: %w", c.ApprovalID, err))
 			}
@@ -127,7 +127,7 @@ func RecordLaws(ctx context.Context, db eventlog.DB, cards []LawCard) (int, erro
 		// Only an enforced law goes into the plan to be measured: a framed
 		// law enacted but not enforced, and a batch repeal, do not. A card
 		// from before the framework (no frame) keeps its item.
-		if c.Op == "repeal_many" || c.Op == "purge" || c.Op == "add_many" || c.Op == "amend_many" || c.Op == "archive" || (c.Frame != nil && c.Frame.Enforce != EnforceOn) {
+		if c.Op == "repeal_many" || c.Op == "purge" || c.Op == "add_many" || c.Op == "amend_many" || (c.Frame != nil && c.Frame.Enforce != EnforceOn) {
 			continue
 		}
 		ok, err := recordLaw(ctx, db, c)

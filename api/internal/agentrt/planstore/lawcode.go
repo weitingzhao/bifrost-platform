@@ -8,9 +8,9 @@ import (
 )
 
 // The laws' own numbering: every law is coded from LAW, never abbreviated
-// (LAW-1). Rows 1 to 85 of the register were what had been said, transcribed
-// from OWNER_LAW.md and archived as material in round 1 of the inventory
-// (#751); the laws the framework holds start at 86. A law is written LAW-k,
+// (LAW-1). Rows 1 to 85 of the register were transcribed from OWNER_LAW.md
+// and repealed in round 1 of the inventory (#751); the laws the framework
+// holds start at 86. A law is written LAW-k,
 // where k counts from that first law: LAW-1 is number 86. The register's
 // streams keep their numbers (law:<n>); the code is derived from the number,
 // and numbers are never given twice (lawpurge.go), so a code never changes
@@ -56,7 +56,7 @@ func nextCode(codes []string, level *int) string {
 }
 
 // LawCode is law n's code as the laws before round 2 had it, derived from the
-// number: LAW-k, k = n - 85, and CORE-1 for 89; "" for material. A
+// number: LAW-k, k = n - 85, and CORE-1 for 89; "" for rows 1 to 85. A
 // law added later carries its code in its record (Law.Code).
 func LawCode(n string) string {
 	v, err := strconv.Atoi(n)

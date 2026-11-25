@@ -40,7 +40,7 @@ type LawRow struct {
 // Law is a law as the register holds it now.
 type Law struct {
 	Law        string    `json:"law"`
-	Code       string    `json:"code,omitempty"` // LAW-k (lawcode.go); empty for material
+	Code       string    `json:"code,omitempty"` // LAW-k (lawcode.go); empty for rows 1 to 85, which had none
 	Version    int       `json:"version"`
 	Op         string    `json:"op"` // transcribed, add, amend or repeal
 	SaidOn     string    `json:"said_on,omitempty"`
@@ -149,7 +149,7 @@ func frameBody(f *LawFrame) map[string]any {
 			m[k] = v
 		}
 	}
-	for k, v := range map[string][]string{"depends_on": f.DependsOn, "supersedes": f.Supersedes, "absorbs": f.Absorbs} {
+	for k, v := range map[string][]string{"depends_on": f.DependsOn, "supersedes": f.Supersedes} {
 		if len(v) > 0 {
 			l := make([]any, len(v))
 			for i, x := range v {
@@ -375,9 +375,6 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 		}
 		return "", true, nil
 	}
-	if c.Op == "archive" {
-		return "", true, archiveMaterial(ctx, tx, c)
-	}
 	if c.Op == "amend_many" {
 		for _, a := range c.Amends {
 			a.ApprovalID, a.Number, a.DecidedOn = c.ApprovalID, c.Number, c.DecidedOn
@@ -411,33 +408,6 @@ func registerCard(ctx context.Context, tx pgx.Tx, c LawCard) (string, bool, erro
 	}
 	num, err := registerOne(ctx, tx, c, n)
 	return num, err == nil, err
-}
-
-// archiveMaterial repeals the material an archive card names that a law in
-// force still absorbs; the reason names the laws that absorb it.
-func archiveMaterial(ctx context.Context, tx pgx.Tx, c LawCard) error {
-	laws, err := currentLaws(ctx, tx)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	absorbed := AbsorbedBy(laws, now)
-	for _, rp := range c.Repeals {
-		prev, have, err := lastLaw(ctx, tx, rp.Law)
-		if err != nil {
-			return err
-		}
-		if !have || LawState(prev, now) != StateMaterial || len(absorbed[rp.Law]) == 0 {
-			continue
-		}
-		l := prev
-		l.Op, l.Status, l.ApprovalID, l.Standards = "repeal", RepealedStatus, c.ApprovalID, nil
-		l.Source = "归档：被第 " + strings.Join(absorbed[rp.Law], "、") + " 条吸收（law_amend " + c.ApprovalID + "：" + rp.Reason + "）"
-		if err := appendLaw(ctx, tx, prev, true, l); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // registerOne writes one add, amend or repeal of law n.

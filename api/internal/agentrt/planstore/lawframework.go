@@ -23,9 +23,10 @@ import (
 // 领域法 (one domain or line). The details a domain owner sets within a law
 // (once level 4, 细则与判例) are RULE, not LAW (LAW-1 二 and 九, version 3,
 // #754): a card that still says
-// level 4 is noted, not refused. Three states: 现行 (in force), 素材 (raw material:
-// what was said, kept with its source, not executed: every transcribed row
-// starts here), 废止.
+// level 4 is noted, not refused. Two states: 现行 (in force) and 废止
+// (repealed). The register holds laws only (LAW-1 四, ISSUE-104): a record
+// that lacks the framework's fields is a law in force with fields missing,
+// noted on its card, not a state of its own.
 //
 // Step by step (LAW-1): first a framework that can hold good laws, in the
 // product; then the laws put into it with how each is enforced and judged,
@@ -54,7 +55,6 @@ const (
 // The states of a law.
 const (
 	StateInForce  = "现行"
-	StateMaterial = "素材"
 	StateRepealed = "废止"
 )
 
@@ -95,16 +95,13 @@ type LawFrame struct {
 	Parent     string   `json:"parent,omitempty"`
 	DependsOn  []string `json:"depends_on,omitempty"`
 	Supersedes []string `json:"supersedes,omitempty"`
-	// Absorbs names the material (素材) this law distils: the numbers of the
-	// transcribed rows it takes in (step two: distil the material law by law,
-	// then confirm once that the new laws cover all of it before the material
-	// is repealed, LAW-1).
-	Absorbs      []string `json:"absorbs,omitempty"`
-	DistinctFrom string   `json:"distinct_from,omitempty"`
-	Executor     string   `json:"executor,omitempty"`
-	Enforcement  string   `json:"enforcement,omitempty"` // the check that enforces it, or 自觉
-	Evidence     string   `json:"evidence,omitempty"`
-	ExpiresOn    string   `json:"expires_on,omitempty"` // a stage law's last day, YYYY-MM-DD
+	// An older record's frame may still carry absorbs; it is not read
+	// (LAW-1 四, ISSUE-104): the data stays in the ledger, unchanged.
+	DistinctFrom string `json:"distinct_from,omitempty"`
+	Executor     string `json:"executor,omitempty"`
+	Enforcement  string `json:"enforcement,omitempty"` // the check that enforces it, or 自觉
+	Evidence     string `json:"evidence,omitempty"`
+	ExpiresOn    string `json:"expires_on,omitempty"` // a stage law's last day, YYYY-MM-DD
 	// Enforce is whether the law is being enforced: 未执行 (the default:
 	// enacted, how it is enforced and judged is set, nothing is enforced yet)
 	// or 执行中 (it is in the plan, the audit line measures it, its checks
@@ -142,7 +139,7 @@ func readLawFrame(raw any) (*LawFrame, error) {
 		return out
 	}
 	f := &LawFrame{Scope: s("scope"), Subject: s("subject"), Modality: s("modality"), Condition: s("condition"), Parent: LawNumberOf(s("parent")),
-		DependsOn: refs("depends_on"), Supersedes: refs("supersedes"), Absorbs: list("absorbs"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
+		DependsOn: refs("depends_on"), Supersedes: refs("supersedes"), DistinctFrom: s("distinct_from"), Executor: s("executor"),
 		Enforcement: s("enforcement"), Evidence: s("evidence"), ExpiresOn: s("expires_on"), Enforce: s("enforce")}
 	switch v := m["level"].(type) {
 	case float64:
@@ -163,8 +160,8 @@ func readLawFrame(raw any) (*LawFrame, error) {
 }
 
 // LawState is a law's state in the framework: 废止 when repealed or a stage
-// law past its last day; 素材 when it only came from the file or carries no
-// level; 现行 otherwise.
+// law past its last day; 现行 otherwise, with or without its frame (LAW-1 四,
+// ISSUE-104).
 func LawState(l Law, today time.Time) string {
 	if l.Status == RepealedStatus {
 		return StateRepealed
@@ -173,9 +170,6 @@ func LawState(l Law, today time.Time) string {
 		if end, err := time.Parse("2006-01-02", l.Frame.ExpiresOn); err == nil && today.After(end.Add(24*time.Hour)) {
 			return StateRepealed
 		}
-	}
-	if l.Op == "transcribed" || l.Frame == nil || l.Frame.Level == nil {
-		return StateMaterial
 	}
 	return StateInForce
 }
@@ -188,8 +182,13 @@ func LawState(l Law, today time.Time) string {
 // modality, an enforcement state or a date out of range) or a conflict with
 // a fundamental law in force.
 func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, standards int) ([]string, error) {
-	if f == nil || f.Level == nil {
-		return []string{"没有框架字段（层级等）：批了也只算素材，不是现行法"}, nil
+	// A law without its frame is a law in force with fields missing (LAW-1
+	// 四, ISSUE-104): the card says what it lacks.
+	if f == nil {
+		return []string{"缺框架字段：层级、范围、主题、规定方式、执行者等都没写"}, nil
+	}
+	if f.Level == nil {
+		return []string{"缺层级（level）：查不了这一层还缺什么"}, nil
 	}
 	lv := *f.Level
 	if lv < LevelDao || lv > LevelDetail {
@@ -266,13 +265,9 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 		l, ok := by[n]
 		return l, ok && LawState(l, now) == StateInForce
 	}
-	// A repealed law cannot be cited: not as a parent, a dependency, a law
-	// superseded or material absorbed: a repealed law does not linger (LAW-1).
-	// This refuses the card.
-	// absorbs is not a citation but a law's provenance: once the material it
-	// absorbed is archived (repealed, round 1, #751) the record stays, and a
-	// later amend of the law carries it (2026-11-25, the first amend of LAW-1
-	// after the archive would have been refused).
+	// A repealed law cannot be cited: not as a parent, a dependency or a law
+	// superseded: a repealed law does not linger (LAW-1). This refuses the
+	// card.
 	cited := map[string][]string{"parent": {f.Parent}, "depends_on": f.DependsOn, "supersedes": f.Supersedes}
 	for field, ns := range cited {
 		for _, n := range ns {
@@ -284,6 +279,8 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 	if f.Parent != "" {
 		if p, ok := inForce(f.Parent); !ok {
 			notes = append(notes, fmt.Sprintf("上位法 %s 不是现行法", nm(f.Parent)))
+		} else if p.Frame == nil || p.Frame.Level == nil {
+			notes = append(notes, fmt.Sprintf("上位法 %s 缺层级，比不了高低", nm(f.Parent)))
 		} else if *p.Frame.Level >= lv {
 			notes = append(notes, fmt.Sprintf("上位法 %s 在第 %d 层，不比它高", nm(f.Parent), *p.Frame.Level))
 		}
@@ -298,23 +295,12 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 			notes = append(notes, fmt.Sprintf("要取代的 %s 不在名录或已废止", nm(sn)))
 		}
 	}
-	for _, a := range f.Absorbs {
-		l, ok := by[a]
-		switch {
-		case !ok:
-			notes = append(notes, fmt.Sprintf("吸收的第 %s 条不在名录", a))
-		case LawState(l, now) == StateInForce:
-			notes = append(notes, fmt.Sprintf("吸收的 %s 是现行法，不是素材", nm(a)))
-		}
-	}
-	if lv >= LevelFundamental && len(f.Absorbs) == 0 {
-		notes = append(notes, "没写吸收了哪些素材（absorbs）")
-	}
 	if f.Scope == "" || f.Subject == "" {
 		return notes, nil
 	}
 	for _, l := range laws {
-		if l.Law == self || slices.Contains(f.Supersedes, l.Law) || LawState(l, now) != StateInForce {
+		// A law in force that lacks its frame or level is not compared.
+		if l.Law == self || slices.Contains(f.Supersedes, l.Law) || LawState(l, now) != StateInForce || l.Frame == nil || l.Frame.Level == nil {
 			continue
 		}
 		o := l.Frame
@@ -364,13 +350,11 @@ type Framework struct {
 	Subjects   []string         `json:"subjects"`
 	ScopeForms []string         `json:"scope_forms"`
 	Modalities []string         `json:"modalities"`
-	States     map[string]int   `json:"states"` // how many laws are in each state now
-	// Coverage is how much of the material the laws in force absorb.
-	Coverage  FrameworkCoverage `json:"coverage"`
-	Enforce   []string          `json:"enforce"`
-	Between   []string          `json:"between"`   // the rules between laws (notes on a card)
-	Integrity []string          `json:"integrity"` // what refuses a card
-	StageNote string            `json:"stage_note"`
+	States     map[string]int   `json:"states"` // how many laws are in force now (a repealed law is not counted)
+	Enforce    []string         `json:"enforce"`
+	Between    []string         `json:"between"`   // the rules between laws (notes on a card)
+	Integrity  []string         `json:"integrity"` // what refuses a card
+	StageNote  string           `json:"stage_note"`
 }
 
 // TheFramework is the framework with the register's counts.
@@ -403,7 +387,6 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			{"parent", "上位法", "它落实或细化的是哪一条"},
 			{"depends_on", "依存", "要先有哪几条成立"},
 			{"supersedes", "取代", "它取代哪几条；被取代的随之废止并移出名录"},
-			{"absorbs", "吸收的素材", "它从哪几条素材提炼而来；素材全被吸收后可一次废止"},
 			{"executor", "执行者", "哪条线负责执行"},
 			{"enforcement", "强制方式", "哪道机器检查强制，或写明靠自觉"},
 			{"evidence", "证据", "从哪个读口取证，是否系统存档"},
@@ -411,12 +394,12 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			{"review", "审计复核", "建卡前审计看标准能不能量：谁、何时、可量或量不了"},
 			{"enforce", "执法开关", "未执行或执行中；执行中才进计划、被审计量"},
 			{"expires_on", "有效期", "阶段法的最后一天"},
-			{"source", "出处", "谁在哪天说的、吸收了哪些素材、批准卡号"},
+			{"source", "出处", "批准它的修法票和日期"},
 		},
 		Subjects:   LawSubjects,
 		ScopeForms: []string{"全系统", "域:Trade|Research|Ops", "领域:<领域 id>", "环境:PROD|STG|DEV", "动作:<一类动作>"},
 		Modalities: lawModalities,
-		States:     map[string]int{StateInForce: 0, StateMaterial: 0},
+		States:     map[string]int{StateInForce: 0},
 		Enforce:    []string{EnforceOff, EnforceOn},
 		Between: []string{
 			"上位优先：下位法和上位法抵触的那一处不执行",
@@ -430,53 +413,21 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			"法只经 Owner 批准的修法票增、改、废",
 			"修法票的改前原文必须和名录对得上",
 			"不能放松根本法（与现行第 1 层法冲突的卡被拒）",
-			"不能引用已废止的法（作上位法、依存、取代或吸收）",
+			"不能引用已废止的法（作上位法、依存或取代）",
 		},
 		StageNote: "现阶段框架的发现只在卡面提示、不拦；执法一条一条开，力度随项目阶段定",
 	}
-	absorbed := AbsorbedBy(laws, now)
-	fw.Coverage.Uncovered = []string{}
 	for _, l := range laws {
 		st := LawState(l, now)
 		if st == StateRepealed {
 			continue
 		}
 		fw.States[st]++
-		if st == StateInForce && l.Frame != nil && l.Frame.Level != nil {
+		if l.Frame != nil && l.Frame.Level != nil {
 			if lv := *l.Frame.Level; lv >= 0 && lv < len(fw.Levels) {
 				fw.Levels[lv].InForce++
 			}
 		}
-		if st == StateMaterial {
-			fw.Coverage.Material++
-			if len(absorbed[l.Law]) > 0 {
-				fw.Coverage.Covered++
-			} else {
-				fw.Coverage.Uncovered = append(fw.Coverage.Uncovered, l.Law)
-			}
-		}
 	}
 	return fw
-}
-
-// AbsorbedBy maps each material row to the laws in force that absorb it.
-func AbsorbedBy(laws []Law, now time.Time) map[string][]string {
-	out := map[string][]string{}
-	for _, l := range laws {
-		if LawState(l, now) != StateInForce || l.Frame == nil {
-			continue
-		}
-		for _, a := range l.Frame.Absorbs {
-			out[a] = append(out[a], l.Law)
-		}
-	}
-	return out
-}
-
-// FrameworkCoverage is how much of the material the laws in force absorb:
-// the material, how many of it at least one law absorbs, and which none does.
-type FrameworkCoverage struct {
-	Material  int      `json:"material"`
-	Covered   int      `json:"covered"`
-	Uncovered []string `json:"uncovered"`
 }

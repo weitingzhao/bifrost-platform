@@ -110,12 +110,10 @@ type LawCounts struct {
 // current version (when an approved card made one) and its numbers.
 type LawView struct {
 	Law
-	State string `json:"state"` // 现行, 素材 or 废止 (the framework)
-	// AbsorbedBy, on a material row, is the laws in force that absorb it.
-	AbsorbedBy []string   `json:"absorbed_by,omitempty"`
-	Item       string     `json:"plan_item,omitempty"`
-	Counts     *LawCounts `json:"counts,omitempty"`
-	Steps      []LawStep  `json:"steps,omitempty"`
+	State  string     `json:"state"` // 现行 (the view leaves out 废止; LAW-1 四)
+	Item   string     `json:"plan_item,omitempty"`
+	Counts *LawCounts `json:"counts,omitempty"`
+	Steps  []LawStep  `json:"steps,omitempty"`
 }
 
 // LawsView is the register, by number, with each law's numbers.
@@ -144,7 +142,6 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 			s := func(k string) string { v, _ := r.Body[k].(string); return v }
 			grade[s("step")] = LawStep{Grade: s("grade"), Version: s("version")}
 		}
-		absorbed := AbsorbedBy(laws, time.Now())
 		for _, l := range laws {
 			v := LawView{Law: l, State: LawState(l, time.Now())}
 			// A repealed law is not in the register's view: it is not read,
@@ -152,9 +149,6 @@ func LawsView(ctx context.Context, db eventlog.DB) ([]LawView, error) {
 			// (LAW-1); it stays only in the ledger.
 			if v.State == StateRepealed {
 				continue
-			}
-			if v.State == StateMaterial {
-				v.AbsorbedBy = absorbed[l.Law]
 			}
 			if l.ApprovalID != "" {
 				var item string

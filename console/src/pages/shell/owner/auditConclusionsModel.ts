@@ -198,8 +198,8 @@ function causeCell(r: StandardRow): Cell {
 }
 
 /**
- * How a law is named on the page: its code (LAW-k) when it has one, else #n, so a row of material is never taken for a
- * law (the Console line, 2026-11-25). Addresses keep the number.
+ * How a law is named on the page: its code (LAW-k) when it has one, else #n (the Console line, 2026-11-25).
+ * Addresses keep the number.
  */
 export const lawName = (r: Pick<StandardRow, 'law' | 'lawCode'>): string => r.lawCode ?? '#' + r.law
 

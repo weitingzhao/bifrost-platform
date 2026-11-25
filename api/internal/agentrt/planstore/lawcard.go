@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
 )
@@ -76,15 +75,11 @@ type LawRepeal struct {
 
 const lawCardMaxRepeals = 30
 
-// The bounds of a batch (the laws distilled from the material go into the
-// framework as one batch, and the material is archived once the laws cover
-// it, LAW-1). The approvals store is one ConfigMap (about 900
-// KiB), so an archive card names numbers and reasons only: whether each is
-// covered is the register's to say, not a quoted text's.
-const (
-	lawCardMaxAdds    = 15
-	lawCardMaxArchive = 100
-)
+// The bounds of a batch of adds or amends (LAW-1). The archive op, which
+// retired material, left with the material status (LAW-1 四, ISSUE-104): an
+// executed archive card no longer reads and is skipped; what it repealed
+// stays repealed.
+const lawCardMaxAdds = 15
 
 // ReadLawAmend reads and checks normalized params; the error says what is
 // wrong, before a card is written.
@@ -103,8 +98,6 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 		return readAddMany(params, la)
 	case "amend_many":
 		return readAmendMany(params, la)
-	case "archive":
-		return readArchive(params, la)
 	case "add":
 		if la.Before != "" {
 			return la, errors.New("law_amend add: before must be empty")
@@ -156,7 +149,7 @@ func ReadLawAmend(params map[string]any) (LawAmend, error) {
 		}
 		return la, nil
 	default:
-		return la, fmt.Errorf("law_amend: op must be add, amend, repeal, repeal_many, purge, add_many, amend_many or archive, not %q", la.Op)
+		return la, fmt.Errorf("law_amend: op must be add, amend, repeal, repeal_many, purge, add_many or amend_many, not %q", la.Op)
 	}
 	if la.Revert == "" {
 		return la, errors.New("law_amend: revert (how to undo it) is required")
@@ -225,9 +218,8 @@ func readAddMany(params map[string]any, la LawAmend) (LawAmend, error) {
 	return la, nil
 }
 
-// readAmendMany reads an amend_many card (2026-11-24: the audit line's check
-// of the first batch against the material asked for changes to seven laws at
-// once): amends lists 1 to lawCardMaxAdds laws, each read as an amend card
+// readAmendMany reads an amend_many card (2026-11-24: the audit line asked
+// for changes to seven laws of the first batch at once): amends lists 1 to lawCardMaxAdds laws, each read as an amend card
 // (law, before, after, standards, frame), none named twice. Like a batch of
 // adds, it does not turn enforcement on.
 func readAmendMany(params map[string]any, la LawAmend) (LawAmend, error) {
@@ -260,39 +252,6 @@ func readAmendMany(params map[string]any, la LawAmend) (LawAmend, error) {
 		}
 		seen[one.Law] = true
 		la.Amends = append(la.Amends, one)
-	}
-	return la, nil
-}
-
-// readArchive reads an archive card: repeals lists the material it retires,
-// each {law, reason}; law, before, after and standards stay empty.
-func readArchive(params map[string]any, la LawAmend) (LawAmend, error) {
-	if la.Law != "" || la.Before != "" || la.After != "" || params["standards"] != nil {
-		return la, errors.New("law_amend archive: law, before, after and standards stay empty; name each law in repeals")
-	}
-	if la.Revert == "" {
-		return la, errors.New("law_amend: revert (how to undo it) is required")
-	}
-	raw, _ := params["repeals"].([]any)
-	if len(raw) == 0 || len(raw) > lawCardMaxArchive {
-		return la, fmt.Errorf("law_amend archive: repeals names 1 to %d laws", lawCardMaxArchive)
-	}
-	seen := map[string]bool{}
-	for i, r := range raw {
-		m, ok := r.(map[string]any)
-		if !ok {
-			return la, fmt.Errorf("law_amend archive: repeals[%d] must be an object", i)
-		}
-		f := func(k string) string { v, _ := m[k].(string); return strings.TrimSpace(v) }
-		rp := LawRepeal{Law: LawNumberOf(f("law")), Reason: f("reason")}
-		if rp.Law == "" || rp.Reason == "" || len(rp.Reason) > lawCardMaxText {
-			return la, fmt.Errorf("law_amend archive: repeals[%d] needs law and a reason", i)
-		}
-		if seen[rp.Law] {
-			return la, fmt.Errorf("law_amend archive: law %s appears twice", rp.Law)
-		}
-		seen[rp.Law] = true
-		la.Repeals = append(la.Repeals, rp)
 	}
 	return la, nil
 }
@@ -379,9 +338,6 @@ func CheckLawCard(ctx context.Context, reg LawLookup, params map[string]any) err
 		}
 		return nil
 	}
-	if la.Op == "archive" {
-		return checkArchive(ctx, reg, la.Repeals)
-	}
 	if la.Op == "amend_many" {
 		for i, a := range la.Amends {
 			if _, err := FrameNotes(ctx, reg, a.Law, a.Frame, len(a.Standards)); err != nil {
@@ -445,37 +401,6 @@ func checkInForce(ctx context.Context, reg LawLookup, op, n, before string) erro
 	}
 	if strings.TrimSpace(law.Text) != before {
 		return fmt.Errorf("law_amend %s: before is not law %s as it stands; it reads: %s", op, n, strings.TrimSpace(law.Text))
-	}
-	return nil
-}
-
-// checkArchive says whether each law is material that a law in force
-// absorbs: only covered material is archived.
-func checkArchive(ctx context.Context, reg LawLookup, repeals []LawRepeal) error {
-	if reg.All == nil {
-		return errors.New("law_amend archive: the register cannot be listed here, so coverage cannot be checked")
-	}
-	laws, err := reg.All(ctx)
-	if err != nil {
-		return fmt.Errorf("law_amend: reading the register: %w", err)
-	}
-	now := time.Now()
-	by := map[string]Law{}
-	for _, l := range laws {
-		by[l.Law] = l
-	}
-	absorbed := AbsorbedBy(laws, now)
-	for _, rp := range repeals {
-		l, ok := by[rp.Law]
-		if !ok {
-			return fmt.Errorf("law_amend archive: law %s is not in the register", rp.Law)
-		}
-		if LawState(l, now) != StateMaterial {
-			return fmt.Errorf("law_amend archive: law %s is not material; archive retires material only", rp.Law)
-		}
-		if len(absorbed[rp.Law]) == 0 {
-			return fmt.Errorf("law_amend archive: no law in force absorbs material %s yet", rp.Law)
-		}
 	}
 	return nil
 }
@@ -570,8 +495,8 @@ func LawCardSummary(ctx context.Context, reg LawLookup, params map[string]any) s
 		notes = append(notes, "批了只立法，未执行")
 		return line + clip(" ｜框架："+strings.Join(notes, "；"), 600)
 	}
-	if op == "repeal_many" || op == "purge" || op == "archive" {
-		verb := map[string]string{"repeal_many": "repeal", "purge": "purge (delete for good)", "archive": "archive (material a law absorbs)"}[op]
+	if op == "repeal_many" || op == "purge" {
+		verb := map[string]string{"repeal_many": "repeal", "purge": "purge (delete for good)"}[op]
 		if la, err := ReadLawAmend(params); err == nil {
 			ns := make([]string, 0, len(la.Repeals))
 			for _, rp := range la.Repeals {

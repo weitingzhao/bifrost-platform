@@ -1,5 +1,5 @@
 import type { LawFramework as Framework, PurgeQueue, RegisterLaw } from '@/api/lawRegister'
-import { coverageLine, inForceAt, purgeLine, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
+import { inForceAt, inForceWithoutLevel, purgeLine, requiredLabels, stateCounts, UNKNOWN } from './lawFrameworkModel'
 import { lawName } from './lawRegisterModel'
 
 const Unknown = ({ what }: { what: string }) => (
@@ -24,10 +24,12 @@ function List({ items, what }: { items: readonly string[] | undefined; what: str
 }
 
 /**
- * The framework of laws itself (GET /api/v1/agentrt/laws → framework): the five levels, the fields, the rules between
- * laws and what refuses a card, and the states' counts. The laws in force hang under their level; today there are none.
+ * The framework of laws itself (GET /api/v1/agentrt/laws → framework): the levels, the fields, the rules between
+ * laws and what refuses a card, and the count in force. The laws in force hang under their level; a law in force
+ * without a level is listed as such (LAW-1 四: fields missing, not a state of its own).
  */
 export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Framework; laws: readonly RegisterLaw[]; purge?: PurgeQueue | null }) {
+  const noLevel = inForceWithoutLevel(laws)
   return (
     <div className="flex min-w-0 flex-col gap-3" data-law-framework>
       <Block id="levels" title="Levels">
@@ -46,10 +48,7 @@ export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Fr
                   <p className="m-0 text-xs text-muted-foreground">Required: {level.required ? requiredLabels(level, fw.fields).join(' · ') : UNKNOWN}</p>
                   {here.length > 0 ? (
                     <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">{here.map(l => (
-                      <li key={l.law} data-in-force-law={l.law}>
-                        {`${lawName(l)}: ${l.text}`}
-                        {l.frame?.absorbs && l.frame.absorbs.length > 0 ? <span className="block text-xs text-muted-foreground">{`Absorbs material ${l.frame.absorbs.join(', ')}`}</span> : null}
-                      </li>
+                      <li key={l.law} data-in-force-law={l.law}>{`${lawName(l)}: ${l.text}`}</li>
                     ))}</ul>
                   ) : null}
                 </li>
@@ -57,6 +56,14 @@ export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Fr
             })}
           </ol>
         )}
+        {noLevel.length > 0 ? (
+          <div className="flex min-w-0 flex-col gap-1 border-l-2 border-[var(--table-rule)] pl-3" data-no-level>
+            <span className="text-xs text-muted-foreground">{`In force, level missing ${noLevel.length}`}</span>
+            <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">{noLevel.map(l => (
+              <li key={l.law} data-in-force-law={l.law}>{`${lawName(l)}: ${l.text}`}</li>
+            ))}</ul>
+          </div>
+        ) : null}
       </Block>
 
       <Block id="fields" title="Fields a law carries">
@@ -97,8 +104,6 @@ export function LawFrameworkView({ framework: fw, laws, purge }: { framework: Fr
             <li key={s} data-state={s}><span className="text-muted-foreground">{s}</span> {n ?? <Unknown what={s} />}</li>
           ))}
         </ul>
-        {/* Step two (ISSUE-17): the material distilled into laws one by one, then repealed once all is covered. */}
-        <p className="m-0 text-sm" data-coverage>{coverageLine(fw)}</p>
         {/* LAW-1 s5 (2026-11-25): the repealed are not shown, only how many wait to be deleted and whether any is overdue. */}
         <p className="m-0 text-sm text-muted-foreground" data-purge>{purgeLine(purge)}</p>
       </Block>

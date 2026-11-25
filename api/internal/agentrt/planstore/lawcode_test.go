@@ -9,8 +9,7 @@ import (
 )
 
 // Origin: 2026-11-25, Owner: 「以后法条统一叫LAW 开始，不用简写」. The laws the
-// framework holds (86 on) are LAW-1, LAW-2, …; rows 1 to 85 were material and
-// have no code. A card may name a law by its code or its number.
+// framework holds (86 on) are LAW-1, LAW-2, …; rows 1 to 85 have no code. A card may name a law by its code or its number.
 func TestLawCode(t *testing.T) {
 	for n, want := range map[string]string{"86": "LAW-1", "89": "CORE-1", "98": "LAW-13", "85": "", "1": "", "x": ""} {
 		if got := planstore.LawCode(n); got != want {
@@ -52,11 +51,11 @@ func TestLawCardTakesCodes(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-25, the first amend of LAW-1 after round 1's archive: its
-// frame still names the material it absorbed (now repealed), which is its
-// provenance, not a citation; the card is not refused for it. A repealed law
-// as a parent is still refused (the positive control).
-func TestAbsorbedArchivedMaterialIsNotACitation(t *testing.T) {
+// Origin: 2026-11-25, the first amend of LAW-1 after round 1's archive
+// carried absorbs naming repealed rows. Since LAW-1 四 / ISSUE-104 absorbs is
+// not read at all: the card is not refused and not noted for it. A repealed
+// law as a parent is still refused (the positive control).
+func TestAbsorbsIsNotRead(t *testing.T) {
 	reg := fakeLookup("99")
 	ctx := context.Background()
 	std := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}

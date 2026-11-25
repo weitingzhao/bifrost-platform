@@ -138,8 +138,8 @@ func TestLawCardRepealMany(t *testing.T) {
 }
 
 // 2026-11-24, Owner: a repealed law is deleted for good after seven days or
-// when he asks ("我直接要求删"). His purge card names only repealed laws, each
-// quoted as it stands; a law in force or material is refused at creation.
+// when he asks. His purge card names only repealed laws, each quoted as it
+// stands; a law in force (with or without its frame) is refused at creation.
 func TestLawCardPurge(t *testing.T) {
 	reg := fakeLookup("92")
 	good := map[string]any{"op": "purge", "revert": "cannot be undone; add the law again by a new card",
@@ -152,7 +152,7 @@ func TestLawCardPurge(t *testing.T) {
 	}
 	bad := map[string]map[string]any{
 		"in force":     {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "90", "before": "approvals go by law", "reason": "x"}}},
-		"material":     {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}}},
+		"unframed":     {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "79", "before": "a", "reason": "x"}}},
 		"stale before": {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "5", "before": "new", "reason": "x"}}},
 		"not in reg":   {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "999", "before": "z", "reason": "x"}}},
 		"no reason":    {"op": "purge", "revert": "r", "repeals": []any{map[string]any{"law": "5", "before": "old"}}},
@@ -193,12 +193,16 @@ func TestLawCardFramework(t *testing.T) {
 		c    map[string]any
 		want string
 	}{
-		"no frame":               {card(nil), "没有框架字段"},
+		// 2026-11-25, LAW-1 四 / ISSUE-104: no frame is a law with fields
+		// missing, said on the card.
+		"no frame":               {card(nil), "缺框架字段"},
+		"no level":               {card(with(2, "level", nil)), "缺层级"},
 		"basic without review":   {card(with(2, "review", nil)), "审计复核"},
 		"basic without evidence": {card(with(2, "evidence", nil)), "证据"},
 		"domain without parent":  {card(with(3, "parent", nil)), "上位法"},
 		"parent not above":       {card(with(2, "parent", "90")), "不比它高"},
-		"parent is material":     {card(with(3, "parent", "79")), "不是现行法"},
+		"parent not in register": {card(with(3, "parent", "999")), "不是现行法"},
+		"parent lacks a level":   {card(with(3, "parent", "79")), "缺层级"},
 		"unknown subject":        {card(with(2, "subject", "心情")), "主题表"},
 		"bad scope":              {card(with(2, "scope", "everywhere")), "格式"},
 		"fundamental by 自觉":      {card(with(1, "enforcement", "自觉")), "机器强制"},
@@ -215,7 +219,8 @@ func TestLawCardFramework(t *testing.T) {
 			t.Errorf("%s: the card's line %q does not say %q", name, line, c.want)
 		}
 	}
-	// A complete frame with no finding has only the enforcement note.
+	// A complete frame with no finding has only the enforcement note. An
+	// absorbs field is ignored, not noted (2026-11-25, LAW-1 四 / ISSUE-104).
 	complete := frame(2)
 	complete["absorbs"] = []any{"79"}
 	if n := planstore.LawCardNotes(ctx, reg, card(complete)); len(n) != 1 {
@@ -236,8 +241,10 @@ func TestLawCardFramework(t *testing.T) {
 	}
 }
 
-// The three states: a transcribed row is 素材, a carded law with a level is
-// 现行, a repealed one or a stage law past its day is 废止.
+// Origin: 2026-11-25, LAW-1 四 / ISSUE-104: two states. A repealed law or a
+// stage law past its day is 废止; every other law is 现行, a transcribed row
+// or a card without a frame included. The repealed and stage cases
+// are the positive control.
 func TestLawState(t *testing.T) {
 	lv := 2
 	now, _ := time.Parse("2006-01-02", "2026-11-24")
@@ -245,8 +252,8 @@ func TestLawState(t *testing.T) {
 		l    planstore.Law
 		want string
 	}{
-		"transcribed":    {planstore.Law{Op: "transcribed", Status: "已落"}, planstore.StateMaterial},
-		"card, no frame": {planstore.Law{Op: "add", Status: "已批"}, planstore.StateMaterial},
+		"transcribed":    {planstore.Law{Op: "transcribed", Status: "已落"}, planstore.StateInForce},
+		"card, no frame": {planstore.Law{Op: "add", Status: "已批"}, planstore.StateInForce},
 		"card, framed":   {planstore.Law{Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv}}, planstore.StateInForce},
 		"repealed":       {planstore.Law{Op: "repeal", Status: planstore.RepealedStatus, Frame: &planstore.LawFrame{Level: &lv}}, planstore.StateRepealed},
 		"stage, past":    {planstore.Law{Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv, ExpiresOn: "2026-11-01"}}, planstore.StateRepealed},
@@ -261,12 +268,13 @@ func TestLawState(t *testing.T) {
 
 // 2026-11-24, Owner: step one is a framework, seen on Ops, with no law in it
 // yet. GET /laws carries the framework itself: five levels with what each
-// requires and how many laws are in force there, the rules, and the states
-// with their counts (a transcribed row is 素材, so an empty frame reads 现行 0).
+// requires and how many laws are in force there, the rules, and the count in
+// force (2026-11-25, LAW-1 四 / ISSUE-104: 现行 is the only state counted; a
+// repealed row is not counted, so a register of repealed rows reads 现行 0).
 func TestTheFramework(t *testing.T) {
 	now, _ := time.Parse("2006-01-02", "2026-11-24")
-	empty := planstore.TheFramework([]planstore.Law{{Law: "1", Op: "transcribed", Status: "已落"}}, now)
-	if len(empty.Levels) != 4 || empty.Rule == "" || empty.States[planstore.StateInForce] != 0 || empty.States[planstore.StateMaterial] != 1 {
+	empty := planstore.TheFramework([]planstore.Law{{Law: "1", Op: "repeal", Status: planstore.RepealedStatus}}, now)
+	if len(empty.Levels) != 4 || empty.Rule == "" || len(empty.States) != 1 || empty.States[planstore.StateInForce] != 0 {
 		t.Fatalf("an empty frame = %+v", empty.States)
 	}
 	if empty.Levels[3].Name != "领域法" || !slices.Contains(empty.Levels[3].Required, "parent") || slices.Contains(empty.Levels[0].Required, "standards") {
@@ -281,44 +289,9 @@ func TestTheFramework(t *testing.T) {
 		{Law: "2", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv}},
 		{Law: "3", Op: "repeal", Status: planstore.RepealedStatus},
 	}, now)
-	if _, has := one.States[planstore.StateRepealed]; has || one.States[planstore.StateInForce] != 1 || one.Levels[2].InForce != 1 {
+	// The transcribed row counts as in force, at no level.
+	if _, has := one.States[planstore.StateRepealed]; has || one.States[planstore.StateInForce] != 2 || one.Levels[2].InForce != 1 {
 		t.Fatalf("counts = %+v, level 2 = %d", one.States, one.Levels[2].InForce)
-	}
-}
-
-// 2026-11-24, step two (Owner: distil the material law by law, then confirm
-// once that the new laws cover all of it before it is repealed): a law names
-// the material it absorbs; the framework counts the coverage, and a material
-// row knows which laws absorb it.
-func TestFrameworkCoverage(t *testing.T) {
-	now, _ := time.Parse("2006-01-02", "2026-11-24")
-	lv := 2
-	laws := []planstore.Law{
-		{Law: "1", Op: "transcribed", Status: "已落"},
-		{Law: "2", Op: "transcribed", Status: "未落"},
-		{Law: "3", Op: "transcribed", Status: "未落"},
-		{Law: "4", Op: "repeal", Status: planstore.RepealedStatus},
-		{Law: "90", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv, Absorbs: []string{"1", "2"}}},
-		{Law: "91", Op: "add", Status: "已批", Frame: &planstore.LawFrame{Level: &lv, Absorbs: []string{"2"}}},
-	}
-	fw := planstore.TheFramework(laws, now)
-	if c := fw.Coverage; c.Material != 3 || c.Covered != 2 || len(c.Uncovered) != 1 || c.Uncovered[0] != "3" {
-		t.Fatalf("coverage = %+v", c)
-	}
-	by := planstore.AbsorbedBy(laws, now)
-	if len(by["2"]) != 2 || len(by["1"]) != 1 || len(by["3"]) != 0 {
-		t.Fatalf("absorbed by = %v", by)
-	}
-	// On a card: absorbing a law in force, or none at all, is a note.
-	reg := fakeLookup("92")
-	std := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}
-	f := frame(2)
-	f["absorbs"] = []any{"90"}
-	if n := planstore.LawCardSummary(context.Background(), reg, map[string]any{"op": "add", "after": "a", "standards": std, "revert": "r", "frame": f}); !strings.Contains(n, "不是素材") {
-		t.Fatalf("absorbing a law in force: %q", n)
-	}
-	if n := planstore.LawCardSummary(context.Background(), reg, map[string]any{"op": "add", "after": "a", "standards": std, "revert": "r", "frame": frame(2)}); !strings.Contains(n, "absorbs") {
-		t.Fatalf("absorbing nothing: %q", n)
 	}
 }
 

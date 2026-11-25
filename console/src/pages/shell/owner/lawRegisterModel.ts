@@ -63,17 +63,17 @@ const count = (n: number | undefined, tone: 'ok' | 'warn' | 'unknown', has: bool
 
 /** The register as a Ledger table, one row per law; the counts are numbers so a sort orders them. */
 /**
- * How a law is named on the page (LAW-1): its code (LAW-k) when it has one; a row without one (material)
- * keeps its register number, written "#n" so it is never read as a law.
+ * How a law is named on the page (LAW-1): its code (LAW-k) when it has one; a row without one (rows 1 to 85)
+ * keeps its register number, written "#n".
  */
 export const lawName = (l: Pick<RegisterLaw, 'law' | 'code'>): string => l.code ?? `#${l.law}`
 
-export function lawRegisterTable(laws: readonly RegisterLaw[], codeOf: ReadonlyMap<string, string> = new Map()): Extract<Block, { kind: 'table' }> {
+export function lawRegisterTable(laws: readonly RegisterLaw[]): Extract<Block, { kind: 'table' }> {
   return {
     kind: 'table',
     head: [
       { label: 'No.' }, { label: 'Text' }, { label: 'Status' }, { label: 'Said on' }, { label: 'Enforced by' },
-      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true }, { label: 'State' }, { label: 'Absorbed by' },
+      { label: 'Reached', num: true }, { label: 'Missed', num: true }, { label: 'Unmeasured', num: true }, { label: 'State' },
     ],
     rows: laws.map(l => {
       const has = l.counts != null
@@ -87,9 +87,6 @@ export function lawRegisterTable(laws: readonly RegisterLaw[], codeOf: ReadonlyM
         count(l.counts?.missed, 'warn', has),
         count(l.counts?.unmeasured, 'unknown', has),
         l.state ?? { text: 'unknown', title: 'The platform did not say this law\'s state' },
-        // Step two (ISSUE-17): which law in force absorbs this material; "none" until one does.
-        l.absorbed_by && l.absorbed_by.length > 0 ? l.absorbed_by.map(n => codeOf.get(n) ?? `#${n}`).join(', ')
-          : l.state === '素材' ? { text: 'none', title: 'No law in force absorbs this material' } : '—',
       ]
       return { key: l.law, cells }
     }),

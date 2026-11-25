@@ -34,14 +34,12 @@ export type RegisterLaw = {
   plan_item?: string
   counts?: LawCounts
   steps?: LawStep[]
-  /** 现行, 素材 or 废止 under the framework (planstore lawsview.go); absent from an older platform. */
+  /** 现行 under the framework (planstore lawsview.go; the register holds laws only, LAW-1 四, and the view leaves out 废止); absent from an older platform. */
   state?: string
-  /** Where the law sits in the framework (level, scope, subject, modality, parent, enforcement…); absent until a card frames it. */
-  frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; absorbs?: string[]; [more: string]: unknown }
-  /** A law's name (LAW-1: laws are written LAW-k, never abbreviated): LAW-1… for the laws in force; absent on material and repealed rows. */
+  /** Where the law sits in the framework (level, scope, subject, modality, parent, enforcement…); absent while the law lacks its frame. */
+  frame?: { level?: number; scope?: string; subject?: string; modality?: string; parent?: string; enforcement?: string; [more: string]: unknown }
+  /** A law's name (LAW-1: laws are written LAW-k, never abbreviated); absent on rows 1 to 85, which had none. */
   code?: string
-  /** On a material row: the laws in force that absorb it (立法线 44065b1c); absent when none does. */
-  absorbed_by?: string[]
 }
 
 /**
@@ -64,8 +62,6 @@ export type LawFramework = {
   between?: string[]
   integrity?: string[]
   stage_note?: string
-  /** How much of the material the laws in force absorb (立法线 44065b1c): absent from an older platform. */
-  coverage?: { material: number; covered: number; uncovered: string[] }
 }
 
 /**
