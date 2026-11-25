@@ -51,3 +51,24 @@ func TestLawCardTakesCodes(t *testing.T) {
 		t.Fatalf("summary = %q", got)
 	}
 }
+
+// Origin: 2026-11-25, the first amend of LAW-1 after round 1's archive: its
+// frame still names the material it absorbed (now repealed), which is its
+// provenance, not a citation; the card is not refused for it. A repealed law
+// as a parent is still refused (the positive control).
+func TestAbsorbedArchivedMaterialIsNotACitation(t *testing.T) {
+	reg := fakeLookup("99")
+	ctx := context.Background()
+	std := []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}}
+	keeps := map[string]any{"op": "amend", "law": "90", "before": "approvals go by law", "after": "approvals go by law, again", "revert": "r", "standards": std,
+		"frame": map[string]any{"level": 2, "absorbs": []any{"5"}}}
+	ok(t, planstore.CheckLawCard(ctx, reg, keeps))
+	if got := planstore.LawCardSummary(ctx, reg, keeps); strings.Contains(got, "吸收") {
+		t.Fatalf("an archived row in absorbs is noted: %q", got)
+	}
+	parent := map[string]any{"op": "amend", "law": "90", "before": "approvals go by law", "after": "x", "revert": "r", "standards": std,
+		"frame": map[string]any{"level": 3, "parent": "5"}}
+	if err := planstore.CheckLawCard(ctx, reg, parent); err == nil {
+		t.Fatal("a repealed law as parent was accepted")
+	}
+}

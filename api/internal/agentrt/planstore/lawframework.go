@@ -260,7 +260,11 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 	// A repealed law cannot be cited: not as a parent, a dependency, a law
 	// superseded or material absorbed (Owner 2026-11-24: a repealed law must
 	// not linger as poison). This refuses the card.
-	cited := map[string][]string{"parent": {f.Parent}, "depends_on": f.DependsOn, "supersedes": f.Supersedes, "absorbs": f.Absorbs}
+	// absorbs is not a citation but a law's provenance: once the material it
+	// absorbed is archived (repealed, round 1, #751) the record stays, and a
+	// later amend of the law carries it (2026-11-25, the first amend of LAW-1
+	// after the archive would have been refused).
+	cited := map[string][]string{"parent": {f.Parent}, "depends_on": f.DependsOn, "supersedes": f.Supersedes}
 	for field, ns := range cited {
 		for _, n := range ns {
 			if l, ok := by[n]; ok && n != "" && LawState(l, now) == StateRepealed {
@@ -286,8 +290,12 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 		}
 	}
 	for _, a := range f.Absorbs {
-		if l, ok := by[a]; !ok || LawState(l, now) != StateMaterial {
-			notes = append(notes, fmt.Sprintf("吸收的第 %s 条不是素材", a))
+		l, ok := by[a]
+		switch {
+		case !ok:
+			notes = append(notes, fmt.Sprintf("吸收的第 %s 条不在名录", a))
+		case LawState(l, now) == StateInForce:
+			notes = append(notes, fmt.Sprintf("吸收的 %s 是现行法，不是素材", lawName(a)))
 		}
 	}
 	if lv >= LevelFundamental && len(f.Absorbs) == 0 {
