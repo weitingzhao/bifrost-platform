@@ -37,7 +37,9 @@ export type LawEffect = {
   said_after: number
   per_week_before: number
   per_week_after: number
-  verdict: 'not said again' | 'eased' | 'not eased' | 'no law time' | string
+  /** How long the law has been in force; under a week the verdict is "too early". */
+  days_after?: number
+  verdict: 'not said again' | 'eased' | 'not eased' | 'too early' | 'no law time' | string
 }
 export type OwnerIssuesAnswer = {
   issues: OwnerIssue[]

@@ -5,7 +5,7 @@ import { NO_ENGINE_READ, useOwnerIssues } from './OwnerIssues'
 export function effectLine(effects: readonly Effect[]): string {
   if (effects.length === 0) return 'No issue names a law yet.'
   const n = (v: string) => effects.filter(e => e.verdict === v).length
-  return `${effects.length} laws answer issues · not said again ${n('not said again')} · eased ${n('eased')} · not eased ${n('not eased')} · no law time ${n('no law time')}`
+  return `${effects.length} laws answer issues · not said again ${n('not said again')} · eased ${n('eased')} · not eased ${n('not eased')} · too early ${n('too early')} · no law time ${n('no law time')}`
 }
 
 const perWeek = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '—')
@@ -44,7 +44,7 @@ export function LawEffect() {
                   <td className="p-1 tabular-nums">{e.verdict === 'no law time' ? '—' : perWeek(e.per_week_before)}</td>
                   <td className="p-1 tabular-nums">{e.verdict === 'no law time' ? '—' : perWeek(e.per_week_after)}</td>
                   <td className="p-1 tabular-nums">{e.verdict === 'no law time' ? '—' : e.said_after}</td>
-                  <td className="p-1">{e.verdict}</td>
+                  <td className="p-1">{e.verdict === 'too early' && e.days_after != null ? `too early (${e.days_after.toFixed(1)} of 7 days)` : e.verdict}</td>
                 </tr>
               ))}
             </tbody>

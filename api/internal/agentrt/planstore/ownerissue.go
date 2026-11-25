@@ -350,11 +350,19 @@ type LawEffect struct {
 	// over the issues that name a law time; zero spans count as one day.
 	PerWeekBefore float64 `json:"per_week_before"`
 	PerWeekAfter  float64 `json:"per_week_after"`
+	// DaysAfter is how long the law has been in force (its longest issue).
+	DaysAfter float64 `json:"days_after"`
 	// Verdict is "not said again", "eased" (the rate after is under half the
-	// rate before), "not eased", or "no law time" when none of its issues
-	// says when the law went in force.
+	// rate before), "not eased", "too early" while the law has been in force
+	// less than EffectMinDays (the rates are shown, the verdict waits), or
+	// "no law time" when none of its issues says when the law went in force.
 	Verdict string `json:"verdict"`
 }
+
+// EffectMinDays is how long a law is in force before its effect is judged:
+// a rate over a day or two says little (2026-11-25: the first reading had
+// 1.75 days after the laws and judged 11 of 15 laws "not eased").
+const EffectMinDays = 7
 
 // LawEffects groups the issues by the laws that answer them, the law whose
 // issues he said most often first.
@@ -402,7 +410,10 @@ func LawEffects(issues []OwnerIssueRead, now time.Time) []LawEffect {
 		default:
 			e.PerWeekBefore = a.before / a.daysBefore * 7
 			e.PerWeekAfter = a.after / a.daysAfter * 7
+			e.DaysAfter = a.daysAfter
 			switch {
+			case a.daysAfter < EffectMinDays:
+				e.Verdict = "too early"
 			case e.SaidAfter == 0:
 				e.Verdict = "not said again"
 			case e.PerWeekAfter < e.PerWeekBefore/2:

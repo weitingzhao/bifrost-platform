@@ -107,6 +107,11 @@ func TestLawEffects(t *testing.T) {
 		issue("ISSUE-5", []string{"ZONE-1"}, 5, nil, nil),     // no law time yet
 	}, now)
 	want := map[string]string{"LAW-6": "eased", "LAW-8": "not said again", "LAW-14": "not eased", "ZONE-1": "no law time"}
+	// A law in force for two days is not judged yet, even if he said nothing since.
+	early := planstore.LawEffects([]planstore.OwnerIssueRead{issue("ISSUE-6", []string{"LAW-2"}, 9, n(0), &law)}, law.Add(48*time.Hour))
+	if len(early) != 1 || early[0].Verdict != "too early" {
+		t.Fatalf("two days after the law: %+v", early)
+	}
 	if len(got) != len(want) {
 		t.Fatalf("effects %+v", got)
 	}
