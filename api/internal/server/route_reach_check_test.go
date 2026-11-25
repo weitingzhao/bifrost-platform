@@ -45,6 +45,10 @@ var intendedRouteAdditions = map[string][]string{
 	// session hook posts with a reporter token; every reader reads.
 	"POST /api/v1/agentrt/owner-said": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-said":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
+	// 2026-11-25 (the Owner: his complaints, pains and needs go to the law
+	// system): the legislation line records issues; every reader reads.
+	"POST /api/v1/agentrt/owner-issues": {"operator", "admin", "trade-satellite"},
+	"GET /api/v1/agentrt/owner-issues":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/harness-preview/grants": {"admin"},
 	// 2026-11-22 (LAW-8, seen and felt; the CI line): why the PROD head-release
 	// loop released or held PROD, from the ledger, read-only, like the delivery reads.

@@ -131,6 +131,9 @@ func init() {
 	exempt("what the Owner says (his choice of automatic collection): the session hook posts the Owner's own messages from a transcript with a reporter token; each is recorded once as owner_said, information for the legislation and audit lines that grants nothing and starts nothing; not a cluster write",
 		"POST /api/v1/agentrt/owner-said",
 	)
+	exempt("where the Owner's complaints, pains and needs go: the legislation line records the issues it drew from what he said, each a new owner_issue version only when it changes; information for the legislation, administration and audit lines that grants nothing and starts nothing; not a cluster write",
+		"POST /api/v1/agentrt/owner-issues",
+	)
 	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
 	)

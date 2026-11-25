@@ -35,6 +35,8 @@ var planTypes = []string{
 	"law_purged",
 	// What the Owner said in a thread, recorded once (ownersaid.go; migration 0048).
 	"owner_said",
+	// One thing the Owner keeps saying and where it goes (ownerissue.go; migration 0050).
+	"owner_issue",
 	// note: a free note on a plan node (plannote) or an architecture row's
 	// note (planimport). The plan's since 2026-11-17 (TD-583); every other
 	// record that was a note has its own type now, and their old rows stay.
@@ -74,6 +76,12 @@ var planBodies = map[string][]eventlog.Field{
 		field("note_event_id", eventlog.Int, false), field("version", eventlog.Str, true)},
 	"owner_said": {field("message_id", eventlog.Str, false), field("transcript", eventlog.Str, false), field("said_at", eventlog.Str, false),
 		field("text", eventlog.Str, false), field("thread", eventlog.Str, true), field("host", eventlog.Str, true), field("truncated", eventlog.Bool, true)},
+	"owner_issue": {field("issue", eventlog.Str, false), field("version", eventlog.Int, false), field("title", eventlog.Str, false),
+		field("kinds", eventlog.IDs, false), field("action", eventlog.Str, false), field("detail", eventlog.Str, false),
+		field("status", eventlog.Str, false), field("evidence", eventlog.IDs, false), field("times", eventlog.Int, false),
+		field("first_at", eventlog.Str, false), field("last_at", eventlog.Str, false), field("to", eventlog.Str, true),
+		field("law_ref", eventlog.Str, true), field("gap", eventlog.Str, true), field("quotes", eventlog.IDs, true),
+		field("law_in_force_at", eventlog.Str, true), field("round", eventlog.Int, true)},
 	"law_purged": {field("law", eventlog.Str, false), field("events", eventlog.Int, false), field("reason", eventlog.Str, false),
 		field("repealed_at", eventlog.Str, false), field("approval_ids", eventlog.IDs, true), field("code", eventlog.Str, true)},
 	"law_recorded": {field("law", eventlog.Str, false), field("version", eventlog.Int, false), field("op", eventlog.Str, false),

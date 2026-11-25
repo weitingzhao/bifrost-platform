@@ -8,6 +8,7 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { TAG_VARIANT } from '@/lib/shell/stateWords'
 import { useHashParam } from '@/lib/shell/useHashSection'
 import { LawFrameworkView } from './LawFramework'
+import { OwnerIssues } from './OwnerIssues'
 import { behindSwitch, frameworkLine, frameworkWord, materialOrder, REPEALED } from './lawFrameworkModel'
 import { lawDetail, lawHref, lawRegisterTable } from './lawRegisterModel'
 
@@ -61,6 +62,7 @@ export function LawRegister() {
       {unread ? <p className="m-0 text-sm text-muted-foreground">{`The framework of laws could not be read${q.error instanceof Error ? `: ${q.error.message}` : ''}. It is unknown.`}</p> : null}
       {answer && !answer.framework ? <p className="m-0 text-sm text-muted-foreground">This platform does not send the framework yet: unknown.</p> : null}
       {answer?.framework ? <LawFrameworkView framework={answer.framework} laws={laws ?? []} purge={answer.purge} /> : null}
+      {loading ? null : <OwnerIssues viaEngine={viaEngine} />}
       {laws ? (
         <section className="flex min-w-0 flex-col gap-2" data-laws-hidden>
           <label className="flex items-center gap-2 text-sm">

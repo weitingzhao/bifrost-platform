@@ -156,6 +156,9 @@ func mountAgentrt(r chi.Router, auth *actuation.AuthService, a *agentrtAPI) {
 		// What the Owner says, posted by the session hook (2026-11-25); read by the legislation and audit lines.
 		r.With(external, cfg).Post("/owner-said", plan.HandlePostOwnerSaid)
 		r.With(read, cfg).Get("/owner-said", plan.HandleGetOwnerSaid)
+		// Where the Owner's complaints, pains and needs go (2026-11-25): the legislation line records issues; every reader reads.
+		r.With(propose, cfg).Post("/owner-issues", plan.HandlePostOwnerIssues)
+		r.With(read, cfg).Get("/owner-issues", plan.HandleGetOwnerIssues)
 		r.With(read, cfg).Get("/external-work/{id}", lineage.HandleGetExternalWork)
 		r.With(external, cfg).Post("/external-work", lineage.HandleRegisterExternalWork)
 		r.With(external, cfg).Post("/external-work/{id}/events", lineage.HandlePostExternalEvent)

@@ -97,6 +97,8 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_plan',
   'get_plan_view',
   'get_laws',
+  'get_owner_issues',
+  'get_owner_said',
   'register_external_work',
   'record_external_work_event',
   'propose_plan_change',
