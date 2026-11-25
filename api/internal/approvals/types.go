@@ -237,8 +237,8 @@ const DailyCardNote = "daily card: it goes to the Owner's phone although it is n
 
 // toOwnerNote is empty for law tickets, six-class cards, drills and the
 // Owner's own inline shutdown; DailyCardNote otherwise.
-func toOwnerNote(a Approval, ownerInline bool) string {
-	if a.Drill || ownerInline || a.OwnerClass != "" || TrackOf(a.Action) == TrackLaw {
+func toOwnerNote(a Approval) string {
+	if a.Drill || a.InlineGPUShutdown || a.OwnerClass != "" || TrackOf(a.Action) == TrackLaw {
 		return ""
 	}
 	return DailyCardNote

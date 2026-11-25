@@ -102,7 +102,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			"drill":       a.Drill,
 			"track":       TrackOf(a.Action),
 			"owner_class": a.OwnerClass,
-			"to_owner":    toOwnerNote(a, body.InlineGPUShutdown),
+			"to_owner":    toOwnerNote(a),
 		})
 		return
 	}

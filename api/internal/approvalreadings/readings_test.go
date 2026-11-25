@@ -125,6 +125,9 @@ func TestToOwnerSplitsLawSixAndDaily(t *testing.T) {
 		{Number: 3, Action: "apply_manifest", Status: approvals.StatusExecuted, CreatedAt: at},
 		{Number: 4, Action: "owner_run_command", Status: approvals.StatusPending, CreatedAt: at},
 		{Number: 5, Action: "ib_mode", Status: approvals.StatusPending, CreatedAt: at, Drill: true},
+		// 2026-11-25, #740 and #742: the Owner's own Console shutdown of the
+		// 4090 was counted as a daily card that reached him; he started it.
+		{Number: 6, Action: "poweroff_compute_node", Status: approvals.StatusExecuted, CreatedAt: at, InlineGPUShutdown: true},
 	}
 	r := Compute(items, time.UTC, now)
 	if len(r.Days) != 1 {

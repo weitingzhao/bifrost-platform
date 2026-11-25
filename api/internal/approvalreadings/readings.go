@@ -240,7 +240,8 @@ func Compute(items []approvals.Approval, loc *time.Location, now time.Time) Read
 	}
 	toOwner := map[string]*ToOwner{}
 	for _, a := range items {
-		if a.Drill || a.CreatedAt.IsZero() {
+		// The Owner's own Console shutdown did not reach him: he started it.
+		if a.Drill || a.InlineGPUShutdown || a.CreatedAt.IsZero() {
 			continue
 		}
 		d := a.CreatedAt.In(loc).Format("2006-01-02")
