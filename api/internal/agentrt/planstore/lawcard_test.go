@@ -266,7 +266,7 @@ func TestLawState(t *testing.T) {
 func TestTheFramework(t *testing.T) {
 	now, _ := time.Parse("2006-01-02", "2026-11-24")
 	empty := planstore.TheFramework([]planstore.Law{{Law: "1", Op: "transcribed", Status: "已落"}}, now)
-	if len(empty.Levels) != 5 || empty.States[planstore.StateInForce] != 0 || empty.States[planstore.StateMaterial] != 1 {
+	if len(empty.Levels) != 4 || empty.Rule == "" || empty.States[planstore.StateInForce] != 0 || empty.States[planstore.StateMaterial] != 1 {
 		t.Fatalf("an empty frame = %+v", empty.States)
 	}
 	if empty.Levels[3].Name != "领域法" || !slices.Contains(empty.Levels[3].Required, "parent") || slices.Contains(empty.Levels[0].Required, "standards") {
@@ -319,5 +319,25 @@ func TestFrameworkCoverage(t *testing.T) {
 	}
 	if n := planstore.LawCardSummary(context.Background(), reg, map[string]any{"op": "add", "after": "a", "standards": std, "revert": "r", "frame": frame(2)}); !strings.Contains(n, "absorbs") {
 		t.Fatalf("absorbing nothing: %q", n)
+	}
+}
+
+// Origin: 2026-11-25, LAW-1 version 3 (#754): the details a domain owner sets
+// are RULE, not LAW. The framework lists four levels of LAW; a card that says
+// level 4 is noted, not refused, and a level-4 law in the register does not
+// break the framework's counts.
+func TestLevelFourIsRule(t *testing.T) {
+	reg := fakeLookup("99")
+	ctx := context.Background()
+	card := map[string]any{"op": "add", "after": "a detail", "revert": "r", "standards": []any{map[string]any{"id": "s1", "standard": "x", "measure": "y"}},
+		"frame": map[string]any{"level": 4, "parent": "LAW-5"}}
+	ok(t, planstore.CheckLawCard(ctx, reg, card))
+	if got := planstore.LawCardSummary(ctx, reg, card); !strings.Contains(got, "是 RULE，不立为 LAW") {
+		t.Fatalf("summary = %q", got)
+	}
+	four := 4
+	fw := planstore.TheFramework([]planstore.Law{{Law: "99", Op: "add", Text: "x", Status: "已批", Frame: &planstore.LawFrame{Level: &four}}}, time.Now())
+	if len(fw.Levels) != 4 {
+		t.Fatalf("levels = %d, want 4", len(fw.Levels))
 	}
 }

@@ -18,10 +18,12 @@ import (
 // conflict, an unexplained duplicate, a missing dependency or a parent that
 // is not above it is refused when it is created.
 //
-// Five levels, the higher first: 0 道 (beliefs, not measured), 1 根本法 (the
-// six hard boundaries, enforced by a machine), 2 基本法 (system-wide), 3
-// 领域法 (one domain or line), 4 细则与判例 (the details a domain owner sets
-// within a higher law). Three states: 现行 (in force), 素材 (raw material:
+// Four levels of LAW, the higher first: 0 道 (beliefs, not measured), 1 根本法
+// (the six hard boundaries, enforced by a machine), 2 基本法 (system-wide), 3
+// 领域法 (one domain or line). The details a domain owner sets within a law
+// (once level 4, 细则与判例) are RULE, not LAW (LAW-1 二 and 九, version 3,
+// #754, Owner 2026-11-25: 「以后要区分LAW和RULE」): a card that still says
+// level 4 is noted, not refused. Three states: 现行 (in force), 素材 (raw material:
 // what was said, kept with its source, not executed: every transcribed row
 // starts here), 废止.
 //
@@ -207,6 +209,9 @@ func FrameNotes(ctx context.Context, reg LawLookup, self string, f *LawFrame, st
 		}
 	}
 	var notes []string
+	if lv == LevelDetail {
+		notes = append(notes, "第 4 层（细则与判例）是 RULE，不立为 LAW；由领域主人定，写明执行哪条 LAW（LAW-1 二、九）")
+	}
 	var miss []string
 	need := func(ok bool, name string) {
 		if !ok {
@@ -350,6 +355,7 @@ type Framework struct {
 	Version    string           `json:"version"`
 	Source     string           `json:"source"`
 	Levels     []FrameworkLevel `json:"levels"`
+	Rule       string           `json:"rule"` // what a RULE is, apart from the levels of LAW
 	Fields     []FrameworkField `json:"fields"`
 	Subjects   []string         `json:"subjects"`
 	ScopeForms []string         `json:"scope_forms"`
@@ -382,8 +388,8 @@ func TheFramework(laws []Law, now time.Time) Framework {
 			{Level: LevelFundamental, Name: "根本法", Meaning: "收不回的硬边界（六类）；机器必须拦，任何下位法不能放松", Required: cat(base, rule, full)},
 			{Level: LevelBasic, Name: "基本法", Meaning: "全系统通用的规矩", Required: cat(base, rule, full)},
 			{Level: LevelDomain, Name: "领域法", Meaning: "只适用于某个领域或某条线；不得和上位法抵触", Required: cat(base, rule, full, []string{"parent"})},
-			{Level: LevelDetail, Name: "细则与判例", Meaning: "落实上位法的具体做法和一次性决定；领域 owner 在授权内自定、登记、可撤", Required: cat(base, rule, []string{"parent"})},
 		},
+		Rule: "RULE 不是 LAW：执行 LAW 的规则（机器检查、签名规则和配方、领域主人在 LAW 之内定的细则和判例），由领域主人定和维护，每条写明它执行哪条 LAW，不进法的名录（LAW-1 九）",
 		Fields: []FrameworkField{
 			{"text", "原文", "一句话说清规矩"},
 			{"scope", "适用范围", "全系统、某个域、某个领域、某个环境或某类动作"},
@@ -433,7 +439,9 @@ func TheFramework(laws []Law, now time.Time) Framework {
 		}
 		fw.States[st]++
 		if st == StateInForce && l.Frame != nil && l.Frame.Level != nil {
-			fw.Levels[*l.Frame.Level].InForce++
+			if lv := *l.Frame.Level; lv >= 0 && lv < len(fw.Levels) {
+				fw.Levels[lv].InForce++
+			}
 		}
 		if st == StateMaterial {
 			fw.Coverage.Material++
