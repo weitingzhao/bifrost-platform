@@ -879,7 +879,7 @@ reg(
 
 reg(
   'request_action',
-  'Create an approval request and return its id and number (#n). Does not run the action.',
+  'Create an approval request and return its id and number (#n). Does not run the action. The answer carries to_owner: a non-empty note means this card goes to the Owner\'s phone although it is neither a law ticket nor one of the six classes (LAW-6 二); do what the note says. When the Owner decides, the decision comes to this thread\'s platform inbox and is on the card (status, decided_by): read it with get_request or wait_for_request; do not ask the Owner whether he approved.',
   {
     action: z.string().describe('Action id from the approvals catalog'),
     params: z.record(z.string(), z.unknown()).optional().describe('Parameters signed into the approval'),
