@@ -93,12 +93,41 @@ func (s *Scanner) repoNames() []string {
 	return out
 }
 
+// retiredNames are the repository registry's rows of tier retired that the
+// organization no longer lists (2026-11-25, Foundation: retiring is "nothing
+// depends on it any more", so the retired name is looked for too; its own
+// tree is not read).
+func (s *Scanner) retiredNames(listed []string) []string {
+	raw, err := s.kept().Read(keptRepoRegistry)
+	if err != nil || raw == nil {
+		return nil
+	}
+	var k keptRepoRows
+	if json.Unmarshal(raw, &k) != nil {
+		return nil
+	}
+	in := map[string]bool{}
+	for _, n := range listed {
+		in[n] = true
+	}
+	var out []string
+	for _, r := range k.Rows {
+		if r.Tier == RetiredTier && r.Name != "" && !in[r.Name] {
+			in[r.Name] = true
+			out = append(out, r.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // keepRepoRefs keeps which files of repo's tree name another repository.
 func (s *Scanner) keepRepoRefs(repo string, t Tree, now time.Time) {
 	names := s.repoNames()
 	if len(names) == 0 {
 		return
 	}
+	names = append(names, s.retiredNames(names)...)
 	k := keptRepoRefs{Repo: repo, Commit: t.Commit, At: now.UTC(), Refs: []RepoRef{}}
 	if repo == ClusterRepo {
 		for _, f := range t.Files {
@@ -156,9 +185,12 @@ type RepoUser struct {
 
 // RepoUsers is one repository's users.
 type RepoUsers struct {
-	Repo  string         `json:"repo"`
-	Users []RepoUser     `json:"users"`
-	Kinds map[string]int `json:"kinds"`
+	Repo string `json:"repo"`
+	// Retired is a repository the registry keeps as retired and the
+	// organization no longer lists: its users are what still names it.
+	Retired bool           `json:"retired,omitempty"`
+	Users   []RepoUser     `json:"users"`
+	Kinds   map[string]int `json:"kinds"`
 }
 
 // RepoUsersDoc is GET /catalog/repo-users.
@@ -202,12 +234,17 @@ func (s *Scanner) repoUsers(only string) (RepoUsersDoc, bool) {
 		}
 	}
 	found := only == ""
-	for _, n := range names {
+	retired := map[string]bool{}
+	for _, n := range s.retiredNames(names) {
+		retired[n] = true
+	}
+	targets := append(append([]string{}, names...), s.retiredNames(names)...)
+	for _, n := range targets {
 		if only != "" && n != only {
 			continue
 		}
 		found = true
-		ru := RepoUsers{Repo: n, Users: []RepoUser{}, Kinds: map[string]int{}}
+		ru := RepoUsers{Repo: n, Retired: retired[n], Users: []RepoUser{}, Kinds: map[string]int{}}
 		for _, u := range by[n] {
 			ru.Users = append(ru.Users, *u)
 			for kind, c := range u.Kinds {

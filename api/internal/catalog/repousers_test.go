@@ -61,3 +61,28 @@ func TestRepoUsersAreReadFromDependencyFiles(t *testing.T) {
 		t.Errorf("unknown repo: %d", w.Code)
 	}
 }
+
+// 2026-11-25, Foundation: a repository is retired when nothing depends on it
+// any more, so the registry's retired names (no longer in the organization)
+// are looked for too; their own tree is not read. The control: a retired
+// name nobody writes has no users and is still listed.
+func TestRetiredRepositoriesAreLookedFor(t *testing.T) {
+	s := &Scanner{Kept: memKept{}}
+	repos, _ := json.Marshal([]string{"infra", "bifrost-platform"})
+	_ = s.kept().Write(keptRepos, repos)
+	reg, _ := json.Marshal(keptRepoRows{Rows: []repoRow{{Name: "bifrost-analytics", Tier: RetiredTier}, {Name: "gone-quietly", Tier: RetiredTier}, {Name: "bifrost-platform", Tier: RetiredTier}}})
+	_ = s.kept().Write(keptRepoRegistry, reg)
+	s.keepRepoRefs("infra", Tree{Commit: "c", Files: []string{"scripts/guard.sh"}, Read: func(string) ([]byte, bool, error) {
+		return []byte("refuse bifrost-analytics\n"), true, nil
+	}}, time.Time{})
+	doc, ok := s.repoUsers("bifrost-analytics")
+	if !ok || len(doc.Repos) != 1 || !doc.Repos[0].Retired || doc.Repos[0].Kinds["governance"] != 1 {
+		t.Fatalf("%+v", doc)
+	}
+	if doc, ok := s.repoUsers("gone-quietly"); !ok || len(doc.Repos[0].Users) != 0 {
+		t.Errorf("a retired name nobody writes: %+v", doc)
+	}
+	if all, _ := s.repoUsers(""); len(all.Repos) != 4 {
+		t.Errorf("listed and retired, a listed one marked retired counted once: %+v", all.Repos)
+	}
+}
