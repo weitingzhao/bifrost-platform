@@ -6,6 +6,8 @@ type Envelope = { body?: unknown; error?: string; receivedAt: string }
 export type CapturedReads = Record<string, Envelope>
 const TOPOLOGY = '/api/v1/topology?env=prod'
 const ALERTS = '/api/v1/telemetry/alerts'
+/** A device the topology gives no readable address: not read by design, not a failed read (control room: boundary). */
+export const NO_ADDRESS = 'The topology gives no address this device can be read at; it is not read by design'
 const queryPath = (q: string) => '/api/v1/telemetry/promql?q=' + encodeURIComponent(q)
 /** Same existing reader and state adapter as City. Capture response evidence without changing their contract. */
 export async function captureReads(get: (path: string) => Promise<unknown>): Promise<CapturedReads> {
@@ -23,7 +25,8 @@ export async function snapshotOf(reads: CapturedReads, provenance: ObservationSn
     if (!r || r.error) throw new Error(r?.error ?? 'Missing capture')
     return r.body
   })
-  const district = hardwareDistrict(hardware)
+  // Signals has no City land to share: all four sheets, so no device stands folded into Other (2026-11-24).
+  const district = hardwareDistrict(hardware, 'system', '', undefined, 4)
   const tree = { id: 'town', kind: 'town' as const, shape: '8x8' as const, label: 'Runtime', question: 'What does the system report?', dashboard: null, children: [district] }
   const capturedAt = Object.values(reads).map(r => r.receivedAt).sort().at(-1) ?? new Date().toISOString()
   const evidence: ObservationSnapshot['evidence'] = {}
@@ -53,7 +56,8 @@ export async function snapshotOf(reads: CapturedReads, provenance: ObservationSn
     const stateReads = [evidenceOf(TOPOLOGY), ...stateKeys.map(k => evidenceOf(queryPath(HARDWARE_QUERIES[k]), k === 'nodeIp' ? l => l.internal_ip === node?.host : match))]
     // Optional standby indicators are not required when Ready is true; do not turn absent optional series into failed health.
     const stateEvidence = row.place.state === 'online' && device?.node ? stateReads.slice(0, 3) : stateReads
-    if (row.place.kind === 'building') evidence[pathKey(row.path)] = stateEvidence
+    const addressless = !node?.host || node.host === '127.0.0.1'
+    if (row.place.kind === 'building') evidence[pathKey(row.path)] = addressless ? [...stateEvidence, { source: TOPOLOGY, receivedAt: reads[TOPOLOGY]?.receivedAt ?? capturedAt, outcome: 'missing', detail: NO_ADDRESS }] : stateEvidence
     else if (row.place.kind === 'room') {
       const source = row.place.meter?.source
       const capacity = row.place.id === 'cpu' ? 'cores' : row.place.id === 'memory' ? 'memTotal' : 'diskSize'

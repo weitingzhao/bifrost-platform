@@ -10,6 +10,8 @@ import { captureReads, snapshotOf } from './read'
 import { qualityFixture } from './qualityFixture'
 import { readOperations } from '../../src/domains/foundation/runtime-observation/operations'
 import { COVERAGE, DATABASES, GITOPS, WORKLOADS, databasePanels, gitopsPanel, readCoverage, readStates, workloadPanels } from '../../src/domains/foundation/runtime-observation/states'
+import { readDomainEdges, readHistory } from '../../src/domains/foundation/runtime-observation/controlRoomReads'
+import { controlRoomOf } from '../../src/domains/foundation/runtime-observation/controlRoom'
 
 {
   const theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark'
@@ -31,6 +33,20 @@ export function Preview() {
         const layerPanels={...ops.panels,ci:[...ops.panels.ci,gitopsPanel(states.gitops,evidence)],data:[...ops.panels.data,...databasePanels(states.databases,evidence)],workloads:workloadPanels(states.workloads,coverage.readout,evidence)}
         if(active)setSnapshot({...base,capturedAt:new Date().toISOString(),evidence,layerPanels})}).catch(e=>{if(active)setError(String(e))})
       return ()=>{active=false}
+    }
+    if (new URLSearchParams(location.search).get('scenario') === 'control') {
+      // The control room on one recorded set of real PROD reads (untracked public/observation-recorded/control-recorded.json:
+      // every path the page asks, as recorded; a path not recorded reads as its error, never as data).
+      let active = true
+      void fetch('/observation-recorded/control-recorded.json').then(r => r.json()).then(async (rec: { reads: Record<string, unknown> }) => {
+        const get = async (path: string) => { if (!(path in rec.reads)) throw new Error('not recorded: ' + path); return rec.reads[path] }
+        const [base, ops, states, history, edges] = await Promise.all([captureReads(get).then(r => snapshotOf(r, 'recorded')), readOperations(get), readStates(get), readHistory(get), readDomainEdges(get)])
+        const evidence = { ...base.evidence, ...ops.evidence, ...states.evidence, ...history.evidence }
+        const layerPanels = { ...ops.panels, ci: [...ops.panels.ci, gitopsPanel(states.gitops, evidence)], data: [...ops.panels.data, ...databasePanels(states.databases, evidence)], workloads: workloadPanels(states.workloads, undefined, evidence) }
+        const controlRoom = controlRoomOf({ hardware: base, operations: ops, databases: states.databases, workloads: states.workloads, busEvidence: states.evidence, edges: edges.edges, edgesEvidence: edges.evidence, trends: history.trends })
+        if (active) setSnapshot({ ...base, capturedAt: new Date().toISOString(), evidence, layerPanels, controlRoom })
+      }).catch(e => { if (active) setError(String(e)) })
+      return () => { active = false }
     }
     if (new URLSearchParams(location.search).get('scenario') === 'quality') { setSnapshot(qualityFixture()); return }
     if (new URLSearchParams(location.search).get('scenario') === 'communication') {
@@ -57,7 +73,7 @@ export function Preview() {
     return () => { cancelled = true; controller.abort(); clearTimeout(timer) }
   }, [])
   if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'controlled') return <ControlledPreview snapshot={snapshot}/>
-  if(snapshot&&new URLSearchParams(location.search).get('scenario') === 'village') return <RuntimeWorld snapshot={snapshot} frame={{hrefs:{city:'#city',agents:'#collaboration',console:'#system'},env:'PROD'}}/>
+  if(snapshot&&['village','control'].includes(new URLSearchParams(location.search).get('scenario') ?? '')) return <RuntimeWorld snapshot={snapshot} frame={{hrefs:{city:'#city',agents:'#collaboration',console:'#system'},env:'PROD'}}/>
   return <>{error && <p role="alert">Read failed: {error}</p>}{snapshot ? <ObservationSurface snapshot={snapshot} initialSelection={snapshot.provenance === 'fixture' ? [] : ['utilities']} layers={[anomalyLayer, { id: 'communication', label: 'Communication', unavailable: snapshot.layerPanels?.communication ? undefined : 'Live communication is not connected in this slice.', present: s => s.layerPanels?.communication ?? [] }]} /> : <p>Reading the existing platform telemetry contract…</p>}</>
 }
 function ControlledPreview({snapshot}: {snapshot: ObservationSnapshot}) {
