@@ -47,7 +47,7 @@ var intendedRouteAdditions = map[string][]string{
 	"GET /api/v1/agentrt/owner-said":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	// 2026-11-25 (the Owner: his complaints, pains and needs go to the law
 	// system): the legislation line records issues; every reader reads.
-	"POST /api/v1/agentrt/owner-issues": {"operator", "admin", "trade-satellite"},
+	"POST /api/v1/agentrt/owner-issues": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-issues":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
 	"POST /api/v1/harness-preview/grants": {"admin"},
 	// 2026-11-22 (LAW-8, seen and felt; the CI line): why the PROD head-release

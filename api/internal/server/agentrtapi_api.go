@@ -157,7 +157,8 @@ func mountAgentrt(r chi.Router, auth *actuation.AuthService, a *agentrtAPI) {
 		r.With(external, cfg).Post("/owner-said", plan.HandlePostOwnerSaid)
 		r.With(read, cfg).Get("/owner-said", plan.HandleGetOwnerSaid)
 		// Where the Owner's complaints, pains and needs go (2026-11-25): the legislation line records issues; every reader reads.
-		r.With(propose, cfg).Post("/owner-issues", plan.HandlePostOwnerIssues)
+		// external, like /owner-said: a reporter's token writes them too (information, versioned, each version names its writer).
+		r.With(external, cfg).Post("/owner-issues", plan.HandlePostOwnerIssues)
 		r.With(read, cfg).Get("/owner-issues", plan.HandleGetOwnerIssues)
 		r.With(read, cfg).Get("/external-work/{id}", lineage.HandleGetExternalWork)
 		r.With(external, cfg).Post("/external-work", lineage.HandleRegisterExternalWork)
