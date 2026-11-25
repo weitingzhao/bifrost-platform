@@ -19,7 +19,7 @@ version: 1
 # commit is used only where the release cannot be read (go run ./api/cmd/unitplan,
 # a process that has not read it yet), and the plan's pin says which.
 pins:
-  bifrost-ui: {commit: 03dc06fd237261d3729b2cd29e3b45cbc151d4c7, advance: stg}
+  bifrost-ui: {commit: 18f8acffd5be24f1ed3b0ff3a969b5efdfb5e3c9, advance: stg}
   bifrost-trade-infra: {commit: 69316d722cc064bb93497f0b20520349563d81ab, advance: manual}
 
 modules:
