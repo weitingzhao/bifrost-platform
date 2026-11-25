@@ -76,7 +76,7 @@ describe('audit conclusions', () => {
   })
 
   it('lists what each unmeasured standard still lacks, and nothing for the measured ones', () => {
-    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: 'Law 91 s1', lacks: 'lacks reader 1' })])
+    expect(unmeasuredList(standardsOf([law('12', ['没核', '达到'])]))).toEqual([expect.objectContaining({ what: 'Law 12 s1', lacks: 'lacks reader 1' })])
   })
 
   it('opens a row onto the conclusion and the cause apart, then the evidence one click away', () => {
