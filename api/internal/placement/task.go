@@ -14,8 +14,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
 )
 
-// Where a task runs (the Owner, 2026-11-18: builds go to the fast node, and to
-// the slower one when it is full). The same api build took about 120 s on
+// Where a task runs (ISSUE-70: builds go to the fast node, and to the slower
+// one when it is full). The same api build took about 120 s on
 // ubt-k3s-07 and 266 s on ubt-k3s-05, whose disk writes take over 20 times as
 // long. A soft preference cannot do this: a run's pods follow its affinity
 // assistant, and Tekton's anti-affinity between assistants outweighs it (#598

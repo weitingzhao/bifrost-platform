@@ -207,8 +207,8 @@ func (a *autopilotDispatcher) fixItem(ctx context.Context, sig checklist.ItemSig
 
 // ReportOnly is PATROL_MODE=report: skills evaluate as usual and record what
 // they would do, but act on nothing. The PROD autopilot starts in this mode
-// (Owner 2026-10-07: maintenance only in PROD, report first, then enable fixes
-// item by item).
+// (ISSUE-81: maintenance only in PROD, report first, then enable fixes item
+// by item).
 func ReportOnly() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("PATROL_MODE")), "report")
 }

@@ -209,8 +209,8 @@ func Queries() []telemetry.QuerySpec {
 				` * on (instance) group_left (nodename) node_uname_info, "node", "$1", "nodename", "(.*)"))`),
 		},
 		// What each node's disks are and how they behave under the real load
-		// (Owner 2026-11-22, relayed by the hardware line: placing a fast-disk
-		// job on a slow disk is the mistake to avoid). The brand does not tell:
+		// (ISSUE-70: placing a fast-disk job on a slow disk is the mistake to
+		// avoid). The brand does not tell:
 		// two nodes with the same model differ by two orders of magnitude in
 		// write tail, so the readings are the model and the measured latency.
 		{
