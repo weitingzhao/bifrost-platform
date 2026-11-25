@@ -159,13 +159,17 @@ type Scanner struct {
 	CommitTime func(ctx context.Context, repo, commit string) (time.Time, error)
 
 	mu sync.Mutex // one scan at a time
+
+	stateOnce sync.Once
+	state     *cachedKept
 }
 
 func (s *Scanner) kept() Kept {
 	if s.Kept != nil {
 		return s.Kept
 	}
-	return StateKept{}
+	s.stateOnce.Do(func() { s.state = newCachedKept(StateKept{}, time.Now) })
+	return s.state
 }
 
 func (s *Scanner) now() time.Time {
