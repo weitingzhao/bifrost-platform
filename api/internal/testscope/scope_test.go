@@ -262,3 +262,38 @@ func TestPlain(t *testing.T) {}`)
 		t.Fatalf("walking tests = %v, want TestOwners and TestReach (not TestPlain)", got)
 	}
 }
+
+// Origin: 2026-11-25. c5493494 added two functions to api/internal/server; codeguard's
+// TestAssemblyOnlyShrinks counts them by globbing and parsing that directory, which the
+// guard scan did not see as a walk, so the incremental run left it out and the full run
+// of 5092a68b went red. Listing a directory and parsing its Go source is a walk; listing
+// alone (testdata) or parsing one named file is not.
+func TestListingAndParsingGoSourceIsAWalk(t *testing.T) {
+	parse := func(src string) *ast.File {
+		f, err := parser.ParseFile(token.NewFileSet(), "x_test.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	reads := parse(`package p
+import ("go/parser"; "go/token"; "path/filepath"; "testing")
+func count(dir string) int { files, _ := filepath.Glob(filepath.Join(dir, "*.go")); for _, f := range files { parser.ParseFile(token.NewFileSet(), f, nil, 0) }; return len(files) }
+func TestShrinks(t *testing.T) { count("../../server") }`)
+	if !walks(reads) {
+		t.Fatal("globbing and parsing Go source is not seen as a walk")
+	}
+	if got := walkingTests([]*ast.File{reads}); strings.Join(got, ",") != "TestShrinks" {
+		t.Fatalf("walking tests = %v, want TestShrinks", got)
+	}
+	// Positive controls: listing testdata alone, and parsing one named file, stay narrow.
+	listOnly := parse(`package p
+import ("os"; "testing")
+func TestFixtures(t *testing.T) { os.ReadDir("testdata") }`)
+	parseOne := parse(`package p
+import ("go/parser"; "go/token"; "testing")
+func TestOne(t *testing.T) { parser.ParseFile(token.NewFileSet(), "x.go", nil, 0) }`)
+	if walks(listOnly) || walks(parseOne) {
+		t.Fatal("a test that only lists testdata or parses one named file was taken for a walk")
+	}
+}

@@ -273,17 +273,25 @@ func testNames(f *ast.File) []string {
 }
 func walks(f *ast.File) bool {
 	aliases := map[string]bool{}
+	osNames, parserNames := map[string]bool{}, map[string]bool{}
 	for _, i := range f.Imports {
 		p, _ := strconv.Unquote(i.Path.Value)
-		if p == "path/filepath" {
-			n := "filepath"
+		name := func(def string) string {
 			if i.Name != nil {
-				n = i.Name.Name
+				return i.Name.Name
 			}
-			aliases[n] = true
+			return def
+		}
+		switch p {
+		case "path/filepath":
+			aliases[name("filepath")] = true
+		case "os":
+			osNames[name("os")] = true
+		case "go/parser":
+			parserNames[name("parser")] = true
 		}
 	}
-	found := false
+	found, lists, parses := false, false, false
 	ast.Inspect(f, func(n ast.Node) bool {
 		c, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -295,12 +303,23 @@ func walks(f *ast.File) bool {
 			if ok && aliases[id.Name] && (s.Sel.Name == "Walk" || s.Sel.Name == "WalkDir") {
 				found = true
 			}
+			if ok && ((aliases[id.Name] && s.Sel.Name == "Glob") || (osNames[id.Name] && s.Sel.Name == "ReadDir") ||
+				(parserNames[id.Name] && s.Sel.Name == "ParseDir")) {
+				lists = true
+			}
+			if ok && parserNames[id.Name] && (s.Sel.Name == "ParseFile" || s.Sel.Name == "ParseDir") {
+				parses = true
+			}
 		} else if id, ok := c.Fun.(*ast.Ident); ok && aliases["."] && (id.Name == "Walk" || id.Name == "WalkDir") {
 			found = true
 		}
 		return true
 	})
-	return found
+	// Listing a directory and parsing the Go source in it reads other packages as a walk does
+	// (2026-11-25: codeguard's TestAssemblyOnlyShrinks globs and parses api/internal/server;
+	// c5493494 added two functions there, its incremental run left the test out and the full
+	// run of 5092a68b went red).
+	return found || (lists && parses)
 }
 
 type guard struct {
