@@ -15,7 +15,7 @@ import (
 // signed release policy covers it: the action and the route that runs it.
 // Each is a route whose every parameter is in the body.
 //
-// Owner 2026-11-15. POST /api/v1/approvals answered 400 "call directly" for a
+// Decision 2026-11-15. POST /api/v1/approvals answered 400 "call directly" for a
 // request the policy covers, and the caller was to call the action's own
 // route. A caller can only do that with a tool for the route; a session's
 // tool list is fixed when it starts, so every session older than the action

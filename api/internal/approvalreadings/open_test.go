@@ -7,8 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
-// Origin: the Owner, 2026-11-21 ("看得见"): the Approvals line listed what the
-// system cannot see; whose move a card is and for how long, a card waiting out
+// Origin (ISSUE-3): the Approvals line listed what the system cannot see; whose move a card is and for how long, a card waiting out
 // "not now", and approvals that timed out waiting for a slot were stored but
 // shown nowhere. These readings come from the records as they are.
 func TestOpenCardsSayWhoseMoveAndSinceWhen(t *testing.T) {

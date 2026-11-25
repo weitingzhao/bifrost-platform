@@ -12,9 +12,8 @@ import (
 
 // GET /api/v1/readings/approvals is what the approval records say, counted:
 // a day, a requester, how many requests were made, how long approval took,
-// and what became of the approved ones. The Owner, 2026-11-14: the Ops page
-// is a window on the system, and what it shows is what the system measured,
-// with no drift from a ledger kept by hand. Every count comes with the
+// and what became of the approved ones. The Ops page shows what the system
+// measured, with no drift from a ledger kept by hand (ISSUE-79). Every count comes with the
 // numbers of the requests it counts, so each can be opened. It reads the
 // approval store's retained records and nothing else; it computes on every
 // request and stores nothing. Read-only; viewer and above.
@@ -52,8 +51,8 @@ type Day struct {
 	Day    string  `json:"day"`
 	Groups []Group `json:"groups"`
 	// ToOwner is every card of the day that reached the Owner, split by
-	// whether it should have (Owner 2026-11-18/19, laws 31 and 46: only a
-	// change of law and the six classes that stay his). Daily is the gap
+	// whether it should have (LAW-6: only a change of law and the six
+	// classes). Daily is the gap
 	// the approvals line closes to 0. Six is the requester's own claim
 	// (owner_class); drills are left out.
 	ToOwner ToOwner `json:"to_owner"`
@@ -88,8 +87,8 @@ type Readings struct {
 	Oldest   string `json:"oldest,omitempty"`
 	Days     []Day  `json:"days"` // newest first
 	// Open is every card not finished, with whose move it is and since when
-	// (the Owner, 2026-11-21: what the system cannot see; Approvals list #4,
-	// #6, #7). Oldest first. Drills are left out.
+	// (what the system could not see, Approvals list #4, #6, #7; LAW-10).
+	// Oldest first. Drills are left out.
 	Open []OpenCard `json:"open"`
 	// WaitTimeouts are cards that were approved and failed waiting for a free
 	// slot (exit 75 past its 30 minutes, "等空档超时"): approvals that bought

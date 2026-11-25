@@ -236,7 +236,7 @@ func Redact(s string) string { return notice.Redact(s) }
 const ExitTempFail = 75
 
 // defaultTempfailWait is how long after approval a card may keep waiting for
-// a slot (Owner 2026-11-14: a decided card may run up to 30 minutes late).
+// a slot: up to 30 minutes after approval (decision 2026-11-14).
 const defaultTempfailWait = 30 * time.Minute
 
 func tempfail(a *Approval, in resultInput) bool {

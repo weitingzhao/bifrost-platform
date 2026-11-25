@@ -14,7 +14,7 @@ import (
 )
 
 // law_amend is the one kind of card the Owner approves for a change of law
-// (Owner 2026-11-23: "only a change of law opens a ticket"). The platform
+// (LAW-6). The platform
 // runs nothing: the approved card is that version of the law, kept in the
 // approval store and never edited (a new version is a new card).
 // approval.card.executed announces it with action law_amend; the plan

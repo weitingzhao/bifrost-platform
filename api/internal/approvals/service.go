@@ -627,7 +627,7 @@ func keepSwept(evs []event) error {
 	return nil
 }
 
-// consoleOnly refuses a chat approval of tier D (ADR §5, Owner 2026-10-10):
+// consoleOnly refuses a chat approval of tier D (ADR §5, decision 2026-10-10):
 // a token holder could otherwise skip the MCP client's own refusal.
 // Every approve path goes through this check. The server trusts the channel
 // value an admin-token caller sends: channel is a label, not proof that the

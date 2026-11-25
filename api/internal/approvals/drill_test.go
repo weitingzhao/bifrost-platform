@@ -19,7 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 
-// A drill (W-31 2.5 gap 2, Owner 2026-10-21; v4 §20.3 rule 8, §20.5
+// A drill (W-31 2.5 gap 2, decision 2026-10-21; v4 §20.3 rule 8, §20.5
 // scenario 9): made through POST /approvals with drill, it waits as pending
 // even for an action a release policy would approve; approve answers 409 on
 // every channel and nothing runs; its notice says it is a drill and asks for

@@ -113,7 +113,7 @@ const BodyLimit = bodyLimit
 // BodyBytes is the size of a body as the store checks it: cleaned the way a
 // body is cleaned, then JSON-encoded with its quotes. For a caller that must
 // know before it asks whether its body fits (the agent runtime's mission
-// cards, Owner 2026-10-15 「决策卡 A」).
+// cards, decision 2026-10-15).
 func BodyBytes(s string) int { return encodedBytes(clean(s, true)) }
 
 func clipPrincipal(s string) string {

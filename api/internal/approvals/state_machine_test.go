@@ -477,7 +477,7 @@ func TestCapacityApprovalRequiresNumberBeforeExecution(t *testing.T) {
 	}
 }
 
-// Owner 2026-10-10 (ADR §5): tier D is approved on Console only. A chat
+// Decision 2026-10-10 (ADR §5): tier D is approved on Console only. A chat
 // approval is refused and leaves the request pending; phone and console are
 // unchanged, and chat still approves below tier D.
 func TestTierDChatApprovalIsRefused(t *testing.T) {

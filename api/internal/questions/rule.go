@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// Answers a signed runtime rule gives (TD-390, the Owner 2026-10-20 「STG 用
-// A」): the agent runtime's card-auto-answer rule answers a card it asked
+// Answers a signed runtime rule gives (TD-390, ISSUE-4): the agent runtime's card-auto-answer rule answers a card it asked
 // with the option the card itself recommends, once it has been open long
 // enough unanswered. Such an answer is the rule's, never the Owner's: its By
 // names the rule and its version, its channel is RuleChannel. Nothing here is

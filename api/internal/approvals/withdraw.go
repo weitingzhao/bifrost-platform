@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// A requester may take back its own card (Owner 2026-11-15; origin #562,
+// A requester may take back its own card (decision 2026-11-15; origin #562,
 // #564, #566: a card built wrong or made moot was left for the Owner to
 // reject). Withdrawing only ever narrows: it cannot approve or run anything,
 // it works only for the requester that built the card, and only before an

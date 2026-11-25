@@ -134,7 +134,7 @@ func init() {
 	exempt("where the Owner's complaints, pains and needs go: the legislation line records the issues it drew from what he said, each a new owner_issue version only when it changes; information for the legislation, administration and audit lines that grants nothing and starts nothing; not a cluster write",
 		"POST /api/v1/agentrt/owner-issues",
 	)
-	exempt("agent runtime sign-off (W-31 2.5, the Owner 2026-10-21): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
+	exempt("agent runtime sign-off (W-31 2.5, ISSUE-3): only the Owner (admin) records his sign-off on a plan step whose done rule waits on it; the store writes the event in one transaction, a second press answers the first, and at most the step moves on the controller's next rules pass; not a cluster write",
 		"POST /api/v1/agentrt/plan/{id}/signoff",
 	)
 	exempt("event bus gate-git (bus/RULES.md §8, step 1, 2026-11-16): Gitea's push webhook, authenticated by the HMAC-SHA256 of the raw body under BUS_GITEA_HOOK_SECRET (503 without it, 401 on a bad signature); it can only append git.main.advanced for a watched repository's main to the event log, once per commit, and starts nothing by itself; not a cluster write",

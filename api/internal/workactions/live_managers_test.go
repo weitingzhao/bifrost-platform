@@ -16,7 +16,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 )
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// Decision 2026-11-14 (LAW-6): approval cards for changes that have a way back; design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. Whether the applier
 // applied an object before is read from the cluster's own copy, with a GET
 // of the object: its managedFields as they are, "not found" told from a

@@ -46,8 +46,8 @@ type Approval struct {
 	// ApprovalLine is filled by public() for readers. It is not stored.
 	ApprovalLine string `json:"approval_line,omitempty"`
 	// Track is filled by public(): "law" for a change of law (law_amend),
-	// "daily" for every other card. Owner 2026-11-23: a change of law is
-	// approved through its own channel on Ops, apart from the daily cards.
+	// "daily" for every other card. A change of law is approved through its
+	// own channel on Ops, apart from the daily cards (LAW-6).
 	Track     string    `json:"track,omitempty"`
 	Status    string    `json:"status"`
 	Reason    string    `json:"reason"`
@@ -81,11 +81,11 @@ type Approval struct {
 	WorkID          string `json:"work_id,omitempty"`
 	// OwnerClass is the requester's claim that this card is one of the six
 	// classes that stay the Owner's (SixClasses); empty for a daily card.
-	// Owner 2026-11-18/11-19 (laws 31, 46): only a change of law and the six
-	// classes should reach him; the readings count the rest as the gap.
+	// Only a change of law and the six classes should reach the Owner
+	// (LAW-6); the readings count the rest as the gap.
 	OwnerClass string `json:"owner_class,omitempty"`
 	// Drill marks a request made to exercise the pages and the notices (v4
-	// §20.3 rule 8, §20.5 scenario 9; W-31 2.5 gap 2, Owner 2026-10-21): it
+	// §20.3 rule 8, §20.5 scenario 9; W-31 2.5 gap 2, decision 2026-10-21): it
 	// is never approved (approve answers 409), so it never runs; it says so
 	// in its notice and is sent no reminder. It can be rejected to close it.
 	Drill bool `json:"drill,omitempty"`

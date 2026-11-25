@@ -1,5 +1,5 @@
 // ruleapprove.go (was package ruleapprove until 2026-11-22, LAW-11) is the action agentrt_rule_approve (R5 phase 2 step 3b;
-// the Owner 2026-11-06 Q2 A): a tier D card, PROD only, that lets a proposed
+// decision 2026-11-06): a tier D card, PROD only, that lets a proposed
 // rule version changing only capacity fields take effect on the Owner's
 // Console approval instead of his signature. The create check refuses a
 // request whose draft does not exist, is not the rule's next version or changes

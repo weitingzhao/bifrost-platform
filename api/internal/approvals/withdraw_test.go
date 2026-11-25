@@ -11,7 +11,7 @@ import (
 // Origin: cards #562, #564, #566 (2026-11-14). A card the requester built
 // wrong, or that became moot, could only be ended by the Owner rejecting it;
 // #562 was approved anyway and ran a second release of the same commit.
-// Owner 2026-11-15: the requester takes its own card back.
+// Decision 2026-11-15: the requester takes its own card back.
 
 func pendingCard(t *testing.T, svc *Service) Approval {
 	t.Helper()
