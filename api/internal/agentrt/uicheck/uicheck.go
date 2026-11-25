@@ -4,7 +4,8 @@
 // bifrost-ci-platform at platform's main head with that ui; green moves the
 // pin, red leaves it and records the commit and the run as blocked. The
 // console's tests then never go red because ui moved (Foundation's s7), and
-// no consumer changes code: what moves is a ConfigMap the CI reads.
+// no consumer changes code: what moves is a ConfigMap the CI reads (the
+// platform's state ConfigMap platform-state-ui-stable).
 //
 // The controller runs the loop (verification/assembly wireUICheck) and lends
 // it the reads and writes below; a nil one runs nothing.

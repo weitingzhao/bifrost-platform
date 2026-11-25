@@ -23,28 +23,35 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/landinggit"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/uicheck"
 	"github.com/weitingzhao/bifrost-platform/api/internal/kubemetrics"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 )
 
-// UIPinConfigMap is the stable ui pin in the landing CI's namespace: the ui
-// commit the console last passed with (agentrt/uicheck). CI clones ui there
-// when its uiRevision is "stable" (infra pipeline-ci-platform resolve-ui).
-const UIPinConfigMap = "bifrost-ui-stable"
+// UIPinConfigMap is the stable ui pin, a state ConfigMap of the platform's own
+// namespace: the ui commit the console last passed with (agentrt/uicheck). CI
+// clones ui there when its uiRevision is "stable" (infra pipeline-ci-platform
+// resolve-ui reads it across namespaces). Not in cicd: the admission policy
+// bifrost-cicd-configmap-writers keeps every cicd ConfigMap another workload
+// reads away from the platform (2026-11-25, the first pin write was denied).
+const UIPinConfigMap = "platform-state-ui-stable"
 
 const uiGitea = "http://gitea.cicd.svc.cluster.local:3000"
 
 var uiFullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // wireUICheck gives PROD's controller the ui pin loop (R0E, 2026-11-25):
-// checks run with the landing CI's client, the pin is a ConfigMap of its
-// namespace (the platform's state role is bound there), ui is read with the
-// platform's read-only Gitea identity. AGENTRT_UI_CHECK=off, another
+// checks run with the landing CI's client, the pin is a state ConfigMap of the
+// pod's namespace (the platform's state role is bound there), ui is read with
+// the platform's read-only Gitea identity. AGENTRT_UI_CHECK=off, another
 // environment or no cluster wires none.
 func wireUICheck(c *controller.Controller, lent *CILent) {
 	if os.Getenv("AGENTRT_UI_CHECK") == "off" || c.Env != "prod" || c.DB == nil || lent == nil || lent.Kubernetes == nil {
 		return
 	}
 	ci := lent.client()
-	namespace := ci.Namespace
+	namespace := k8sstate.Namespace()
+	if namespace == "" {
+		return
+	}
 	reader := uiReader{dir: strings.TrimSpace(os.Getenv(landinggit.ReaderDirEnv)), client: &http.Client{Timeout: 20 * time.Second}}
 	check := &uicheck.Check{
 		UIHead: func(ctx context.Context) (string, error) { return reader.head(ctx, "bifrost-ui") },
