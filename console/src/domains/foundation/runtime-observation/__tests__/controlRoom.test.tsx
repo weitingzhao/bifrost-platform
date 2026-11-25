@@ -62,7 +62,13 @@ it('words every signal it read: boundary by design is quiet, a failed read is un
   expect(word('data:olap')).toBe('warn')
   expect(word('db:data/bifrost-postgres')).toBe('fail')    // backup failed
   expect(word('workload:ns/b')).toBe('unknown')
-  expect(m.items.find(i => i.id.startsWith('alert:TargetDown'))?.plain).toBe('Some monitored targets are unreachable')
+  expect(m.items.find(i => i.id === 'alert:TargetDown')?.plain).toBe('Some monitored targets are unreachable')
+  // STG 2026-11-25: same-name alerts are one group, one lamp per instance (20 groups were 9 names)
+  const two = controlRoomOf({ ...input, hardware: { ...hardware, content: { ...hardware.content, alerts: { source: 'a', alerts: [
+    { id: 'KubePodNotReady|pod=a', name: 'KubePodNotReady', severity: 'warning', summary: 'x', at: null },
+    { id: 'KubePodNotReady|pod=b', name: 'KubePodNotReady', severity: 'critical', summary: 'x', at: null }] } } } as never })
+  const kp = two.items.filter(i => i.stage === 'alerts')
+  expect(kp.map(i => [i.name, i.word, i.lamps?.map(l => l.label)])).toEqual([['KubePodNotReady', 'fail', ['a', 'b']]])
   expect(m.items.some(i => i.name.startsWith('Watchdog'))).toBe(false) // info alerts are not findings
   expect(m.items.find(i => i.id === 'domain:plan')?.usedBy).toEqual(['domain:assembly'])
   expect(m.stages.map(s => s.id)).toEqual(['domains', 'ci', 'data', 'devices', 'alerts'])

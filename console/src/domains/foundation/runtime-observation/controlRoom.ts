@@ -114,9 +114,18 @@ export function controlRoomOf(input: ControlRoomInput): ControlRoomModel {
       evidence: own.length ? [...alertEv, ...reads] : reads })
   }
   // The alert's id carries its labels (content/alerts.ts): the pod, instance or job tells two of the same name apart.
-  const subject = (id: string) => { const l = Object.fromEntries(id.split('|')[1]?.split(',').map(kv => kv.split('=')) ?? []); return l.pod ?? l.instance ?? l.job ?? l.namespace }
-  for (const a of alerts.filter(a => !a.at && sev(a.severity) !== 'info')) items.push({ id: 'alert:' + a.id, stage: 'alerts', name: a.name + (subject(a.id) ? ' · ' + subject(a.id) : ''), word: sev(a.severity), lamps: [{ label: 'firing', word: sev(a.severity), detail: a.severity }],
-    plain: a.summary || 'Monitoring reports it firing', source: `${a.name} (${a.severity})${a.since ? ' since ' + a.since : ''}: ${a.summary}`, evidence: alertEv })
+  // The alert's id carries its labels (content/alerts.ts): what it is about tells two of the same name apart.
+  const subject = (id: string) => { const l = Object.fromEntries(id.split('|')[1]?.split(',').map(kv => kv.split('=')) ?? []); return l.daemonset ?? l.deployment ?? l.statefulset ?? l.pod ?? l.instance ?? l.job ?? l.namespace }
+  // One group per alert name, one lamp per firing instance (Owner 2026-11-24: a lamp group is one module; STG
+  // 2026-11-25 showed 20 alert groups for 9 names and the phone overflowed one screen).
+  const stray = alerts.filter(a => !a.at && sev(a.severity) !== 'info')
+  for (const name of [...new Set(stray.map(a => a.name))]) {
+    const xs = stray.filter(a => a.name === name)
+    items.push({ id: 'alert:' + name, stage: 'alerts', name, word: worst(xs.map(a => sev(a.severity))),
+      lamps: xs.map(a => ({ label: subject(a.id) ?? 'firing', word: sev(a.severity), detail: `${a.severity}${a.since ? ' since ' + a.since : ''}` })),
+      plain: xs[0].summary || 'Monitoring reports it firing',
+      source: xs.map(a => `${subject(a.id) ?? a.name} (${a.severity})${a.since ? ' since ' + a.since : ''}: ${a.summary}`).join(' · '), evidence: alertEv })
+  }
 
   const workloads = input.workloads?.states
   const notReady = workloads?.filter(w => w.state.ready !== 'ready') ?? []
