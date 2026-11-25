@@ -49,6 +49,9 @@ type Check struct {
 	// run that is not (the ui push's own run, taken as the check) is checked
 	// again with one that is before the commit is kept off the pin.
 	Own func(run string) bool
+	// Notify tells whoever made the ui commit that it was kept off the pin,
+	// by which run, and which commit the pin stays at; nil, only the log says so.
+	Notify func(ctx context.Context, ui, run, stable string)
 
 	mu      sync.Mutex
 	ui, run string // the ui commit under check and its run
@@ -140,6 +143,9 @@ func (c *Check) Pass(ctx context.Context) (string, error) {
 		}
 		c.logf("agentrt-ui-check: ui %s kept off: %s failed; stable stays at %s", short(head), c.run, short(pin.Commit))
 		run := c.run
+		if c.Notify != nil {
+			c.Notify(ctx, head, run, pin.Commit)
+		}
 		c.ui, c.run = "", ""
 		return "blocked " + run, nil
 	}

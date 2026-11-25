@@ -141,9 +141,14 @@ func TestARedPushRunIsCheckedAgainBeforeTheCommitIsBlocked(t *testing.T) {
 	if !strings.HasPrefix(own, "ui-check-") {
 		t.Fatalf("the commit is checked again with an own run: %v", w.ensured)
 	}
-	// Positive control: the own run's red does block.
+	// Positive control: the own run's red does block, and its maker is told.
+	var told []string
+	c.Notify = func(_ context.Context, ui, run, stable string) { told = append(told, ui, run, stable) }
 	w.status[own] = "Failed"
 	if did := pass(t, c); did != "blocked "+own || w.pin.BlockedCommit != uiA {
 		t.Fatalf("an own red run blocks: %q %+v", did, w.pin)
+	}
+	if len(told) != 3 || told[0] != uiA || told[1] != own || told[2] != uiB {
+		t.Fatalf("the block is told once, with the run and the commit the pin stays at: %v", told)
 	}
 }

@@ -28,6 +28,9 @@ type CILent struct {
 	// Dynamic and Kubernetes are the cluster's clients, made when called.
 	Dynamic    func() (dynamic.Interface, error)
 	Kubernetes func() (kubernetes.Interface, error)
+	// Tell sends a note from the controller to an actor (coordination's
+	// mailbox), about a matter of verification; nil sends nothing.
+	Tell func(ctx context.Context, to, body string) error
 }
 
 func (l CILent) client() *landingci.Client {

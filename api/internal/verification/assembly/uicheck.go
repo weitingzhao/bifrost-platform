@@ -111,6 +111,22 @@ func wireUICheck(c *controller.Controller, lent *CILent) {
 		},
 		Logf: c.Logf,
 		Own:  func(run string) bool { return strings.HasPrefix(run, "ui-check-") },
+		Notify: func(ctx context.Context, ui, run, stable string) {
+			thread, err := reader.session(ctx, "bifrost-ui", ui)
+			if err != nil || thread == "" {
+				c.Logf("agentrt-ui-check: nobody told of ui %s kept off (%v)", ui, err)
+				return
+			}
+			body := fmt.Sprintf("bifrost-ui %s is kept off the stable pin: the console's CI with it failed (run %s). "+
+				"console and the Trade frontend stay on ui %s until a later ui commit passes. "+
+				"Read the run: GET /api/v1/delivery/runs/%s", ui, run, stable, run)
+			if lent.Tell == nil {
+				return
+			}
+			if err := lent.Tell(ctx, "thread:"+thread, body); err != nil {
+				c.Logf("agentrt-ui-check: telling %s of ui %s failed: %v", thread, ui, err)
+			}
+		},
 	}
 	c.Loops = append(c.Loops, controller.Loop{Name: "agentrt-ui-check", Every: uicheck.Every, Run: func(ctx context.Context) error {
 		passCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -204,6 +220,29 @@ func (r uiReader) head(ctx context.Context, repo string) (string, error) {
 		return "", fmt.Errorf("gitea: no main head of %s", repo)
 	}
 	return b.Commit.ID, nil
+}
+
+var claudeSession = regexp.MustCompile(`(?m)^Claude-Session:\s*(local_[0-9a-f-]{36})\s*$`)
+
+// session is the Claude-Session trailer of a commit's message: the thread that
+// made it, "" when it carries none.
+func (r uiReader) session(ctx context.Context, repo, commit string) (string, error) {
+	body, err := r.get(ctx, "/repos/bifrost/"+url.PathEscape(repo)+"/git/commits/"+url.PathEscape(commit))
+	if err != nil {
+		return "", err
+	}
+	var c struct {
+		Commit struct {
+			Message string `json:"message"`
+		} `json:"commit"`
+	}
+	if err := json.Unmarshal(body, &c); err != nil {
+		return "", err
+	}
+	if m := claudeSession.FindStringSubmatch(c.Commit.Message); m != nil {
+		return m[1], nil
+	}
+	return "", nil
 }
 
 func (r uiReader) version(ctx context.Context, repo, commit string) (string, error) {

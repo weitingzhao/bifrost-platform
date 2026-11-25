@@ -1,6 +1,11 @@
 package server
 
 import (
+	"context"
+	"errors"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actor"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/coord"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	verificationassembly "github.com/weitingzhao/bifrost-platform/api/internal/verification/assembly"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,5 +44,12 @@ func (s *Server) landingCI() verificationassembly.CILent {
 	}, Kubernetes: func() (kubernetes.Interface, error) {
 		client, _, err := s.cluster.Service().KubernetesClient()
 		return client, err
+	}, Tell: func(ctx context.Context, to, body string) error {
+		db := s.recordDB()
+		if db == nil {
+			return errors.New("the ledger is not connected")
+		}
+		_, err := coord.SendMessage(ctx, db, actor.Writer{Actor: "controller"}, to, "note", []byte(body), "verification")
+		return err
 	}}
 }
