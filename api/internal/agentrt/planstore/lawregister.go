@@ -63,7 +63,7 @@ func LawStream(n string) string { return "law:" + n }
 // RepealedStatus is the status of a law a card repealed.
 const RepealedStatus = "废止"
 
-var lawRow = regexp.MustCompile(`^\|\s*(\d+|LAW-\d+)\s*\|`)
+var lawRow = regexp.MustCompile(`^\|\s*(\d+|(?:DAO|CONSTITUTION|LAW|BYLAW)-\d+)\s*\|`)
 
 // ParseLawTable reads the rows of OWNER_LAW.md's register table (the section
 // 「## 登记」): seven cells each, a pipe inside backticks being text.
