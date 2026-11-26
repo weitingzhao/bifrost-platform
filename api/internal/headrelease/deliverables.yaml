@@ -23,7 +23,7 @@
 # PROD row cannot be enabled; it is listed so that "is my commit released"
 # (GET /api/v1/delivery/released) answers for PROD as well.
 # The parameter named revision is the pipeline's own revision.
-# Rows for the Trade repositories stay disabled (Owner 2026-11-13).
+# Rows for the Trade repositories stay disabled (决定 2026-11-13).
 deliverables:
   - name: platform-stg
     enabled: true

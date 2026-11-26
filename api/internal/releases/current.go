@@ -34,7 +34,7 @@ var (
 // at or after the record's completion (review 162 A2). So the recorder's
 // lag and a delivery in flight read as unsettled, never as the previous
 // deployment. A delivery that failed or went unrecorded and was then pruned
-// from Tekton is not seen (review 162 A1, the Owner's decision).
+// from Tekton is not seen (decided in review 162, A1).
 //
 // The records come from the record table once it is wired (2026-11-18: 1,272
 // ConfigMaps and rows compared field by field, the same runs and the same

@@ -3,7 +3,7 @@
 // nothing and decides nothing: a verdict here is a reading for the Ops page,
 // not a gate.
 //
-// Owner 2026-11-16: CI does not depend on the business; it sets the standard
+// ISSUE-20 (2026-11-16): CI does not depend on the business; it sets the standard
 // and scores every repository that uses it from measured data, and the
 // repositories score CI in turn. Only what is measured is an item: each is
 // pass, fail or unmeasured with the raw number, there is no weighted formula,

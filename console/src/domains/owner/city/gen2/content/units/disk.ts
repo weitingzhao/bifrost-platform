@@ -4,7 +4,7 @@ import type { ArrayReading, DiskRoomReadings, DriveReading, VolumeReading } from
 
 /**
  * The disk unit (the third through the unit process, 2026-11-19). City metaphor: the factory's warehouse, a rack
- * per drive in its kind's form (high-bay HDD, line-side SSD), the Owner's word at Inside the same day.
+ * per drive in its kind's form (high-bay HDD, line-side SSD), 决定 2026-11-19 at Inside.
  *
  * Details: what node exporter reports about a machine's disks, after a read of every family it has
  * (2026-11-19 22:36Z). Three scopes: each physical drive (its kind, traffic, how busy, errors), each volume

@@ -22,7 +22,7 @@ import (
 // kind of cluster object whose state the gate says on the bus when it
 // changes. The row names the resource, the fields that make the state and
 // the topic; the topic's body is checked against the register. No kind of
-// object has code of its own here: the Owner's rule is that a module that
+// object has code of its own here: by ISSUE-34 a module that
 // joins or leaves is a configuration change, not a code change.
 
 // WatchSpec is a row and the ref its events carry (the topic's register ref).

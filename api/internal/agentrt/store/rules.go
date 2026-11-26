@@ -22,7 +22,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
-// The runtime's rules (design v5 §5.2 「规则」, Owner 2026-10-14 「规则 A」):
+// The runtime's rules (design v5 §5.2 「规则」, 决定 2026-10-14 option A):
 // rows of agentrt.rule, append only, one version after another. What a rule
 // says is what rules.Parse reads from the text stored with it; body_json is
 // derived from that text and checked again on every read. A rule that needs

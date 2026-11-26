@@ -6,7 +6,7 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/react'
 import { exchangesOf, evidenceThrough, STAGES, STAGE_LABEL } from '@bifrost/ui/communication'
 import { ObservationSurface, type ObservationSnapshot } from '@bifrost/ui/city/observation'
 
-// 2026-11-22 Owner acceptance: shared communication semantics survive layer switches, duplicates and ACK-before-send.
+// 2026-11-22 (ISSUE-61): shared communication semantics survive layer switches, duplicates and ACK-before-send.
 it('consumes the existing communication contract without rebuilding its state machine', () => {
   const at = '2026-11-22T12:00:00Z'
   const sent = { id: 's1', communication: 'm1', channel: 'message', stage: 'sent', from: 'agent-a', to: 'agent-b', evidence: { id: 's1', source: 'fixture:ledger', at } }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildingsOf, OTHER } from '../districtBuildings'
 import type { DomainHoldings } from '../domainOwns'
 
-// 2026-11-22, the Owner: the DAG must show at every level; the map line serves each domain's buildings (its Go
+// 2026-11-22 (ISSUE-9): the DAG must show at every level; the map line serves each domain's buildings (its Go
 // packages grouped by the first directory under a Go root, f2c674e8). These pin that City draws them as read,
 // sized by packages, and that a domain with more than its ground holds (foundation: 30 buildings that day) keeps
 // the biggest and puts the rest in one Other that names them: the frame's 16-slot rule, nothing dropped.
@@ -24,7 +24,7 @@ describe('a domain’s buildings in its district', () => {
     const other = out.find(b => b.id === OTHER)!
     expect(other.label).toMatch(/^Other · \d+$/)
     expect(other.question).toContain('b28')
-    // 2026-11-22, the Owner: past 16 a level is cut too fine, to decouple or merge: Other stands as a construction site.
+    // 2026-11-22 (ISSUE-35): past 16 a level is cut too fine, to decouple or merge: Other stands as a construction site.
     expect(other.landmark).toBe('site')
   })
   it('no buildings served: none drawn', () => {

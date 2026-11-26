@@ -310,7 +310,7 @@ var privilegeSince = time.Date(2026, 11, 21, 21, 6, 32, 0, time.UTC)
 
 // privilegeReading: owner_privilege_uses, the times in the window the Owner
 // stepped in to move something that was stuck (lines waiting on each other, or
-// nothing saying whose it is). Origin: LAW-6 (the Owner, 2026-11-21, relayed):
+// nothing saying whose it is). Origin: LAW-6:
 // the privilege must exist, its uses should fall, and the count is the fixed
 // reference for every before-and-after. The facts are the coordinator's, the
 // definition Audit's; this only counts what the ledger holds.

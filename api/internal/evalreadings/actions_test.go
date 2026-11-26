@@ -8,7 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actionrecord"
 )
 
-// 2026-11-20, the Owner via the coordinator: after a relaxation, count what
+// 决定 2026-11-20: after a relaxation, count what
 // the lines did on their own, by law, and how many said what undoes it. PROD
 // that day: 948 records, 145 under "signed release policy", 48 with a
 // declared rollback. The fake pages by Limit like actionrecord.List and puts

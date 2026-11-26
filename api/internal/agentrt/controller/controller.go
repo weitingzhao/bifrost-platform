@@ -227,8 +227,8 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		c.every(ctx, &wg, "agentrt-units-daily", 5*time.Minute, func() error { return c.Sources.UnitsDaily(ctx) })
 	}
 	if c.Sources.HeadRelease != nil {
-		// Thirty seconds: the slow poll of Owner 2026-11-13 ("state is read
-		// from the source; events are only hints"). No event hints it yet.
+		// Thirty seconds: the slow poll of ISSUE-74 (state is read
+		// from the source; events are only hints). No event hints it yet.
 		c.every(ctx, &wg, "head-release", 30*time.Second, func() error { return c.Sources.HeadRelease(ctx) })
 	}
 	// Expired idempotency keys go, a thousand at a time and at most two
@@ -248,7 +248,7 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	for _, l := range c.Loops {
 		c.every(ctx, &wg, l.Name, l.Every, func() error { return l.Run(ctx) })
 	}
-	// The old dispatch lane is retired (the Owner 2026-11-13): nothing is
+	// The old dispatch lane is retired (ISSUE-24): nothing is
 	// leased, routed, dispatched, accepted, closed or timed any more, hosts
 	// are not watched and no assessment is asked for. What stays in this
 	// pass is what the plan tree and the rules need (Steps, which the

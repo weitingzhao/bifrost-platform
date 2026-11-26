@@ -1,4 +1,4 @@
-// 2026-11-24 箭10, the delivery lane step 3 (the Owner: release CI and the Gitea lineage on one page, one Change-Id
+// 2026-11-24 箭10, the delivery lane step 3 (ISSUE-66: release CI and the Gitea lineage on one page, one Change-Id
 // one lane, the stuck ones first). The lanes come only through the engine, by the environment's switch, PROD off; where
 // it is off the page says so (boundary) and reads nothing else; a picked lane is in the address (World F1) and every
 // lane can go back to City's Delivery district (World F2).

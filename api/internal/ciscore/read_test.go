@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Origin of every case in this file — Owner 2026-11-16: CI scores every
+// Origin of every case in this file — ISSUE-20 (2026-11-16): CI scores every
 // repository that uses it, and its users score CI; only what is measured is
 // an item. The reads are narrow because of 2026-11-14: a loop that read every
 // run each round took the workers past their memory limit.

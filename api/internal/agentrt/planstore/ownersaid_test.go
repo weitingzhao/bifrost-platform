@@ -10,8 +10,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
-// Origin: 2026-11-25, the Owner chose automatic collection of what he says
-// (「我觉得B好，需要自动收集」): the hook may post a message more than once, so
+// Origin: 2026-11-25, ISSUE-104 (决定 2026-11-25: collected automatically):
+// the hook may post a message more than once, so
 // each must be recorded once by its message_id, and read back in the order said.
 func TestOwnerSaidRecordedOnce(t *testing.T) {
 	t.Parallel()

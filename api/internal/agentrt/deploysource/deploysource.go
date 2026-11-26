@@ -90,7 +90,7 @@ func deployedFrom(rec releases.Record) (string, map[string]any, bool) {
 // runsRecorded: every pod of every workload runs the digest the record says
 // was delivered. A pod that pulled another image under the same tag, a
 // rollout under way, or a pod that cannot be read makes the deployment not
-// known (TD-343; the Owner chose this on 2026-10-14).
+// known (TD-343; 决定 2026-10-14).
 func runsRecorded(ctx context.Context, rel Deployments, env string, rec releases.Record) bool {
 	for _, w := range workloads {
 		digests, err := rel.PodDigests(ctx, "bifrost-platform-"+env, w.deployment, w.container)

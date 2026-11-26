@@ -8,7 +8,7 @@ import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { StepSignoffHere } from '../StepSignoffHere'
 
-// 11-05: the Owner opened R5:5.13-3's own address, read "You sign off …" under Done when and found no button; the only
+// 事故 2026-11-05: R5:5.13-3's own address read "You sign off …" under Done when, with no button; the only
 // one was row 66 of 75 under Sign-offs › Not started, folded. The step card now carries it. The fixture is the GET
 // /plan?root=R2 test-database answer stepSignoffs.test.tsx reads: 2.3-2 waits on race (planned), 2.4-1 is signed.
 

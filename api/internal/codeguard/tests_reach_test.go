@@ -14,8 +14,8 @@ import (
 // what there is (2026-11-17).
 //
 // Origin: LAW-10 (2026-11-16: domains speak only through contracts;
-// judging and testing go only through the contract, black box) and the
-// Owner's word of 2026-11-17 12:1x, through the coordinator: the standard
+// judging and testing go only through the contract, black box) and
+// 决定 2026-11-17: the standard
 // for where a test sits and what it may touch is software engineering's, and
 // CI follows it; what does not meet it is debt. The CI line's page
 // (coordinator's shared notes duty/from-ci-w1-2026-11-17-test-standard.md)

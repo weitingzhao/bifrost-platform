@@ -17,8 +17,8 @@ const aheadEvery = time.Minute
 // new head and keeps the result in the platform's state; the API then answers
 // from what is kept.
 //
-// Owner 2026-11-16 22:5x, the coordinator's reading of it: the graph was
-// computed when he clicked, so he waited. A click should only read. This is
+// 事故 2026-11-16 22:5x: the graph was computed on the click, so the
+// reader waited. A click should only read. This is
 // the plain form (a look a minute); waking on git.main.advanced instead is
 // the communication line's bus, and can replace the ticker.
 func (c *Cache) ReadAhead(ctx context.Context, repos []string, source func() Source) {

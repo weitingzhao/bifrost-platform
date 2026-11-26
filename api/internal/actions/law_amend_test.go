@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 2026-11-23, Owner: only a change of law opens a ticket. The gate is the
+// 2026-11-23, LAW-6: only a change of law opens a ticket. The gate is the
 // approvals line's: law_amend is tier D and runs nothing. What a card says is
 // legislation's (planstore lawcard_test.go); without its rules wired the gate
 // refuses every card (moved 2026-11-24, legislation and administration

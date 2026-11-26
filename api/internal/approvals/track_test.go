@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// 2026-11-23, Owner (relayed by 1 Plan): a change of law is approved through
+// 2026-11-23, LAW-6: a change of law is approved through
 // its own channel on Ops, apart from the daily cards. The list splits by
 // track so the Console can give law_amend its own entry.
 func TestListSplitsLawFromDailyCards(t *testing.T) {

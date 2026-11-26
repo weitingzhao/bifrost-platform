@@ -19,7 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
-// Origin of every case in this file — 2026-11-16: the Owner read Work → CI and
+// Origin of every case in this file — 2026-11-16, ISSUE-29: a reader of Work → CI
 // could not tell what was running, who depends on whom, or what a change pulls
 // in; this page and its two routes replace it. Each case says below what of
 // the two routes it guards.
@@ -146,7 +146,7 @@ func TestCIDomainsReadsTheTreeAndKeepsItByCommit(t *testing.T) {
 	if _, err = cache.Graph(context.Background(), src, "r"); err != nil || reads.Load() != 1 {
 		t.Fatalf("a second read at the same commit read the tree again: %d reads, %v", reads.Load(), err)
 	}
-	// Origin: 2026-11-16 22:5x, the Owner switched to By dependency and saw "loading" for a long
+	// Origin: 事故 2026-11-16 22:5x, switching to By dependency showed "loading" for a long
 	// time: main had moved, the platform had restarted, and the look itself began the read of
 	// every Go file. When main moves the last graph is answered at once, marked with the commit
 	// it is of and that a newer one is being read; the read happens away from the request.
@@ -216,7 +216,7 @@ func TestCIDomainsWithoutATableIsUnmeasuredAndAFailedReadIsNotKept(t *testing.T)
 // have is read false (2026-11-16: 21 of 102 runs were of commits that never
 // reached main; they must not read as "changed nothing"), a read commit is
 // kept for good and an unread one is asked again only after a while.
-// Origin: 2026-11-16 22:5x, the Owner waited when he clicked: the graph was read on the click. The workers now read
+// Origin: 事故 2026-11-16 22:5x, a click waited: the graph was read on the click. The workers now read
 // it ahead and keep it; another process (the API) that still holds the graph of the commit before finds the kept one
 // of main's head and answers with it, without reading the tree itself. The control is the same cache with nothing
 // newer kept: it answers the old graph, marked as being refreshed.

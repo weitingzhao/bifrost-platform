@@ -117,7 +117,7 @@ func snapshotCases() []snapshotCase {
 	}
 }
 
-// Owner 2026-11-15: no second reader; the author proves a judge change with
+// LAW-9: no second reader; the author proves a judge change with
 // machine facts (must-refuse set, decision snapshots). Every answer of the
 // corpus is compared whole with its golden file: covered or not, the clauses
 // in the order checked, every reason.

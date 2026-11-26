@@ -7,7 +7,7 @@ import { NO_ADDRESS } from './read'
 import type { DomainEdge } from './controlRoomReads'
 
 /**
- * Signals' control room (Owner 2026-11-24: a power plant's big screen, not a wall of cards; 箭10 approved the
+ * Signals' control room (ISSUE-9, 2026-11-24: a power plant's big screen, not a wall of cards; 箭10 approved the
  * prototype and its corrections). Every signal the page already reads becomes one item with the source's word as one
  * of the seven and one plain sentence; the source's own text goes to `source`, its reads to `evidence`. Nothing is
  * judged beyond that mapping. Two cases are "not read by design" (boundary, quiet), decided here and nowhere else:
@@ -116,7 +116,7 @@ export function controlRoomOf(input: ControlRoomInput): ControlRoomModel {
   // The alert's id carries its labels (content/alerts.ts): the pod, instance or job tells two of the same name apart.
   // The alert's id carries its labels (content/alerts.ts): what it is about tells two of the same name apart.
   const subject = (id: string) => { const l = Object.fromEntries(id.split('|')[1]?.split(',').map(kv => kv.split('=')) ?? []); return l.daemonset ?? l.deployment ?? l.statefulset ?? l.pod ?? l.instance ?? l.job ?? l.namespace }
-  // One group per alert name, one lamp per firing instance (Owner 2026-11-24: a lamp group is one module; STG
+  // One group per alert name, one lamp per firing instance (ISSUE-9: a lamp group is one module; STG
   // 2026-11-25 showed 20 alert groups for 9 names and the phone overflowed one screen).
   const stray = alerts.filter(a => !a.at && sev(a.severity) !== 'info')
   for (const name of [...new Set(stray.map(a => a.name))]) {

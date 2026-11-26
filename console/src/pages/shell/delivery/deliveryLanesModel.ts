@@ -3,7 +3,7 @@ import { engineUnreachableText, readEngine } from '@/api/engine'
 import { formatShellHash } from '@/lib/shell/consoleRoutes'
 
 /*
- * Work → Delivery (箭10 2026-11-24, the delivery lane, step 3; the Owner: release CI and the Gitea lineage on one page,
+ * Work → Delivery (箭10 2026-11-24, the delivery lane, step 3; ISSUE-66: release CI and the Gitea lineage on one page,
  * one Change-Id one lane, the stuck ones first). The lanes come only from the UI engine
  * (GET /engine/v1/delivery/lanes, field table cockpit/ui-engine/delivery-lanes-fields.md); the engine judges every
  * cell, the page draws. Where the engine is not switched on, the page says so: there is no direct read to fall back to.

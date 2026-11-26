@@ -1,4 +1,4 @@
-// 2026-11-24 the Owner on a phone: coming from Signals pinned at 21:12, Agents headlined
+// 事故 2026-11-24, on a phone: coming from Signals pinned at 21:12, Agents headlined
 // "Requested communication message:m_01M85… is not in the loaded evidence", drew one person and no line, and its
 // timeline cards led with "Inbox delivery" / "Sent". It could not say who was talking to whom (箭10 asked for the fix).
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'

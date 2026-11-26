@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PICTURE_READER, trafficPanel, tripsOf, type TrafficContract } from '../traffic'
 
-// 2026-11-21, the Owner: the communication line's traffic in the City. The contract below is the bus registry
+// 2026-11-21 (ISSUE-9): the communication line's traffic in the City. The contract below is the bus registry
 // of that day (api/internal/bus/registry: git.main.advanced is lineage's, read by headrelease in delivery and
 // unit-watch in verification; seat.mail.arrived is coordination's, read by inbox-waiters in coordination).
 const contract: TrafficContract = {

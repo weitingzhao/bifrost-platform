@@ -11,7 +11,7 @@ import (
 )
 
 // Moved from actions/law_amend_test.go on 2026-11-24 with the rules
-// (legislation and administration agreed the split). 2026-11-23, Owner: only
+// (legislation and administration agreed the split). 2026-11-23, LAW-6: only
 // a change of law opens a ticket; it names add/amend/repeal and measurable
 // standards; it changes a real record of the law in the register, never
 // stands alone. fakeLookup holds law 79 in force ("a"), law 5 repealed.
@@ -107,7 +107,7 @@ func TestLawCardMustMatchTheRegister(t *testing.T) {
 	}
 }
 
-// 2026-11-24, Owner: clear the register's duplicates, superseded laws and
+// 2026-11-24, ISSUE-24: clear the register's duplicates, superseded laws and
 // entries that are not laws, one card for a batch. Each law must be in force
 // and quoted as it stands; one law that does not read refuses the card.
 func TestLawCardRepealMany(t *testing.T) {
@@ -137,8 +137,8 @@ func TestLawCardRepealMany(t *testing.T) {
 	}
 }
 
-// 2026-11-24, Owner: a repealed law is deleted for good after seven days or
-// when he asks. His purge card names only repealed laws, each quoted as it
+// 2026-11-24, ISSUE-17: a repealed law is deleted for good after seven days or
+// on request. A purge card names only repealed laws, each quoted as it
 // stands; a law in force (with or without its frame) is refused at creation.
 func TestLawCardPurge(t *testing.T) {
 	reg := fakeLookup("92")
@@ -164,7 +164,7 @@ func TestLawCardPurge(t *testing.T) {
 	}
 }
 
-// 2026-11-24, the framework of laws v1, step by step (Owner: first a
+// 2026-11-24, the framework of laws v1, step by step (ISSUE-17: first a
 // framework that can hold good laws, then the laws in it, then enforcement
 // law by law): what the framework finds goes on the card as notes; only a
 // malformed frame or a conflict with a fundamental law refuses it.
@@ -266,7 +266,7 @@ func TestLawState(t *testing.T) {
 	}
 }
 
-// 2026-11-24, Owner: step one is a framework, seen on Ops, with no law in it
+// 2026-11-24, ISSUE-17: step one is a framework, seen on Ops, with no law in it
 // yet. GET /laws carries the framework itself: five levels with what each
 // requires and how many laws are in force there, the rules, and the count in
 // force (2026-11-25, LAW-1 四 / ISSUE-104: 现行 is the only state counted; a

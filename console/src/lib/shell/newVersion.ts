@@ -4,8 +4,8 @@ import { moduleScriptSrc } from '@/pwa/consoleBuild'
 import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 
 /*
- * A newer build is live (箭10 2026-11-23): the Owner's tablet keeps the Console open, and a deploy he cannot see is a
- * change he cannot perceive. Detection is the existing build drift (pwa/useConsoleBuildDrift: this page's module script
+ * A newer build is live (箭10, 事故 2026-11-23): a tablet keeps the Console open, and a deploy its viewer cannot see is
+ * a change nobody perceives. Detection is the existing build drift (pwa/useConsoleBuildDrift: this page's module script
  * against a fresh index.html). Here: the frame's notice for every view in the shell, and an idle page reloading itself.
  * A page in use (a click, a key, a scroll in the last five minutes) is never reloaded under the hand. The decision page
  * keeps its own banner and its own rule (no reload while a decision is in flight, and a typed reason must survive): no
@@ -22,7 +22,7 @@ export const IDLE_MS = 5 * 60_000
 /**
  * Whether the newer build can actually load: its index.html answers and names a module script, and that script
  * answers 200. While a rollout still splits requests between old and new replicas, the new page's script can 404 or
- * 502, and a reload then lands on a white page (2026-11-24, the Owner's phone could not open ops.bifrost.lan after a
+ * 502, and a reload then lands on a white page (事故 2026-11-24: a phone could not open ops.bifrost.lan after a
  * deploy). Reload only when this is true; otherwise keep the page that works.
  */
 export async function liveBuildReady(fetcher: typeof fetch = fetch): Promise<boolean> {

@@ -22,8 +22,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/unitplan"
 )
 
-// The two reads of the CI page (Work > CI) about domains (Owner 2026-11-16:
-// he could not tell from the page who depends on whom, or what a change pulls
+// The two reads of the CI page (Work > CI) about domains (ISSUE-29,
+// 2026-11-16: the page did not tell who depends on whom, or what a change pulls
 // in). Both are contracts, version Version in the body; read-only;
 // viewer and above.
 //
@@ -238,7 +238,7 @@ func readAt(ctx context.Context, src Source, repo, commit string) (Graph, error)
 // head's is read in the background. Only a repository no graph was ever read
 // of makes the request wait.
 //
-// Owner 2026-11-16 22:5x: switching to By dependency showed "loading" for a
+// 事故 2026-11-16 22:5x: switching to By dependency showed "loading" for a
 // long time. The graph was read when the page asked, kept in memory only,
 // and valid for one commit: main moved dozens of times that evening and the
 // platform restarted at every delivery, so almost every look began a read of

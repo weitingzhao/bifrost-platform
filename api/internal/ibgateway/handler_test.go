@@ -117,7 +117,7 @@ func TestPatchGatewayYamlMode(t *testing.T) {
 }
 
 // The platform must not carry Trade's account numbers, and must not relay a TWS
-// login name if the gateway is still configured with one (Owner, 2026-09-06:
+// login name if the gateway is still configured with one (决定 2026-09-06:
 // account identity is the IB account number). Both went wrong at once before
 // discovery replaced the hardcoded pair — the compiled-in ids no longer matched
 // the keys the gateway wrote, so every slot read "no ib:health key".

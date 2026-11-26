@@ -4,11 +4,11 @@ import { consoleContent } from '../console'
 import type { MapStatus } from '../domainsPanel'
 import { districtTechTree, domainTechTree } from '../techTree'
 
-// 2026-11-20, the Owner: the domains' tech tree is configured from the real graph. These pin that its
+// 2026-11-20 (ISSUE-9): the domains' tech tree is configured from the real graph. These pin that its
 // nodes are the districts with their map lights, its edges the imports GET /api/v1/ci/domains serves
 // (a wrong-way edge kept as a loop), that it says what it does not see, and that an unread graph leaves
 // the nodes alone with why rather than a guessed edge.
-// The approvals domain was owner until the Owner's naming of 2026-11-21: the ids follow the map.
+// The approvals domain was owner until the naming of 决定 2026-11-21: the ids follow the map.
 const light = (value: string) => ({ value, why: '' })
 const row = (id: string, overall = 'good') => ({ id, overall, alive: light('good'), interfaces: light('problem'), boundary: light('good'), fresh: light('unknown') })
 const status = { version: 1, domains: [row('foundation'), row('approvals', 'problem'), row('coordination')] } as MapStatus
@@ -53,7 +53,7 @@ describe('the domains tech tree', () => {
   })
 })
 
-// 2026-11-21/22, the Owner: the tree follows the level; inside a district it is who among its buildings stands on
+// 2026-11-21/22 (ISSUE-9): the tree follows the level; inside a district it is who among its buildings stands on
 // whom. The buildings are the map's (catalog/domain buildings), the edges /ci/domains inner (production imports,
 // aa0ca3cf). These pin the merge: packages to the map's buildings, a package of a building that did not fit to
 // Other, two-way pairs one marked a loop, and no inner read: nodes alone with why. The hardware district has none.

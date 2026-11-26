@@ -46,7 +46,7 @@ describe('the districts are the domains', () => {
   })
 })
 
-// 2026-11-21, the Owner: every district stands as a picture of what it is, from the engine's catalogue, and
+// 2026-11-21 (ISSUE-9): every district stands as a picture of what it is, from the engine's catalogue, and
 // the lines claim theirs (the Console's ownership table, facilities). These pin that a claimed kind becomes
 // the district's style, an unclaimed one stays plain, and a district is solid only when the map serves its lights.
 describe('a district stands as the building its line claimed', () => {

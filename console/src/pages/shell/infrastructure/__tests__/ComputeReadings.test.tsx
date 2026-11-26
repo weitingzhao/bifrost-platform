@@ -103,7 +103,7 @@ describe('compute readings', () => {
     expect(readingValues(down)).toBe('gpu-server · ubt-k3s-05')
     expect(readingValues(minutes)).toBe('ComputePainDbGuestLoad 2062 · ComputePainDbReplication 60')
   })
-  // 2026-11-22 Owner (relayed by the hardware line): know what each disk is and how fast it really is, so a
+  // 2026-11-22 (ISSUE-70): know what each disk is and how fast it really is, so a
   // fast-disk job is not placed on a slow disk. Same model, 07 vs 08: write p99 689 ms vs 4.4 ms (PROD 11-22 00:3xZ).
   it('shows each disk with its model and firmware, and write latency in milliseconds per node and disk', () => {
     const disks: TelemetryMetricResult = {

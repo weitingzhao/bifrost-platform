@@ -46,7 +46,7 @@ func scopeTrees(t *testing.T, commits map[string]map[string]string) func(context
 }
 
 // What the scope route answers for each kind of commit. Origin: the three
-// acceptance sentences of the declaration standard (Owner, 2026-11-13): no
+// acceptance sentences of the declaration standard (决定 2026-11-13): no
 // declaration, everything runs; a declaration, the blocks it names; and the
 // fall-backs of its §4, each saying why. The manifest here names a module
 // "web": no name the platform's own repository uses is needed for an answer.

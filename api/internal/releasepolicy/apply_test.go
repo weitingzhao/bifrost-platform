@@ -99,7 +99,7 @@ func (f *applyFixture) editPlan(edit func(p *releasepolicy.ApplyPlan)) {
 	f.plans["plan-1"] = p
 }
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// LAW-6: approval cards for changes that have a way back; design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. The positive control of
 // every case below: an apply of an object the applier applied before, of an
 // allowed kind in an allowed namespace, from a path that is not excluded.
@@ -125,7 +125,7 @@ func TestApplyOfAPreviousGenerationIsCovered(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// LAW-6: approval cards for changes that have a way back; design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. Each case is the covered
 // apply with one thing wrong.
 func TestApplyWithOneThingWrongWaits(t *testing.T) {
@@ -240,7 +240,7 @@ func TestApplyWithOneThingWrongWaits(t *testing.T) {
 	})
 }
 
-// Owner 2026-11-14: approval cards for changes that have a way back; design
+// LAW-6: approval cards for changes that have a way back; design
 // ci-speed/owner-off-the-loop-rules.md §3 class 4. The policy signed before
 // the section existed answers an apply exactly as it answers any action that
 // is not a release, and names no policy: the server keeps the card.

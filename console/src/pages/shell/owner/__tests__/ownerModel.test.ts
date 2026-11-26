@@ -22,7 +22,7 @@ const alert = (labels: Record<string, string>, value = '1') => ({ labels: { seve
 describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
   const split = splitAlerts(alerts, ev, NOW)
 
-  // 2026-11-19, the Owner via the coordinator: an IB slot without TWS is a notice to see, not work waiting on him (the secondary slot he set aside 11-12).
+  // 决定 2026-11-19: an IB slot without TWS is a notice to see, not work waiting on the Owner (the secondary slot was set aside, 决定 2026-11-12).
   it('shows the secondary IB slot without TWS as a notice, not his, and tells the IB plugin with it', () => {
     expect(split.yours).toEqual([])
     const notice = split.worth.find(r => r.title === 'IB secondary slot has no TWS session')!
@@ -38,7 +38,7 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 }, kinds: { approve: 1, hands: 1 } }).headline).toBe('1 to approve · 1 needs your hands')
     expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 }, kinds: { approve: 0, hands: 2 } }).headline).toBe('2 need your hands')
     expect(ownerVerdict({ ...base, yours: { state: 'known', count: 2 } }).headline).toBe('2 things are yours')
-    // 2026-11-23 the Owner: laws and actions said apart in the verdict's facts too.
+    // 2026-11-23 (LAW-6): laws and actions said apart in the verdict's facts too.
     expect(ownerVerdict({ ...base, approvals: 3, lawApprovals: 1, yours: { state: 'known', count: 3 } }).line).toMatch(/^1 law · 2 actions to approve · /)
     expect(ownerVerdict({ ...base, approvals: 2, yours: { state: 'known', count: 2 } }).line).toMatch(/^2 requests to approve · /)
   })

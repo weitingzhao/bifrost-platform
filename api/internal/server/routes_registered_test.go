@@ -16,9 +16,8 @@ import (
 // (config/domain-ownership.json, domains[].contracts.request_response): a
 // route is registered before it exists, not found by a scan afterwards.
 //
-// Origin: 2026-11-22, the Owner in the Foundation thread: "like Kubernetes,
-// you must register with me before you do the next thing, or many people
-// lose track"; LAW-10 (a change says which domain it belongs to). That day
+// Origin: 2026-11-22, ISSUE-69: like Kubernetes, a thing is registered
+// before the next step is taken, or many lose track; LAW-10 (a change says which domain it belongs to). That day
 // 87 of 235 routes had no contract row, and three real losses were counted
 // (a package nobody placed defaulting to foundation, four compute interfaces
 // unregistered, payload's charter path left behind after a rename). The 87

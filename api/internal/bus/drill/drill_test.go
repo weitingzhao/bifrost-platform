@@ -23,7 +23,7 @@ var ctx = context.Background()
 
 func str(m map[string]any, k string) string { v, _ := m[k].(string); return v }
 
-// 2026-11-18, the Owner's "first make problems visible": 12 channels never fire
+// 2026-11-18, ISSUE-97 (problems are made visible first): 12 channels never fire
 // in normal life and stayed "unproven". Each row that names a drill key in
 // problems.yaml must have exactly that drill, and a drill with no row would be
 // evidence nobody reads.

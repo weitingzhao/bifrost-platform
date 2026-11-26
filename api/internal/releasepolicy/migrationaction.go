@@ -12,7 +12,7 @@ import (
 )
 
 // A signed policy may cover run_agentrt_migration (its ddl_reversible
-// condition, Owner 2026-11-15): the platform runs, on its own environment,
+// condition, LAW-6): the platform runs, on its own environment,
 // the migrations of a commit that environment has not applied. It is covered
 // when the commit was delivered successfully to the source environment (the
 // pipeline the policy pins this environment's pipeline to: that delivery ran

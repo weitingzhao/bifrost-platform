@@ -209,7 +209,7 @@ function numbersCell(r: StandardRow): Cell {
   if (r.reading === undefined) return { text: '…', title: 'Reading this step’s events' }
   if (r.reading === null) return { text: '—', title: 'No verdict posted on this step' }
   if (!r.reading.found) return { text: 'not found', tone: 'unknown', title: `Note ${r.reading.noteEventId} is not among the step’s last 50 events` }
-  // A number read once is never drawn as a conclusion (the Owner, 11-19): it says so.
+  // A number read once is never drawn as a conclusion (ISSUE-33): it says so.
   return { text: SOURCE_WORD[r.reading.source], ...(r.reading.source === 'archived' ? {} : { tone: 'unknown' as const }) }
 }
 

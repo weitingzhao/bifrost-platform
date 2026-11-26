@@ -53,7 +53,7 @@ func across(o ownership, imports map[string][]string) []string {
 // (config/quality-ruler.json), and the coordinator ruled the wall be extended
 // to every domain.
 //
-// 2026-11-21, the Owner in the decoupling thread (C1 "c1 做", C2 "C2做"): the
+// 决定 2026-11-21 (decoupling items C1 and C2): the
 // wall grew on purpose, to check two places it skipped. delivery stopped being
 // mixed (a mixed package is skipped), and its three imports of other domains
 // came onto the list: actions is imported by the trust-anchored
@@ -69,7 +69,7 @@ func across(o ownership, imports map[string][]string) []string {
 // (server, planwiring, and integration, its system test). It stands on top:
 // it imports every domain, so its own imports are not checked here, and an
 // import of it by a domain is (only api/cmd imports it; foundation's wall
-// holds the base). Origin: 2026-11-21, the Owner in the Foundation thread,
+// holds the base). Origin: 2026-11-21,
 // LAW-10 — the three packages were "mixed", which the wall skipped both ways,
 // and the milestone "each package one domain" could never reach 9/9.
 const assembly = "assembly"

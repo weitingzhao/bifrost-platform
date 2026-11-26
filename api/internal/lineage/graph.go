@@ -33,8 +33,8 @@ type GraphBranch struct {
 	Status string `json:"status"`
 }
 
-// Branch kinds counted per repo (GraphBranchCounts). Origin: 2026-11-22, the
-// Owner (relayed by the CI line): the graph must show what is true, with work
+// Branch kinds counted per repo (GraphBranchCounts). Origin: 2026-11-22,
+// ISSUE-66: the graph must show what is true, with work
 // merged correctly in one class and orphans or unmerged work in another.
 const (
 	BranchOpen       = "open"

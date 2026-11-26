@@ -63,8 +63,8 @@ func (la LawAmend) AddCards() []LawCard {
 	return out
 }
 
-// LawRepeal is one law a repeal_many card repeals (2026-11-24: the Owner
-// asked to clear the register's duplicates, superseded laws and entries that
+// LawRepeal is one law a repeal_many card repeals (2026-11-24, ISSUE-24:
+// clear the register's duplicates, superseded laws and entries that
 // are not laws; one card for a batch, each law with its text as it stands
 // and why it goes).
 type LawRepeal struct {

@@ -1,4 +1,4 @@
-// 2026-11-22 Owner: observation must never ACK, accept, reply or approve on a member's behalf.
+// 2026-11-22 (ISSUE-61): observation must never ACK, accept, reply or approve on a member's behalf.
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentWorld, WorkingStudio, exchangesOf } from '@bifrost/ui/communication'
@@ -14,7 +14,7 @@ describe('read-only observation', () => {
     expect(screen.getByText('Opened by recipient')).toBeTruthy()
     expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals()
   })
-  // 2026-11-22 Owner: the world is the mode; details must not cover it until requested.
+  // 2026-11-22 (ISSUE-61): the world is the mode; details must not cover it until requested.
   it('opens evidence on demand from the independent Agents mode', () => {
     render(<AgentWorld stationImage="/station.png" cityHref="#city" consoleHref="#collaboration?look=console" snapshot={{version:1,members:[{id:'a',label:'A',memberships:[]}],exchanges:[],coverage:{state:'ready',note:'Test provenance',truncated:false}}}/>)
     expect(screen.queryByRole('complementary',{name:'Observation details'})).toBeNull()

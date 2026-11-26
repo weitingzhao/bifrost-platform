@@ -1,4 +1,4 @@
-// 2026-11-24 the Owner on Command: "for your info 优先级不高，排到下面，把法提起来。同时这些section是不是可以收起来。默认展开".
+// 2026-11-24 (ISSUE-53): on Command, For your information goes lower, laws go up, and the sections fold.
 // A section opens by default, folds on a click, is remembered in this browser, and an address naming it opens it again.
 import { afterEach, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'

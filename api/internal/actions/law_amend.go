@@ -1,4 +1,4 @@
-// Ownership (2026-11-23, Owner: legislation apart from administration;
+// Ownership (2026-11-23, ISSUE-12: legislation apart from administration;
 // agreed by legislation and the approvals line): what a law_amend card says
 // (its params, its check against the register of laws, its line) is
 // legislation's, in agentrt/planstore (lawcard.go), moved there on

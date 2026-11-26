@@ -265,7 +265,7 @@ func TestShadowRecordKeepsTheLineAndNamesAMiss(t *testing.T) {
 	}
 }
 
-// Origin: Owner 2026-11-16, reopening the incremental landing: the run that
+// Origin: 决定 2026-11-16 (ISSUE-22), reopening the incremental landing: the run that
 // lets a commit in is incremental, and the full run of the push to main is
 // the check on it. Every such pair is one reconciliation; a full run that
 // fails where the incremental one passed is a miss, said so by name. A full

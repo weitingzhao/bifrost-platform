@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// A migration that cannot destroy rows (Owner 2026-11-15): every top-level
+// A migration that cannot destroy rows (LAW-6): every top-level
 // statement of the file is one of the kinds below. It is an allow-list by
 // statement kind, where the additive check in ddl.go is a deny-list on lines
 // and passes what it does not know: here anything not recognised is out of

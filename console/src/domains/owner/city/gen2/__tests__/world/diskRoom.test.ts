@@ -3,7 +3,7 @@ import { rowsDrawn, setRuler } from '@bifrost/ui/city/library/dictionary'
 import { baysOf, LOW_RACK, WARN_FROM, diskRoom, diskRoomShape, diskSummaryOf, volumeName, type DiskRoomReadings } from '@bifrost/ui/city/units/diskRoom'
 import { diskRoomReadings } from '../../content/units/disk'
 
-// 2026-11-19, the disk unit's room, the warehouse (shelves the Owner's word the same day), drawn against the room standards. The readings are one
+// 2026-11-19, the disk unit's room, the warehouse (shelves, 决定 2026-11-19), drawn against the room standards. The readings are one
 // real read of that day (a cluster node, the NAS, a Mac mini).
 const GB = 1e9, TB = 1e12
 const ssd = { kind: 'ssd' as const, model: 'G-BONG X300 512GB', rpm: null, read: 819, write: 136e3, busy: 0.021, ops: 20.5, latency: 0.00136, temp: 44.9 }
@@ -54,7 +54,7 @@ describe('the disk room', () => {
     expect(b.out.svg).toContain('READ ONLY')
     expect(b.out.svg).toContain('3 ERRORS')
   })
-  // 2026-11-19, the Owner: the stack must be countable, and the last places red, "警戒区…硬盘快满了".
+  // 2026-11-19 (ISSUE-9): the stack must be countable, and the last places red: a warning zone for a disk nearly full.
   it('the last places past 85% of a volume are red; a nearly full disk has red cartons', () => {
     expect(WARN_FROM).toBe(0.85)
     expect(rowsDrawn(() => diskRoom(node)).ids).toContain('vol.redzone')

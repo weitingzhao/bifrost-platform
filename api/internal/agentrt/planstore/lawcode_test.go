@@ -8,7 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
-// Origin: 2026-11-25, Owner: 「以后法条统一叫LAW 开始，不用简写」. The laws the
+// Origin: 2026-11-25, ISSUE-17: laws are coded LAW-n, never shortened. The laws the
 // framework holds (86 on) are LAW-1, LAW-2, …; rows 1 to 85 have no code. A card may name a law by its code or its number.
 func TestLawCode(t *testing.T) {
 	for n, want := range map[string]string{"86": "LAW-1", "89": "CORE-1", "98": "LAW-13", "85": "", "1": "", "x": ""} {
@@ -72,7 +72,7 @@ func TestAbsorbsIsNotRead(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-25, Owner: 「每一层都用特定的单词表示，同时采用特定的编号体系」.
+// Origin: 2026-11-25, ISSUE-17: each level has a word of its own and a numbering of its own.
 // A new law is coded by its level, each level counting on its own (DAO,
 // CORE, LAW, ZONE), the code kept in its record; an amend keeps the
 // code and may not change the level; the codes before (LAW-1…13) stay.

@@ -24,7 +24,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 )
 
-// run_agentrt_migration (Owner 2026-11-15): the platform runs, on its own
+// run_agentrt_migration (LAW-6): the platform runs, on its own
 // environment, the agentrt migrations of a commit that environment's
 // database has not applied. Until then PROD's migrations were a Job the
 // Owner created by hand from an exec card (#493, #554, #558), and the PROD

@@ -178,9 +178,9 @@ func (w *Live) Start(ctx context.Context, pipeline string, params map[string]str
 	return run, "", nil
 }
 
-// DecisionRecord is the record of one decision of the loop (Owner 2026-11-13:
-// "no card, but a trace ... auditable later, with the reason ... so it can be
-// judged in hindsight"). One is written each time a deliverable's outcome
+// DecisionRecord is the record of one decision of the loop (LAW-6:
+// no card, but a trace that can be audited later, with its reason, so it can
+// be judged in hindsight). One is written each time a deliverable's outcome
 // changes, a start and a decision not to start alike: to the platform's audit
 // log (GET /api/v1/audit, action head_release) and to the process log.
 type DecisionRecord struct {

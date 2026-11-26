@@ -89,7 +89,7 @@ describe('audit conclusions', () => {
     expect(evidence.map(x => x.key)).toEqual(expect.arrayContaining(['judged', 'ref:approval #723', 'ref:commit 848cdc8e', 'ref:run ci-engine-cbfcs', 'ref:evidence_id 126335']))
   })
 
-  // 2026-11-25 the Owner: laws are written LAW-k, never shortened (platform d9985668 sends code on every law in force).
+  // 2026-11-25 (ISSUE-17): laws are written LAW-k, never shortened (platform d9985668 sends code on every law in force).
   it('names a law by its code, and a row without one as #n so it is never taken for a law', () => {
     const coded = { ...law('97', ['没核']), code: 'LAW-12' } as RegisterLaw
     const [r] = standardsOf([coded])

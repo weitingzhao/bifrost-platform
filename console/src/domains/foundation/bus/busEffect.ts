@@ -2,8 +2,8 @@ import { authedFetch } from '@/api/client'
 
 /**
  * GET /api/v1/bus/effect — what the bus's work does, each reading computed
- * from its source when asked (2026-11-17: the Owner could not see what the
- * communication work does). A reading the platform could not take carries
+ * from its source when asked (2026-11-17, ISSUE-29: what the communication
+ * work does could not be seen). A reading the platform could not take carries
  * `unmeasured` instead of a value.
  */
 export type BusEffectItem = { what: string; when: string; ref?: string }

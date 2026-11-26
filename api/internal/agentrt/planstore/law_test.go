@@ -14,7 +14,7 @@ import (
 	_ "github.com/weitingzhao/bifrost-platform/api/internal/bus/cards"
 )
 
-// 2026-11-23, the closed loop (Owner: only a change of law opens a ticket;
+// 2026-11-23, the closed loop (LAW-6: only a change of law opens a ticket;
 // the plan owns the loop): an executed law_amend card becomes one item of
 // the newest round with a step per standard, its plan_changed events name
 // the card's executed event, it is recorded once however often a pass finds

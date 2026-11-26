@@ -17,19 +17,19 @@
     "root": "console/src",
     "inventory": "console/domain-inventory.json",
     "groups": {
-      "console/src/domains/foundation/observation-access": {"domains": ["foundation"], "status": "assigned", "basis": "Owner-authorized shared observation access: opt-in host query composition over existing runtime snapshot contract; no new ingestion, authority or health rules."},
-      "console/src/domains/foundation/runtime-observation": {"domains": ["foundation"], "status": "assigned", "basis": "Owner-authorized generic observation composition; consumes existing City hardware and coordination communication contracts, no ingestion or health rules."},
+      "console/src/domains/foundation/observation-access": {"domains": ["foundation"], "status": "assigned", "basis": "Shared observation access: opt-in host query composition over existing runtime snapshot contract; no new ingestion, authority or health rules."},
+      "console/src/domains/foundation/runtime-observation": {"domains": ["foundation"], "status": "assigned", "basis": "Generic observation composition; consumes existing City hardware and coordination communication contracts, no ingestion or health rules."},
       "console/src/domains/coordination/communication": {
         "domains": ["coordination"],
         "status": "assigned",
-        "basis": "2026-11-22 Owner-authorized Agent collaboration observation: read-only composition of public message, bus receipt and Crew contracts; shared UI owns rendering."
+        "basis": "决定 2026-11-22: Agent collaboration observation: read-only composition of public message, bus receipt and Crew contracts; shared UI owns rendering."
       },
       "console/src": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
+        "basis": "决定 2026-11-16: generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/api": {
         "domains": [
@@ -96,7 +96,7 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
+        "basis": "决定 2026-11-16: generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/pages/shell/ci": {
         "domains": [
@@ -523,224 +523,224 @@
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/flex-query": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/research": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/market-data": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/flex-query": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/research": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/MarketDataManagePage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/FlexQueryManagePage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/IbGatewayManagePage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/ResearchEnginePage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/PluginGalleryPage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/satellite-bus": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/shell/ib": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteApiHealthPage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteHealthPage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/pages/SatelliteTelemetryPage.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/satellite": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/satellite-bus": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/flexQueryPlugin.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataCapabilities.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDimensions.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDocs.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataDoctor.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataPlugin.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/marketDataQueueHistory.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/researchEngine.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/api/satelliteBusTypes.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useFlexQueryLiveProbe.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useIbGatewayLiveProbe.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/hooks/useMarketDataLiveProbe.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/TradeMonitoringPeerLinks.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/lib/tradeFrontendUrls.ts": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/components/agent": {
         "domains": [
@@ -1015,7 +1015,7 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
+        "basis": "决定 2026-11-16: observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/pages/ObservabilityPage.tsx": {
         "domains": [
@@ -1029,21 +1029,21 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
+        "basis": "决定 2026-11-16: observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/hooks/useObservabilitySnapshot.ts": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
+        "basis": "决定 2026-11-16: observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/pages/shell/data": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed Tenant integration: DataPage only composes plugin, market-data, flex and research application views. Backup implementation and client physically moved to Foundation; storage navigation link remains an explicit cross-domain link."
+        "basis": "决定 2026-11-16: Tenant integration: DataPage only composes plugin, market-data, flex and research application views. Backup implementation and client physically moved to Foundation; storage navigation link remains an explicit cross-domain link."
       },
       "console/src/api/dataHusbandry.ts": {
         "domains": [
@@ -1066,28 +1066,28 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed Foundation read-only page composition; implementation moved whole to Foundation/control-room, this path is a compatibility export only. Existing readers and all execution/auth code unchanged."
+        "basis": "决定 2026-11-16: Foundation read-only page composition; implementation moved whole to Foundation/control-room, this path is a compatibility export only. Existing readers and all execution/auth code unchanged."
       },
       "console/src/components/activity": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
+        "basis": "决定 2026-11-16: generic composition ownership, audited source and consumers: application bootstrap, shell exports or activity side-effect bridge only. Original authentication initialization and cross-domain imports preserved. Attribution correction, not an actual business implementation split."
       },
       "console/src/lib/activity": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed Foundation UI composition: compatibility exports only, preserving readiness registration; implementation split into Foundation activity and Tenant namespace/workload mapping. No execution caller changed."
+        "basis": "决定 2026-11-16: Foundation UI composition: compatibility exports only, preserving readiness registration; implementation split into Foundation activity and Tenant namespace/workload mapping. No execution caller changed."
       },
       "console/src/components/TradeNsSegmentControl.tsx": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 source/caller audit: UI consumers of the five Owner-confirmed tenant integrations; display attribution only, no trading/IB behavior edited"
+        "basis": "2026-11-16 source/caller audit: UI consumers of the five tenant integrations of 决定 2026-11-16; display attribution only, no trading/IB behavior edited"
       },
       "console/src/domains/plan/readings": {
         "domains": [
@@ -1101,7 +1101,7 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed read-only backup status display belongs to Foundation (compute charter excludes storage). Owns panel, response type and GET client; no backup execution, database or permission changes."
+        "basis": "决定 2026-11-16: read-only backup status display belongs to Foundation (compute charter excludes storage). Owns panel, response type and GET client; no backup execution, database or permission changes."
       },
       "console/src/domains/owner/city": {
         "domains": [
@@ -1122,35 +1122,35 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged.; 2026-11-16 complete bay observation, attention, display formatting and local accordion/hash navigation model moved unchanged; compatibility entry preserves existing readers."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged.; 2026-11-16 complete bay observation, attention, display formatting and local accordion/hash navigation model moved unchanged; compatibility entry preserves existing readers."
       },
       "console/src/domains/foundation/network": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
       },
       "console/src/domains/foundation/monitoring": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
       },
       "console/src/domains/foundation/mission": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
       },
       "console/src/domains/foundation/shell": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
       },
       "console/src/domains/delivery/policy": {
         "domains": [
@@ -1164,7 +1164,7 @@
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner confirmed ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
+        "basis": "决定 2026-11-16: ownership; complete read-only implementation and callers moved from shared hooks/components. Cross-domain observation inputs remain visible; execution, permission and gate logic unchanged."
       },
       "console/src/hooks/__tests__/useFleetSnapshot.test.ts": {
         "domains": [
@@ -1178,28 +1178,28 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
+        "basis": "决定 2026-11-16: activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
       },
       "console/src/domains/tenant/activity": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
+        "basis": "决定 2026-11-16: activity split: generic feed, target parsing and read-only rollout observation belong to Foundation; tenant namespace/workload display mapping belongs to Tenant. Existing behavior retained."
       },
       "console/src/domains/foundation/runtime-map": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
+        "basis": "决定 2026-11-16: split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
       },
       "console/src/domains/tenant/runtime-map": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
+        "basis": "决定 2026-11-16: split: generic read-only runtime projection and page composition in Foundation explicitly consume Tenant display adapters. Tenant role, scope, icon, navigation and question mappings physically extracted; no execution or gate changes. Baseline output parity verified."
       },
       "console/src/domains/foundation/runtime-map/contracts.ts": {
         "domains": [
@@ -1213,14 +1213,14 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
+        "basis": "决定 2026-11-16: observation composition: generic read-only aggregation/display separated from explicit Tenant signal, namespace, alert and probe interpretation adapters; legacy exports preserve consumers; mutation and permission page unchanged"
       },
       "console/src/domains/tenant/observability": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-confirmed Tenant integration: namespace/signal/dashboard/alert mappings, bus and IB observation adapters and tenant environment selector; no execution or permission changes"
+        "basis": "决定 2026-11-16: Tenant integration: namespace/signal/dashboard/alert mappings, bus and IB observation adapters and tenant environment selector; no execution or permission changes"
       },
       "console/src/domains/delivery/api": {
         "domains": [
@@ -1311,35 +1311,35 @@
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+        "basis": "决定 2026-11-16: extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
       },
       "console/src/domains/tenant/environment": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+        "basis": "决定 2026-11-16: extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
       },
       "console/src/domains/foundation/observation-display": {
         "domains": [
           "foundation"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction. 2026-11-16 fleet navigation/viewer environment helpers extracted whole, unchanged; original paths preserve all consumers and protected fleet builders remain untouched."
+        "basis": "决定 2026-11-16: extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction. 2026-11-16 fleet navigation/viewer environment helpers extracted whole, unchanged; original paths preserve all consumers and protected fleet builders remain untouched."
       },
       "console/src/domains/tenant/readiness": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+        "basis": "决定 2026-11-16: extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
       },
       "console/src/domains/delivery/runtime-observation": {
         "domains": [
           "delivery"
         ],
         "status": "assigned",
-        "basis": "2026-11-16 Owner-authorized extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
+        "basis": "决定 2026-11-16: extraction of complete read-only catalog/display/navigation/observation responsibilities. Original compatibility exports retained; D10/action types, readiness exclusions and default refusals remain at original paths and unchanged. Output/order parity frozen before extraction."
       },
       "console/src/domains/foundation/runtime-health": {
         "domains": [
@@ -1529,14 +1529,14 @@
           "delivery"
         ],
         "status": "assigned",
-        "basis": "2026-11-22 Owner-authorized generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
+        "basis": "决定 2026-11-22: generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
       },
       "console/src/domains/tenant/market-observation/observation-report": {
         "domains": [
           "payload"
         ],
         "status": "assigned",
-        "basis": "2026-11-22 Owner-authorized generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
+        "basis": "决定 2026-11-22: generic report integration: this domain alone adapts its existing read-only response to portable Block/evidence contracts; no business verdict or command added."
       }
     }
   }

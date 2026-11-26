@@ -1,4 +1,4 @@
-// 2026-11-22 Owner: Agents, City and Console are peer observation modes, not embedded dashboards.
+// 2026-11-22 (ISSUE-61): Agents, City and Console are peer observation modes, not embedded dashboards.
 import { describe, expect, it } from 'vitest'
 import { communicationHref, readCommunicationLook } from '../looks'
 import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'

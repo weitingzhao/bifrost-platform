@@ -159,7 +159,7 @@ func (u *ScopeShadow) Observe(ctx context.Context, p seenfacts.PipelineRun) {
 // CIReconcileAction is the audit action of one reconciliation: a full CI run
 // of a commit that the ledger already has a passed incremental run for.
 //
-// Owner 2026-11-16: the landing lets a commit in on an incremental run and the
+// ISSUE-22 (2026-11-16): the landing lets a commit in on an incremental run and the
 // full run of the push to main, which nobody waits for, is the check on it.
 // status "ok": the full run passed too. "missed": it failed, so the
 // incremental run passed something a full run catches; the row of the full

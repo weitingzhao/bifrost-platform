@@ -65,7 +65,7 @@ func TestProblemChannelsNameRealThings(t *testing.T) {
 			t.Errorf("%s: drill %q must be drill:<id> and only on a connected row", p.ID, p.Drill)
 		}
 		for _, e := range p.Events {
-			// 2026-11-18, the Owner's "first make problems visible": a drill must
+			// 2026-11-18, ISSUE-97 (problems are made visible first): a drill must
 			// never count as a real run, so no row names a drill stream as events.
 			if strings.Contains(e, "drill:") {
 				t.Errorf("%s: event %q names a drill stream; a drill goes in drill:", p.ID, e)
@@ -117,7 +117,7 @@ func TestProblemReadingCountsOnlyWhatRan(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner's "first make problems visible": 12 channels never fire
+// 2026-11-18, ISSUE-97 (problems are made visible first): 12 channels never fire
 // in normal life and stayed "unproven". A drill proves the event can be written;
 // it must show apart from a real run, and a real run must win over it.
 func TestProblemReadingSeparatesDrills(t *testing.T) {

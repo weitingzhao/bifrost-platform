@@ -32,12 +32,12 @@ const findRunRow = async (name: string): Promise<HTMLElement> => {
 }
 
 /*
- * Origin of the cases marked "contract" — 2026-11-13/14, the Owner: he accepts CI's configuration and runs only when
+ * Origin of the cases marked "contract" — 2026-11-13/14 (ISSUE-29): CI's configuration and runs are accepted only when
  * the Ops page shows them, computed from the source CI itself reads; and CI's own front end is tested against the
  * contract its back end keeps (api/internal/server/testdata/contract/units), not against the back end's source.
  *
- * Origin of the cases marked "page" — 2026-11-16: the Owner read Work → CI and could not tell what was running, who
- * depends on whom, or what a change pulls in; this page and its two routes replace it. The tables he had are kept,
+ * Origin of the cases marked "page" — 2026-11-16 (ISSUE-29): Work → CI could not tell what was running, who
+ * depends on whom, or what a change pulls in; this page and its two routes replace it. The old tables are kept,
  * each folded and read only when opened; the cases that were about them open the fold first.
  */
 
@@ -236,7 +236,7 @@ it('a project list the platform could not read from the Pipelines is an alert wi
   expect(fetchUnitsConfig).not.toHaveBeenCalled()
 })
 
-// Origin: Owner 2026-11-15 could see repositories but not their units/dependencies.
+// Origin: 2026-11-15 (ISSUE-29): the page showed repositories but not their units/dependencies.
 // Inputs must be fetched for the displayed config commit, not guessed from the latest run.
 it('explores units on demand and clears the context when selecting another repo', async () => {
   setup()
@@ -417,8 +417,8 @@ it('shares one selection (domain, run) across By time, By domain and By dependen
   fireEvent.click(screen.getByTestId('ci-dep-node-owner'))
   expect(screen.getByTestId('ci-selection')).toHaveTextContent('Domain owner')
   expect(screen.getByTestId('ci-dep-panel')).toHaveTextContent('Depended on byfoundation (1, wrong way)')
-  // Origin: 2026-11-16 22:4x, the Owner read the page and asked "does foundation depend on the other packages, or do
-  // they depend on it?". Every domain says both directions in words, with nothing selected or clicked: the base
+  // Origin: 2026-11-16 22:4x (ISSUE-29): the page did not say whether foundation depends on the other packages or
+  // they depend on it. Every domain says both directions in words, with nothing selected or clicked: the base
   // depends on one domain (the wrong way, in red) and three depend on it; the packages on both sides are one fold down.
   const base = screen.getByTestId('ci-direction-foundation')
   expect(base).toHaveTextContent('foundation · base')
@@ -466,7 +466,7 @@ it('draws every dependency arrow at full strength when no domain is selected', a
   expect(screen.getByTestId('ci-dep-edge-foundation>owner')).toHaveAttribute('data-opacity', '0.75')
 })
 
-// Origin: 2026-11-16 22:5x, the Owner switched from By time to another view and saw "loading" for a long time: main had
+// Origin: 事故 2026-11-16 22:5x: switching from By time to another view showed "loading" for a long time: main had
 // moved and the page waited for the new graph. While a newer graph is being read the last one is drawn, and one line
 // says which commit it is of and where main is; nothing spins.
 it('draws the last graph while a newer one is being read, and says which commit it is of', async () => {

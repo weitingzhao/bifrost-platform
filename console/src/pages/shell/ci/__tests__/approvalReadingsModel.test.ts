@@ -3,13 +3,13 @@ import { MAX_LISTED_NUMBERS, approvalRows, approvalsDescription, approvalsView, 
 import { contract } from './contract'
 
 /*
- * Origin of every case in this file — 2026-11-14, the Owner: the Ops page is a window on the system and shows what the
- * system measured, with no drift from a ledger kept by hand; that day he was told by word how many cards he was asked
- * for and how many bought nothing, and the page showed none of it.
+ * Origin of every case in this file — 2026-11-14 (ISSUE-79): the Ops page is a window on the system and shows what the
+ * system measured, with no drift from a ledger kept by hand; that day how many cards went to the Owner and how many
+ * bought nothing was told only by word, and the page showed none of it.
  */
 
 describe('approval rows, from the contract', () => {
-  // Origin: as above (2026-11-14, the Owner) — the rows are the route's days and requesters, newest day first.
+  // Origin: as above (2026-11-14, ISSUE-79) — the rows are the route's days and requesters, newest day first.
   it('one row per day and requester, newest day first, the day shown once', () => {
     const rows = approvalRows(contract.approvals())
     expect(rows.map(r => [r.day, r.requester, r.showDay])).toEqual([

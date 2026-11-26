@@ -1,4 +1,4 @@
-// 2026-11-24 the Owner (by the legislation line): "我要在 console 的那个里面有一个入口能看到就可以了" — step one is the
+// 2026-11-24 (ISSUE-17): an entry on the Console is enough — step one is the
 // framework of laws itself on Command → Laws, empty for now: five levels, the fields, the rules between laws and
 // what refuses a card, and the count in force. 2026-11-25, LAW-1 四 / ISSUE-104: the register holds laws only; the
 // switch for the other rows and the coverage line are gone and the page draws only laws in force.

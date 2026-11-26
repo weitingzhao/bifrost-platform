@@ -4,7 +4,7 @@ import type { ApprovalItem } from '@/api/approvals'
 import type { LineageThread } from '@/api/lineage'
 import { linesOf, sessionOf, stageOf, type SeatStatus } from '@/api/seatStatus'
 
-// 2026-11-17 (the Owner: he asks for progress because Ops does not show it):
+// 2026-11-17 (ISSUE-1: progress is asked for because Ops does not show it):
 // one row per line from the seat's own status, beside what the platform
 // counts — its cards for the Owner (drills apart), its commits by the
 // furthest stage, its session heartbeat. A line that waits comes first.

@@ -4,7 +4,7 @@ import { FULL_CI_PATH, fullCICheckPath, unitConfigPath, unitRunsPath, unitScopeP
 
 // Origin: 2026-11-14. The units routes need a viewer's sign-in, which agents do
 // not have; the CI line itself could not call its own check route that day.
-// The Owner: CI's users are the lines up and down the ring and CI itself, and
+// ISSUE-12: CI's users are the lines up and down the ring and CI itself, and
 // they use it through these answers. These are the paths the tools ask.
 const a = 'a'.repeat(40)
 const b = 'b'.repeat(40)

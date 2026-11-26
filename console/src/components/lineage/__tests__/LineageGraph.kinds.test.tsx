@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { LineageGraphCommit, LineageRepoGraph } from '@/api/lineage'
 import { LineageGraph } from '@/components/lineage/LineageGraph'
 
-// Origin: 2026-11-22, the Owner (relayed by the CI line): the commit graph drew agent attempts whose task another
+// Origin: 2026-11-22 (ISSUE-66): the commit graph drew agent attempts whose task another
 // attempt had already landed as lanes beside pending work, so merged work and orphans could not be told apart.
 // These pin that superseded attempts are folded out unless asked for, and that every kind is counted.
 const c = (sha: string, subject: string): LineageGraphCommit => ({ sha, subject, at: '2026-11-22T12:00:00Z' })

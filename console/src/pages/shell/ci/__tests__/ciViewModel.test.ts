@@ -5,7 +5,7 @@ import {
 import { contract } from './contract'
 
 /*
- * Origin of every case in this file — 2026-11-13/14, the Owner: he accepts CI's configuration and runs only when the
+ * Origin of every case in this file — 2026-11-13/14 (ISSUE-29): CI's configuration and runs are accepted only when the
  * Ops page shows them, computed from the source CI itself reads; and CI's own front end is tested against the contract
  * its back end keeps (api/internal/server/testdata/contract/units), not against the back end's source.
  */
@@ -17,7 +17,7 @@ const run = (name: string) => {
 }
 
 describe('configuration rows, from the contract', () => {
-  // Origin: as above (2026-11-13/14, the Owner) — a declared project shows its modules as the route answers them.
+  // Origin: as above (2026-11-13/14, ISSUE-29) — a declared project shows its modules as the route answers them.
   it('a declared project: one row per module, tasks with their unit and shard counts, what it reads, and what runs on every change', () => {
     const view = configView(contract.configDeclared())
     expect(view.state).toBe('declared')

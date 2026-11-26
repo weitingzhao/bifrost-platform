@@ -8,9 +8,9 @@ import { ApprovalReadingsBlock } from '../ApprovalReadingsBlock'
 import { contract } from './contract'
 
 /*
- * Origin of every case in this file — 2026-11-14, the Owner: the Ops page is a window on the system and shows what the
- * system measured, with no drift from a ledger kept by hand; that day he was told by word how many cards he was asked
- * for and how many bought nothing, and the page showed none of it.
+ * Origin of every case in this file — 2026-11-14 (ISSUE-79): the Ops page is a window on the system and shows what the
+ * system measured, with no drift from a ledger kept by hand; that day how many cards went to the Owner and how many
+ * bought nothing was told only by word, and the page showed none of it.
  */
 
 vi.mock('@/api/readings', () => ({ fetchApprovalReadings: vi.fn() }))
@@ -28,7 +28,7 @@ const cellOf = (row: HTMLElement, column: string) => {
   return cell
 }
 
-// Origin: as above (2026-11-14, the Owner) — each count on the page leads to the requests behind it.
+// Origin: as above (2026-11-14, ISSUE-79) — each count on the page leads to the requests behind it.
 it('draws a count with a link to each request behind it', async () => {
   setup()
   const row = await screen.findByTestId('approval-readings-2026-11-14/line-a')

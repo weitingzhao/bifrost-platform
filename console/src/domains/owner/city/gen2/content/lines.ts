@@ -4,8 +4,8 @@ import type { LineageResponse } from '@/api/lineage'
 import { linesActivity, quietLabel, type LineActivity } from '@/api/lineageActivity'
 
 /**
- * What each line did, on the City (the chief of staff's brief, 2026-11-22: the Owner sees in the City as in the
- * Console what every line did lately and whether it went live, without asking anyone). Read from the lineage read
+ * What each line did, on the City (the chief of staff's brief, 2026-11-22, ISSUE-61: the City shows, as the
+ * Console does, what every line did lately and whether it went live, without asking anyone). Read from the lineage read
  * (GET /api/v1/lineage) and counted by `linesActivity`, the one function the Console's Commit lineage counts with,
  * over the same window it opens with (14 days): one number on both sides.
  *

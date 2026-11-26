@@ -1,7 +1,7 @@
 // The unit workshop (ISSUE-9): how each unit of the city is made, inside out, one stage
-// at a time, each stage shown here for the Owner to confirm before the next. The process is the frame's
-// (frame/units/process.ts); the units are content (content/units/). Read-only: confirmations are the
-// Owner's words in the thread, recorded in the spec, never a button here.
+// at a time, each stage shown here to be confirmed before the next. The process is the frame's
+// (frame/units/process.ts); the units are content (content/units/). Read-only: confirmations are
+// recorded in the spec, never a button here.
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { STAGES, stagesOf, unitRulesBroken, type Detail, type StageId, type UnitSpec } from '@bifrost/ui/city/units/process'

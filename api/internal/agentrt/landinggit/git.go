@@ -47,8 +47,8 @@ const ReaderDirEnv = "GITEA_READER_DIR"
 var noRef = regexp.MustCompile(`$^`)
 
 // ReaderFromEnv is a read-only Git for the landing grant's material, its
-// create check and its executor, which run in platform-api (Owner 2026-10-29
-// chose this over mounting the lander, the one identity that can push
+// create check and its executor, which run in platform-api (决定 2026-10-29,
+// rather than mounting the lander, the one identity that can push
 // platform main, in the process that serves HTTP). It reads main and fetches
 // the A, M0 and R commits; every push, main push and delete refuses.
 func ReaderFromEnv(repos ...string) (*Git, error) {

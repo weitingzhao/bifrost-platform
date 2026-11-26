@@ -58,7 +58,7 @@ func planRepo() (entries []gitread.TreeEntry, blobs map[string]string) {
 	return entries, blobs
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // The instruments' reader lists a commit's files (no directories, no submodules) and returns a blob's bytes from Gitea.
 func TestInstrumentSourceReadsFilesAndBlobsFromGitea(t *testing.T) {
 	const commit = "0123456789012345678901234567890123456789"

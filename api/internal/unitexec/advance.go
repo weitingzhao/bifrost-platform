@@ -28,7 +28,7 @@ import (
 // ReceiveUnits records every unit TaskRun that finished and writes a row of
 // evidence for each task whose parts add up to a verdict.
 //
-// Who calls Advance is another layer (Owner 2026-11-13: a push event,
+// Who calls Advance is another layer (ISSUE-74: a push event,
 // with a slow poll behind it) and is not written yet. Until then an agent
 // asks through POST /api/v1/units/evidence, and the receiving pass runs.
 //

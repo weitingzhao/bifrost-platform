@@ -654,7 +654,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-20 Owner opened the 0.2 map line (foundation): the map's pool of what it cannot perceive, a reading; it imports only foundation's statefile and safego"
+      "basis": "决定 2026-11-20 opened the 0.2 map line (foundation): the map's pool of what it cannot perceive, a reading; it imports only foundation's statefile and safego"
     },
     "api/internal/agentrt/eventlog": {
       "domains": [
@@ -1095,35 +1095,35 @@
         "payload"
       ],
       "status": "assigned",
-      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
+      "basis": "决定 2026-11-16: Tenant integration ownership; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/flexquery": {
       "domains": [
         "payload"
       ],
       "status": "assigned",
-      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
+      "basis": "决定 2026-11-16: Tenant integration ownership; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/research": {
       "domains": [
         "payload"
       ],
       "status": "assigned",
-      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
+      "basis": "决定 2026-11-16: Tenant integration ownership; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/tradeagent": {
       "domains": [
         "payload"
       ],
       "status": "assigned",
-      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
+      "basis": "决定 2026-11-16: Tenant integration ownership; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/ibgateway": {
       "domains": [
         "payload"
       ],
       "status": "assigned",
-      "basis": "Owner confirmed Tenant integration ownership in direct conversation on 2026-11-16; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
+      "basis": "决定 2026-11-16: Tenant integration ownership; package implementation, trading, permission and gate behavior unchanged; ownership confirmation does not claim physical isolation"
     },
     "api/internal/agentrt/store": {
       "domains": [
@@ -1137,7 +1137,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
+      "basis": "2026-11-21 LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-16 Complete file/reader audit: ordinary observations and scope-shadow report projection are in owning domains. Retain HTTP/lifecycle wiring, original identity/evidence/integrity/refusal and release decisions, plus communication-lane Bus wiring. Source dependencies remain explicit; shared protected scope is not claimed as isolated. 2026-11-20: agentrt/agentrtapi folded in (its only user was server); mixed 5 -> 4."
     },
     "api/internal/agentrt/controller": {
       "domains": [
@@ -1165,7 +1165,7 @@
         "delivery"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the decoupling thread (C1, \"c1 做\"): delivery is one domain, so the domain wall checks it; what it still imports from other domains is on the wall's baseline (domainsAcross) and only shrinks. Before: 2026-11-21 decoupling line: delivery reaches verification (cirunview, unitexec), compute (placement) and owner's approvals and actuationpolicy through ports it declares (verification_ports.go, placement_ports.go, release_context.go, mirrors.go), bound by the server; approvalnotify.Redact is read where it lives (notice, foundation). verification and compute are off this row; it stays mixed for owner (actions, imported by the trust-anchored window_handler.go and run_window.go; questions, which the server may not name) and coordination (threadinbox). The 2026-11-19 sentence that a port buys neither stability nor speed is withdrawn: delivery's transitive imports of this module went 51 -> 28, and 164 of the last 7 days' commits touched only packages it no longer reaches. Before: 2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged. 2026-11-17 the tests of the phase and task-timing decoders and the read of a run's steps followed that code to cirunview; so did the timings read and its cache; the parameter exposure allowlist, its test and the route wiring stay. The paged list of unit TaskRuns went too; creating one stays. One test file is left that verification answers for and this row cannot name: outside_inputs_test.go, which must sit in the package whose tests it declares inputs for. 2026-11-19 (decoupling) the row names every domain the package imports: owner (actions, approvals, approvalnotify, actuationpolicy, questions), verification (cirunview, unitexec) and compute (placement) were imported but not listed. It stays mixed: its owner imports are trust-anchored packages that may not be edited or moved, and putting a port in front of release judgment buys neither stability nor speed."
+      "basis": "决定 2026-11-21 (decoupling item C1): delivery is one domain, so the domain wall checks it; what it still imports from other domains is on the wall's baseline (domainsAcross) and only shrinks. Before: 2026-11-21 decoupling line: delivery reaches verification (cirunview, unitexec), compute (placement) and owner's approvals and actuationpolicy through ports it declares (verification_ports.go, placement_ports.go, release_context.go, mirrors.go), bound by the server; approvalnotify.Redact is read where it lives (notice, foundation). verification and compute are off this row; it stays mixed for owner (actions, imported by the trust-anchored window_handler.go and run_window.go; questions, which the server may not name) and coordination (threadinbox). The 2026-11-19 sentence that a port buys neither stability nor speed is withdrawn: delivery's transitive imports of this module went 51 -> 28, and 164 of the last 7 days' commits touched only packages it no longer reaches. Before: 2026-11-16 Complete file/reader audit: CI phases/run observations and Delivery configuration/supply projections are in their domains. Retain Delivery resource/context composition, strict policy/health/ref/success checks, execution, window queue transitions and communication contracts. Existing CI and coordination ownership ruling is unchanged. 2026-11-17 the tests of the phase and task-timing decoders and the read of a run's steps followed that code to cirunview; so did the timings read and its cache; the parameter exposure allowlist, its test and the route wiring stay. The paged list of unit TaskRuns went too; creating one stays. One test file is left that verification answers for and this row cannot name: outside_inputs_test.go, which must sit in the package whose tests it declares inputs for. 2026-11-19 (decoupling) the row names every domain the package imports: owner (actions, approvals, approvalnotify, actuationpolicy, questions), verification (cirunview, unitexec) and compute (placement) were imported but not listed. It stays mixed: its owner imports are trust-anchored packages that may not be edited or moved, and putting a port in front of release judgment buys neither stability nor speed."
     },
     "api/internal/agentrt/canon": {
       "domains": [
@@ -1186,7 +1186,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 (decoupling item 5): tests only, no production code. The agent runtime's cross-domain tests, moved here from agentrt/store unchanged; they import plan (planstore, planview, plan, planwiring), lineage (externalwork, recorderimport, workregistration), verification (landing, controller), delivery (deliveryreadings, deliveryview), coordination (coord), owner (questions) and foundation packages."
+      "basis": "2026-11-21 LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 (decoupling item 5): tests only, no production code. The agent runtime's cross-domain tests, moved here from agentrt/store unchanged; they import plan (planstore, planview, plan, planwiring), lineage (externalwork, recorderimport, workregistration), verification (landing, controller), delivery (deliveryreadings, deliveryview), coordination (coord), owner (questions) and foundation packages."
     },
     "api/internal/agentrt/storekit": {
       "domains": [
@@ -1249,7 +1249,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner charter card and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes. 2026-11-22 LAW-11: moved from api/internal/assessmentreadings unchanged."
+      "basis": "决定 2026-11-16 (charter card) and approval read scope: complete recorded advice stream query; no assessment execution, validity judgment, authorization or writes. 2026-11-22 LAW-11: moved from api/internal/assessmentreadings unchanged."
     },
     "api/internal/assessmentview": {
       "domains": [
@@ -1609,7 +1609,7 @@
         "payload"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 Foundation review: only the payload domain uses it (its one importer is api/internal/topology), so it belongs to payload; the payload seat is staffed and claimed it the same day (shared notes biz-align/foundation-handover-2026-11-21.md). 2026-11-16 Owner-approved domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
+      "basis": "2026-11-21 Foundation review: only the payload domain uses it (its one importer is api/internal/topology), so it belongs to payload; the payload seat is staffed and claimed it the same day (shared notes biz-align/foundation-handover-2026-11-21.md). 决定 2026-11-16: domain split. Complete Build/Live projection extracted: generic node/edge aggregation, datastore host matching and discovered-machine ordering; tenant display rules supplied through an adapter."
     },
     "api/internal/tenant/husbandry/checklistview": {
       "domains": [
@@ -1630,7 +1630,7 @@
         "payload"
       ],
       "status": "assigned",
-      "basis": "2026-11-16 Owner-confirmed split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved. 2026-11-20: proxyjson (foundation) moved here (its only user): the bounded GET-and-decode through the caller's proxy is proxy_get.go (proxyGet), unchanged; the caller still owns the status-error representation and proxy policy."
+      "basis": "决定 2026-11-16, split: Complete Market/Flex/Research read-only husbandry interpretation; original thresholds, paths, failure explanations and ordering preserved. 2026-11-20: proxyjson (foundation) moved here (its only user): the bounded GET-and-decode through the caller's proxy is proxy_get.go (proxyGet), unchanged; the caller still owns the status-error representation and proxy policy."
     },
     "api/internal/resourceview": {
       "domains": [
@@ -1798,7 +1798,7 @@
         "foundation"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each decoupling acceptance reading with its ruler version on the bus (foundation.acceptance.measured, POST /api/v1/bus/acceptance, action record_acceptance_reading); the Owner wanted Foundation's state on the bus. Imports only foundation packages (actor, eventlog); the server wires it."
+      "basis": "2026-11-21 bus sub-domain, written by the Foundation seat: records each decoupling acceptance reading with its ruler version on the bus (foundation.acceptance.measured, POST /api/v1/bus/acceptance, action record_acceptance_reading); 决定 2026-11-21 put Foundation's state on the bus. Imports only foundation packages (actor, eventlog); the server wires it."
     },
     "api/internal/bus/guardblock": {
       "domains": [
@@ -1910,7 +1910,7 @@
         "approvals"
       ],
       "status": "assigned",
-      "basis": "2026-11-18 Owner asked to audit the laws, Skills and MCP tools on Ops: a read model of OWNER_LAW.md, the SKILL.md files, .mcp.json and the platform MCP server's source at main, through Gitea; only the server imports it."
+      "basis": "2026-11-18 ISSUE-36: the laws, Skills and MCP tools are audited on Ops: a read model of OWNER_LAW.md, the SKILL.md files, .mcp.json and the platform MCP server's source at main, through Gitea; only the server imports it."
     },
     "api/internal/patrol": {
       "domains": [
@@ -1959,7 +1959,7 @@
         "assembly"
       ],
       "status": "assigned",
-      "basis": "2026-11-21 the Owner in the Foundation thread, LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
+      "basis": "2026-11-21 LAW-10: the packages that wire every domain together form their own domain, assembly. Direction is why it is not foundation: every domain imports foundation, while assembly imports every domain and only api/cmd imports it; it reaches each domain through what that domain offers, and integration is its system test. Before: mixed. 2026-11-18 moved out of store (decoupling item 5, S4; store's portsbind.go, 79 lines, unchanged in effect): the binding of the plan code's ports to their providers (the external work checks and activity reads, the plan tree, the delivery read's lineage naming, the loop alerts, the recorder import decision, the coordination alert claim, the Owner's question limits); it is wiring only, holds no rule and no query, and is mixed because it names the plan on one side and lineage, delivery, coordination and the Owner's questions on the other, as the assembly of the plan code; it is linked by server and by the tests that run the plan code, and nothing but wiring may be added to it"
     },
     "api/internal/agentrt/ownercard": {
       "domains": [
@@ -2065,19 +2065,19 @@
     "config/trade-api-domains.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
     "config/trust-overrides.yaml": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: platform configuration; the class and the reader's domain of each source is in config/catalog-index.json"},
     "console/.design-sync": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's design-sync configuration (design brief for the console)"},
-    "console/domain-inventory.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/domain-ownership.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/eslint.config.js": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/index.html": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/nginx.conf": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/package-lock.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/package.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/domain-inventory.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/domain-ownership.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/eslint.config.js": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/index.html": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/nginx.conf": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/package-lock.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/package.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
     "console/public": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: static assets the console serves"},
     "console/scripts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: console scripts; frontend-domain-map.mjs is the map line's front-end inventory"},
-    "console/tsconfig.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/tsconfig.node.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/vite.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
-    "console/vitest.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 2026-11-16 Owner-confirmed)"},
+    "console/tsconfig.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/tsconfig.node.json": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/vite.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
+    "console/vitest.config.ts": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the console's build and composition files (foundation holds console composition, 决定 2026-11-16)"},
     "mcp/README.md": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the MCP servers' index"},
     "mcp/platform": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the platform's MCP server: tools over every domain's routes; the server itself is shared composition, each tool's route is listed in its domain's contract"},
     "mcp/unifi": {"domains": ["foundation"], "status": "assigned", "basis": "2026-11-20 0.2 map line, first review of the unperceived pool: the UniFi network MCP server (network is foundation's, api/internal/network)"},

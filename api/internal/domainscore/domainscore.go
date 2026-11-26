@@ -1,6 +1,6 @@
 // Package domainscore scores each domain's code against config/quality-ruler.json:
 // one ruler for every domain, a version on every score, so that a domain's
-// number can be compared with its own earlier numbers (Owner 2026-11-16).
+// number can be compared with its own earlier numbers (ISSUE-20).
 //
 // It is a reading: it decides nothing and gates nothing. Version 4 measures
 // dependency direction and, of the contracts item, the Go surface (5 of its

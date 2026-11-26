@@ -136,7 +136,7 @@ func (p *Policy) AdditiveDDL() bool {
 }
 
 // DDLReversible reports whether a migration that cannot destroy rows may
-// pass without the Owner (Owner 2026-11-15): a no_ddl hit on a file under
+// pass without the Owner (LAW-6): a no_ddl hit on a file under
 // ddl_reversible_paths that is new and whose every statement is of the class
 // ClassifyMigration names, and run_agentrt_migration for such files. It is
 // off unless the policy says true; then both wait for the Owner as before.
@@ -152,7 +152,7 @@ func (p *Policy) reversiblePaths(repo string, files []string) []string {
 
 // TrustAnchorSelfChecked reports whether a no_trust_anchor_change hit in a
 // self-checked repo may pass when the commit's CI succeeded and the diff
-// touches no owner-only path (Owner 2026-11-15: a second reader adds no new
+// touches no owner-only path (LAW-9: a second reader adds no new
 // fact; the author proves a change to the judge with machine facts). It is
 // off unless the policy says true. The trust_anchor_reviewed and
 // reviewable_repos of a policy signed on 2026-11-15 are no longer read.

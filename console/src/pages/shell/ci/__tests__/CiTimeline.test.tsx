@@ -9,7 +9,7 @@ import type { TimingRun } from '@/api/ciTimings'
 import { AS_OF, change, graph, sha, unitsRun } from './ciPageFixture'
 
 /*
- * Origin of every case in this file — 2026-11-16: the Owner read Work → CI and could not tell what was running, who
+ * Origin of every case in this file — 2026-11-16 (ISSUE-29): Work → CI could not tell what was running, who
  * depends on whom, or what a change pulls in; this page and its two routes replace it. Each case says what it guards.
  */
 

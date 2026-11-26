@@ -4,7 +4,7 @@ import { buildEnvelope, parseEnvelope, present, wholeUnderAuto } from './message
 import { STATUS_BOARD, ack, forgetKeptMessagesForTests, readMessage, reportStatus, send, waitDetailed } from './messageTools.js'
 import type { RuntimeDeps } from './runtimeTools.js'
 
-// Origin: 2026-11-14, the Owner asked that seats talk through the platform to
+// Origin: 2026-11-14, ISSUE-7: seats talk through the platform to
 // save tokens (agent-tool-comm design v1 §4). That day the main coordinator
 // thread took about 1000 automatic seat summaries and was compacted about 95
 // times; a message in a model's context is paid for on every later turn.
@@ -105,7 +105,7 @@ describe('summaries', () => {
   })
 })
 
-// 2026-11-17 (the Owner: he asks for progress because Ops does not show it;
+// 2026-11-17 (ISSUE-1: progress was asked for because Ops did not show it;
 // after card #587, no route of its own): report_status is a "status" message
 // to the status board whose text is the status fields; the summary is what
 // the line is doing, one line, cut to the summary bound.

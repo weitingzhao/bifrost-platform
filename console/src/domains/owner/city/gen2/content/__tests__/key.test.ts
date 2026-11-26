@@ -5,7 +5,7 @@ import { deviceSprite, facilityOf, formOfPlace, levelsOf } from '@bifrost/ui/cit
 import { hardwareDistrict, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 
-// 2026-11-19, the Owner: the metaphor standard must be usable in the page — open a power plant and see
+// 2026-11-19 (ISSUE-9): the metaphor standard must be usable in the page — open a power plant and see
 // what each thing on it means, like a chart's legend — before a second facility is designed, so the two
 // can be compared row by row. The fixture is the real read of that day (hardware.test.ts).
 const d = hardwareDistrict(fixture as unknown as HardwareReads)
@@ -35,7 +35,7 @@ describe('a facility’s key', () => {
     expect(rows.find(r => r.id === 'cores')!.now).toMatch(/^\d+ cores$/)
     expect(rows.find(r => r.id === 'mem.used')!.source).toBeTruthy()
   })
-  // 2026-11-20, the Owner: every computer is one kind of building, so an unread Windows box keeps the same
+  // 2026-11-20 (ISSUE-9): every computer is one kind of building, so an unread Windows box keeps the same
   // gauges as a plant that runs; each says it is not read (the old test expected only its state row).
   it('a machine nothing reads keeps its gauges, each saying not read rather than a number', () => {
     const rows = keyOf(dev('win11-host')).rows

@@ -99,7 +99,7 @@ func TestAlertsAgreeWithTheRegister(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner's "first make problems visible": the Watchdog going
+// 2026-11-18, ISSUE-97 (problems are made visible first): the Watchdog going
 // missing was known only to the relay on the Mac mini. The mirror says each
 // change once, and a blip of the relay's own plane says nothing.
 func TestRelayWatchSaysEachChangeOnce(t *testing.T) {
@@ -178,7 +178,7 @@ func TestFireNamesTheRecordItTellsOf(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner's "first make problems visible": X-A24
+// 2026-11-18, ISSUE-97 (problems are made visible first): X-A24
 // (BifrostAlertmanagerWebhookFailing) had no bus event. The relay watch now says
 // Prometheus's reading of it as an alert, and a Prometheus that does not answer
 // changes nothing.

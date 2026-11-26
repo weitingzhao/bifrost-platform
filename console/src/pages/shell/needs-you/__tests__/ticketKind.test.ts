@@ -1,4 +1,4 @@
-// 2026-11-23 the Owner (by the coordinator), 箭10 ruled the screen: tickets for a change of law and tickets for
+// 2026-11-23 (LAW-6), 箭10 ruled the screen: tickets for a change of law and tickets for
 // executive work no longer share one queue on Command. The kind comes from the data (a request's action, a
 // question's owner_duty), never from a title; a question without a duty is an action marked "kind not declared".
 import { describe, expect, it } from 'vitest'

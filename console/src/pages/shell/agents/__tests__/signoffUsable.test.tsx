@@ -199,7 +199,7 @@ describe('a step whose work has not started is not waiting for the Owner\'s sign
   })
 
   it('when only steps not started have a sign-off rule, none waits: 0 in the block, nothing on For you, the steps under Not started', async () => {
-    // The Owner's 2026-10-23 case: every rule not signed is on a step nobody has started.
+    // 事故 2026-10-23: every rule not signed is on a step nobody has started.
     plan = { ...plan, nodes: plan.nodes.map(n => (WAITING.includes(n.label) ? { ...n, state: 'done' } : n)) }
     show(<><SignoffWaiting /><SignoffWaitingLink /></>)
     expect(await screen.findByRole('heading', { name: 'Waiting for your sign-off · 0' })).toBeInTheDocument()

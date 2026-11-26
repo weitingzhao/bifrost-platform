@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Origin of these cases: 0.2 map line, 2026-11-20. Owner (via coordinator):
+// Origin of these cases: 0.2 map line, 2026-11-20, ISSUE-69:
 // what is not on the map is "cannot be perceived", a defect to review; the
 // scan never adds it to the map, and each entry carries when it was found.
 // The 11-19 survey found the table's default (no row -> foundation) means a
@@ -294,7 +294,7 @@ func TestRunScansWhatTheListingNames(t *testing.T) {
 	}
 }
 
-// 2026-11-21, the Owner asked how the map knows a thing was removed: it saw
+// 2026-11-21, ISSUE-69: how does the map know a thing was removed? It saw
 // additions (the pool) but a row whose thing was deleted stayed registered,
 // unseen. The control: a row that covers a file is not stale.
 func TestARowThatCoversNothingIsStale(t *testing.T) {

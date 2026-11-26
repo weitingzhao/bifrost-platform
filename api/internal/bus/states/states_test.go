@@ -11,8 +11,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/registry"
 )
 
-// 2026-11-20: the Owner asked that every module's state reach the bus and
-// that a joining module mean no code change. Each state type registered with
+// 决定 2026-11-20: every module's state reaches the bus, and a joining
+// module means no code change (ISSUE-34). Each state type registered with
 // subject_from and change_from must be readable here with no Go of its own.
 func TestEveryRegisteredStateTypeQualifies(t *testing.T) {
 	tenants, err := registry.Load()

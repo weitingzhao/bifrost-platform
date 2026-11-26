@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { alertsUnder, placedIn, worst, type CityAlert } from '@bifrost/ui/city/alerts'
 import type { Place } from '@bifrost/ui/city/places'
 
-// 2026-11-21, the Owner: the picture never judges; the line that measures does. The engine lights each place
+// 2026-11-21 (ISSUE-9): the picture never judges; the line that measures does. The engine lights each place
 // with the alerts under it (how many, the worst) and lists the ones it cannot place: these pin that counting.
 const a = (id: string, severity: CityAlert['severity'], at: string[] | null): CityAlert => ({ id, name: id, severity, summary: '', at })
 const alerts = [a('down', 'critical', ['compute', 'ubt-k3s-05']), a('disk', 'warning', ['compute', 'nas']), a('pod', 'warning', null), a('stale', 'info', ['compute', 'gone'])]

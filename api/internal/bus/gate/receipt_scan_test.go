@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Origin: 2026-11-19, the Owner's "performance problems are fixed when found":
+// Origin: 2026-11-19, ISSUE-90 (performance problems are fixed when found):
 // the Bus page's two slowest reads each scanned a day of receipts. One scan must
 // serve both, and a failure or an older window must not be answered from it.
 func TestReceiptReadsShareOneScan(t *testing.T) {

@@ -10,8 +10,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 )
 
-// Origin: 2026-11-24, Owner in the legislation thread: a repealed law must
-// not linger as poison, "满七天或者我直接要求删..都可以物理删除". These check
+// Origin: 2026-11-24, ISSUE-17 and ISSUE-24: a repealed law must not linger
+// as poison; after seven days, or at once on request, it may be deleted
+// physically. These check
 // the one deletion the ledger allows (migration 0047): only a repealed law,
 // only seven days after its repeal or by the Owner's purge card, the whole
 // stream at once, and a tombstone that keeps its number and card ids so
@@ -127,7 +128,7 @@ func TestPurgeCardDeletesAtOnce(t *testing.T) {
 	}
 }
 
-// 2026-11-24, the Owner asked whether keeping laws in the shared event table
+// 2026-11-24, ISSUE-92 asks whether keeping laws in the shared event table
 // mixes them with data a clean-up rule could remove (law 42 asks growing data
 // to have one). Since migration 0047 the one deletion is the function above;
 // outside it nothing is deleted: not by the runtime role, not by the table's

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { STAGES, stagesOf, unitRulesBroken, type UnitSpec } from '@bifrost/ui/city/units/process'
 import { UNITS } from '../../content/units/cpu'
 
-// 2026-11-19, the Owner: build from the inside out — the detail first, in full, then each level a
+// 2026-11-19 (ISSUE-99): build from the inside out — the detail first, in full, then each level a
 // summary of the one before — and set the process up first, with a page to confirm each stage on.
 const base: UnitSpec = { id: 't', name: 'T', what: '', details: [{ id: 'a', label: 'A', meaning: '', query: 'up', unit: 'count', per: 'machine' }], confirmed: {} }
 

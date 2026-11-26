@@ -13,8 +13,8 @@ import (
 // that runs it must schedule on amd64 and passes the build preflight first
 // (workload placement G2).
 //
-// Read from the pipeline's definition, not a hand-kept list (Owner 2026-11-17
-// approved proposal B, duty/proposal-ci-w1-2026-11-17-kaniko-gate-list.md):
+// Read from the pipeline's definition, not a hand-kept list (决定 2026-11-17,
+// proposal B, duty/proposal-ci-w1-2026-11-17-kaniko-gate-list.md):
 // the list had missed bifrost-build-research-pine and bifrost-ci-finance, both
 // kaniko builds, and named bifrost-deliver-platform-prod, which builds nothing.
 const kanikoExecutor = "kaniko-project/executor"

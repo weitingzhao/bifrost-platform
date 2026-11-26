@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// The tuning rule (R5 phase 2 step 3b, T4; the Owner 2026-11-06 Q5): the
+// The tuning rule (R5 phase 2 step 3b, T4; 决定 2026-11-06 Q5): the
 // runtime's timeouts, retry counts and limits that are capacity, not
 // authority, as configuration with the code's defaults. The registry below is
 // closed: a rule names only keys it lists, each a whole number between its

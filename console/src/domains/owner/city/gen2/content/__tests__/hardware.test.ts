@@ -6,7 +6,7 @@ import { assign, planFor, plotsOf } from '@bifrost/ui/city/grid'
 import { hardwareDistrict, hardwareRulesBroken, OTHER_DEVICES, sheetsTheTownGives, type HardwareReads } from '../hardware'
 import fixture from './hardware.fixture.json'
 
-// 2026-11-19, the Owner: the hardware district is the first domain to come in through the entry rules
+// 2026-11-19 (ISSUE-9): the hardware district is the first domain to come in through the entry rules
 // (RULES.md §2). The fixture is one real read of the platform's topology and monitoring (that day,
 // 20:01Z, with the NAS's RAID arrays): 13 devices; gpu-server asleep on purpose; the two Windows TWS hosts and the MacBook with
 // nothing reading them. Before this, the plan said every machine outside the cluster was unread;
@@ -26,9 +26,9 @@ describe('the hardware district, from one real read', () => {
     expect(dev('mac-mini-1').state).toBe('online')
     expect(dev('UGREEN-NAS').state).toBe('online')
   })
-  // 2026-11-19, the Owner, on the first try: tiny boxes huddled in the middle, the ground wasted. Sizes
+  // 事故 2026-11-19, on the first try: tiny boxes huddled in the middle, the ground wasted. Sizes
   // grew so what a device shows reads at a glance, and the ground is laid out by what things are for.
-  // 2026-11-20, the Owner: a unit is 4×4, sixteen to a sheet; the GPU tower and the NAS two units, the rest one.
+  // 2026-11-20 (ISSUE-9): a unit is 4×4, sixteen to a sheet; the GPU tower and the NAS two units, the rest one.
   it('sizes by weight: the GPU tower and the NAS park medium; every other device small; all fit one sheet', () => {
     expect(dev('gpu-server').shape).toBe('4x8')
     expect(dev('UGREEN-NAS').shape).toBe('4x8')
@@ -51,13 +51,13 @@ describe('the hardware district, from one real read', () => {
     expect(dev('UGREEN-NAS').children.map(r => r.id)).toEqual(['cpu', 'memory', 'volume-1', 'volume-2'])
     expect(dev('gpu-server').children.map(r => r.id)).toContain('gpu')
   })
-  // 2026-11-19, the Owner: the NAS has physical disks, show them. Read from its RAID arrays (md1: three
+  // 2026-11-19 (ISSUE-9): the NAS has physical disks, and they are shown. Read from its RAID arrays (md1: three
   // disks, 24 TB; md2: two, 984 GB), matched to the volumes by size, not by the numbers in their names.
   it('a NAS volume carries the disks of its array and their states', () => {
     const vols = dev('UGREEN-NAS').children.filter(r => r.id.startsWith('volume-'))
     expect(vols.map(v => v.units)).toEqual([['online', 'online', 'online'], ['online', 'online']])
   })
-  // 2026-11-19, the Owner: every roof and wall shows something. The roof a number (who), the sign the
+  // 2026-11-19 (ISSUE-9): every roof and wall shows something. The roof a number (who), the sign the
   // workload pool or role (what for), a wall the pods running now (how busy) — all read.
   it('surfaces show what is read: roof number, sign, pods running; none on what nothing reads', () => {
     expect(dev('ubt-k3s-04').face).toMatchObject({ roof: '04', sign: 'DATA PRIMARY', tally: { what: 'pods' } })
@@ -68,7 +68,7 @@ describe('the hardware district, from one real read', () => {
     expect(dev('win11-host').face?.sign).toBeUndefined()
     expect(dev('win11-host').face?.tally).toBeUndefined()
   })
-  // 2026-11-20, the Owner: every device carries a two-digit number on itself; its look says the kind, the
+  // 2026-11-20 (ISSUE-9): every device carries a two-digit number on itself; its look says the kind, the
   // number which one. Servers keep their node's number (01–09), the rest take free numbers from 10 by id.
   it('numbers every device with two digits, servers by their node, the rest from 10, none twice', () => {
     expect(dev('ubt-k3s-04').face?.roof).toBe('04')
@@ -99,7 +99,7 @@ describe('the hardware district, from one real read', () => {
   })
 })
 
-// 2026-11-19, the Owner: put the units' rooms into use ("可以把这些东西放到这个房间里面去了"), each its
+// 2026-11-19 (ISSUE-9): the units' rooms are put into use, each its
 // own module. With the units read, a computer's rooms carry their module's picture and its shape, and the
 // disk is one warehouse holding every volume; without them, the plain rooms as before.
 describe('the units’ rooms in use', () => {

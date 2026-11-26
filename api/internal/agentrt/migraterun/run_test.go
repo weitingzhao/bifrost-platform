@@ -125,7 +125,7 @@ func newMigrationFixture(t *testing.T) *migrationFixture {
 	return f
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // The Job created is the environment's manifest with one change, the image:
 // the api build the source environment's successful delivery of the commit
@@ -156,7 +156,7 @@ func TestMigrationRunnerCreatesTheJobAndReadsWhatItApplied(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // A database that is current for the commit gets no Job, and the answer says so.
 func TestMigrationRunnerDoesNothingWhenCurrent(t *testing.T) {
@@ -168,7 +168,7 @@ func TestMigrationRunnerDoesNothingWhenCurrent(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // Each case is the run above with one thing wrong. A refusal before the Job
 // creates nothing; a Job that fails is an error with its log; a Job whose
@@ -255,7 +255,7 @@ func TestMigrationRunnerRefusals(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: what the policy reads of this platform is what /health
+// LAW-6: what the policy reads of this platform is what /health
 // reports; an unwired runtime, an unread schema and unwired release records
 // are each an error, and a read one names the pipeline, repository, directory
 // and applied migrations.

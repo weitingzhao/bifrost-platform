@@ -50,7 +50,7 @@ func TestBuildCountsLinksWaitsAndReports(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-17, the Owner wants the live map to say how busy the bus
+// Origin: 2026-11-17, ISSUE-29: the live map says how busy the bus
 // is now: NewRate counts the last window's events by type and per minute.
 func TestNewRateCountsByTypeAndMinute(t *testing.T) {
 	r := NewRate(60, []string{"ci.run.started", "ci.run.started", "git.main.advanced"})

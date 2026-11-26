@@ -184,7 +184,7 @@ describe('NeedsYouPage', () => {
     window.location.hash = ''
   })
 
-  // 2026-11-23 the Owner (by the coordinator), 箭10 ruled the screen: a change of law and executive work do not share
+  // 2026-11-23 (LAW-6), 箭10 ruled the screen: a change of law and executive work do not share
   // one queue. A law_amend card stands under Laws, every other request under Actions, each with its own count.
   it('puts a law_amend card under Laws and other requests under Actions, each counted apart', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')

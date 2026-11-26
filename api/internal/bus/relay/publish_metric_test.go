@@ -46,7 +46,7 @@ func TestThePublishHistogramCountsSlowPublishes(t *testing.T) {
 	}
 }
 
-// Origin: 2026-11-18, the Owner's "first make problems visible": a drill must
+// Origin: 2026-11-18, ISSUE-97 (problems are made visible first): a drill must
 // reach the stream without passing for real traffic of the topic it borrows.
 func TestADrillIsCountedUnderItsOwnStream(t *testing.T) {
 	if got := countedAs(Row{Type: "alert.rule.fired", Stream: "drill:N06"}); got != "drill:N06" {

@@ -1,6 +1,6 @@
 // Package evalreadings is the evaluation readout: GET /api/v1/readings/evaluation.
 //
-// LAW-8 (Owner 2026-11-19): the numbers an evaluation uses come only from the
+// LAW-8: the numbers an evaluation uses come only from the
 // system. Each number here is computed from records that are kept (the event
 // ledger, read only through its declared read shape: eventlog.ReadShape) or
 // from Prometheus recording rules, over a window that has already closed, so
@@ -12,8 +12,8 @@
 // coordination domain), never by the line they describe.
 //
 // Origin: the coordinator's daily brief computed its numbers with ad-hoc
-// scripts (shared notes benchmark/), and the Owner said on 2026-11-19 that
-// "none of the evaluation results come from the system". Raw-record audit and
+// scripts (shared notes benchmark/), and on 2026-11-19 none of
+// the evaluation results came from the system (LAW-8). Raw-record audit and
 // the choices behind this package: shared notes metrics/
 // eval-readout-step1-records-2026-11-20.md and eval-readout-options-2026-11-20.md.
 //

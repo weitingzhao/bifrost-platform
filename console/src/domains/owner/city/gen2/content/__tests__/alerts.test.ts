@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Place } from '@bifrost/ui/city/places'
 import { alertsRead, cityAlerts, deviceOf, type DeviceKey, type PromAlert } from '../alerts'
 
-// 2026-11-21, the Owner: the utilities read the metrics line's judgment, not the picture's own. The alerts below
+// 2026-11-21 (ISSUE-9): the utilities read the metrics line's judgment, not the picture's own. The alerts below
 // are PROD's firing alerts of that evening (GET /api/v1/telemetry/alerts, read through the bench proxy) and its
 // devices (topology): ubt-k3s-05 down, gpu-server in standby, CPUThrottlingHigh on cicd pods scraped from a
 // kubelet on 192.168.10.80. Placement is exact: node label, host label, or a host's own address; a workload's

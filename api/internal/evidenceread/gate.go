@@ -42,7 +42,7 @@ type CIReader = func(ctx context.Context, repo, sha string) (status, run string,
 // tested, only partly tested, or still running). The run is the one the
 // answer rests on. It asks what was recorded, not the key the commit would
 // have now: a repository beside it moving on does not turn a tested commit
-// untested (Owner 2026-11-12, until dependencies are pinned).
+// untested (决定 2026-11-12, until dependencies are pinned).
 //
 // A commit with no verdict of its own is asked again by its content: the rows
 // of its git tree, under whatever commit (a rebase or a squash onto main, a
@@ -57,7 +57,7 @@ func LedgerCI(db func() eventlog.DB, tree func(context.Context, string, string) 
 // to PROD is judged on (the policy's ci_succeeded, the PROD pipeline's
 // check-source through GET /api/v1/evidence/ci): a commit that landed on an
 // incremental pass reaches STG on the chain, and PROD only once the full run
-// of the push to main has passed (Owner 2026-11-16: the incremental run lets
+// of the push to main has passed (ISSUE-22: the incremental run lets
 // it in, the full run after it is the reconciliation).
 func LedgerCIStrict(db func() eventlog.DB, tree func(context.Context, string, string) (string, error)) CIReader {
 	return LedgerCIWith(db, tree, false, false)

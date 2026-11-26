@@ -581,7 +581,7 @@ const maxSourceRecords = 50
 // source pipeline succeeded and shipped exactly the pinned commits, all of
 // them in the same record; otherwise why not. It need not be the newest
 // record: the source environment moving on does not take back a delivery
-// that succeeded (Owner 2026-11-15; the PROD pipeline's own source check
+// that succeeded (ISSUE-3; the PROD pipeline's own source check
 // reads the same way).
 func (e *Engine) deliveredBy(ctx context.Context, from string, pinned map[string]string) string {
 	records, err := e.d.Deployed.Shipped(ctx, from)

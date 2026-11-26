@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { onSheet, sheetCount, sheetsOf, type Place } from '@bifrost/ui/city/places'
 
-// 2026-11-20, the Owner: a district of 4×8 holds two 16×16 grounds, 8×8 four; each cell of its town on the city
+// 2026-11-20 (ISSUE-9): a district of 4×8 holds two 16×16 grounds, 8×8 four; each cell of its town on the city
 // stands for one, and inside you see one at a time and step between them without going out.
 const P = (id: string, kind: Place['kind'], shape: string, children: Place[] = [], sheet?: number): Place =>
   ({ id, kind, shape, label: id, question: '', dashboard: null, children, ...(sheet != null ? { sheet } : {}) }) as Place

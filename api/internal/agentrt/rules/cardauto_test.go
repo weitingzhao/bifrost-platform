@@ -79,8 +79,8 @@ func cardAutoSeconds(version int, direction, wait, kinds string) string {
 	return strings.Replace(cardAutoText(version, direction, "5", kinds), "after_minutes: 5", "after_seconds: "+wait, 1)
 }
 
-// TD-393 (the Owner 2026-10-20 「STG 的规则等待按秒、设 5 秒…所有种类的运行时卡都
-// 归规则管」): the wait in seconds, from 0; every kind of card the runtime
+// TD-393 (决定 2026-10-20: on STG a rule waits in seconds and answers every
+// kind of runtime card): the wait in seconds, from 0; every kind of card the runtime
 // asks; a rule says after_seconds or after_minutes, never both, and its body
 // says it as its text does, so versions 1 and 2 read as they were signed.
 func TestCardAutoRuleInSeconds(t *testing.T) {
@@ -137,7 +137,7 @@ func TestCardAutoRuleInSeconds(t *testing.T) {
 	}
 }
 
-// Review 489 A1 on T12 (the coordinating thread 2026-10-22 for the Owner:
+// Review 489 A1 on T12 (决定 2026-10-22:
 // A1): assessment: veto keeps a card's AI assessment to a veto. Optional,
 // one value; written back when given, absent from the body of a rule that
 // does not give it (versions 1 to 3 read as signed). Giving it tightens;

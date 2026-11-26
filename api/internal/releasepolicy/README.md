@@ -27,7 +27,7 @@ the snapshots) and the diff touches no owner-only path.
 ## Migrations that cannot destroy rows
 
 With `conditions.ddl_reversible: true` and a `ddl_reversible_paths` list in
-the signed policy (Owner 2026-11-15), a migration file under those paths is
+the signed policy (LAW-6), a migration file under those paths is
 not a `no_ddl` refusal when it is new in the diff and every top-level
 statement is of the class `ClassifyMigration` names (`migrationclass.go`): an
 allow-list by statement kind, so what it does not recognise is out. A changed

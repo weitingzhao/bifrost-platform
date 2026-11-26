@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Menu, Pager, pageOf, Tabs, useConfirm } from '@bifrost/ui/city/parts'
 
-// 2026-11-19, the Owner: the frame gives every panel the same parts and fixes where they go, like Bootstrap.
+// 2026-11-19 (ISSUE-55): the frame gives every panel the same parts and fixes where they go, like Bootstrap.
 afterEach(cleanup)
 
 describe('pageOf', () => {

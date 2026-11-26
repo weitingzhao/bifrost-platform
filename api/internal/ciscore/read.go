@@ -18,7 +18,7 @@ import (
 )
 
 // GET /api/v1/ci/scorecard is how each repository uses CI, and how CI serves
-// them, scored from the runs the cluster still keeps (Owner 2026-11-16; the
+// them, scored from the runs the cluster still keeps (ISSUE-20; the
 // items and their pass lines are ciscore's). Read-only; viewer and above.
 //
 // It is computed only when asked and the answer is kept for scorecardKeep.

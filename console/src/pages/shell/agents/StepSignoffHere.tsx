@@ -10,8 +10,8 @@ const CLOSED = new Set(['done', 'stopped', 'dropped'])
 const STEP_SIGNOFF_REFRESH = 'Refresh the plan before signing.'
 
 /**
- * On the step card, under "Done when": the step's Sign off, where the Owner reads what it waits on (11-05: he opened a
- * step's own address, read "You sign off …" and found no button; the only one was row 66 of 75 under Sign-offs › Not
+ * On the step card, under "Done when": the step's Sign off, where the Owner reads what it waits on (事故 2026-11-05: a
+ * step's own address was opened, read "You sign off …" and found no button; the only one was row 66 of 75 under Sign-offs › Not
  * started, folded). Only a step whose done rule names owner_signoff reads anything: its own GET /plan/{id} (the
  * sign-offs it holds), every 15 s, so the module page reads no whole plan. The controls are Sign-offs' own; a step no
  * task has started on says first that Ops shows no work behind it. Nothing while it is read or when nothing waits.

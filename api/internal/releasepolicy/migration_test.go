@@ -56,7 +56,7 @@ func (f *applyFixture) migrate() releasepolicy.Decision {
 	return f.eng.Decide(context.Background(), "run_agentrt_migration", releasepolicy.Tier("C"), map[string]any{"commit": rptest.SHA("new")})
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // A release whose diff carries a new migration of the class is covered: the
 // PROD pipeline's own schema task refuses a build whose migrations are not
@@ -123,7 +123,7 @@ func TestReleaseCarryingAMigrationAlreadyAppliedHere(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // Each case is the covered release above with one thing wrong; the fixture's
 // policy has additive_ddl on, and none of these falls back to it.
@@ -194,7 +194,7 @@ func TestReleaseWithAMigrationOutOfClassIsRefused(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // The positive control of the action's cases: the commit was delivered to the
 // source environment, and the one file this environment has not applied is
@@ -221,7 +221,7 @@ func TestRunMigrationIsCovered(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // Each case is the covered request above with one thing wrong: it waits for
 // the Owner's card, and the reason names the file and the statement kind.
@@ -319,7 +319,7 @@ func TestRunMigrationNotCovered(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // A policy signed before the condition existed answers a release exactly as
 // before: a migration file is a no_ddl hit.

@@ -3,7 +3,7 @@ import type { Place } from '@bifrost/ui/city/places'
 import { HUES } from '@bifrost/ui/city/sprites'
 import { hueOf } from '@bifrost/ui/city/theme'
 
-// 2026-11-19, the Owner: things differ and their look passes down (a district's theme to its
+// 2026-11-19 (ISSUE-9): things differ and their look passes down (a district's theme to its
 // buildings, a building's to its rooms); the ways between them are one standard.
 const node = (id: string, children: Place[] = []): Place => ({ id, kind: 'district', shape: '4x4', label: id, question: '', dashboard: null, children })
 const tree = node('town', [node('a', [node('a1', [node('r1'), node('r2')]), node('a2')]), node('b', [node('b1')])])

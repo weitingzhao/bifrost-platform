@@ -60,7 +60,7 @@ export const regressionsPath = (a: { repo?: string; open?: boolean }): string =>
 }
 
 /**
- * get_bus_states (2026-11-20, the Owner: every module's state changes reach
+ * get_bus_states (决定 2026-11-20: every module's state changes reach
  * the bus): GET /api/v1/bus/states, each subject's latest change for one
  * registered state type. A type qualifies by its register entry alone.
  */

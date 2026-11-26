@@ -62,7 +62,7 @@ func putSignal0042(ctx context.Context, t *testing.T, admin *pgx.Conn, createdAt
 	}
 }
 
-// Origin: 2026-11-21, the Owner in the decoupling thread ("c5 现在就删"):
+// Origin: 决定 2026-11-21 (decoupling item C5, deleted now):
 // agentrt.outbox_retired, retired by 0028 with 2,309 delivered rows on PROD and
 // no writer since 11-15, is dropped with its two functions.
 func TestDrop0042RemovesTheRetiredOutbox(t *testing.T) {

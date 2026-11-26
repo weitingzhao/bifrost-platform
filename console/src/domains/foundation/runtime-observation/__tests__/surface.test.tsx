@@ -10,7 +10,7 @@ const room = { id: 'cpu', kind: 'room' as const, shape: '4x4' as const, label: '
 const building = { id: 'node-a', kind: 'building' as const, shape: '4x4' as const, label: 'Node A', question: 'State', dashboard: null, state: 'online' as const, children: [room] }
 const fixture: ObservationSnapshot = { version: 1, id: 'fixture-1', capturedAt: at, provenance: 'fixture', content: { tree: { ...building, id: 'town', kind: 'town', children: [building] }, alerts: { source: '/alerts', alerts: [] } }, evidence: { 'node-a/cpu': [read] } }
 
-// 2026-11-22 Owner multi-view acceptance: zero/missing/error/stale must remain distinct, not green guesses.
+// 2026-11-22 (ISSUE-33), multi-view acceptance: zero/missing/error/stale must remain distinct, not green guesses.
 describe('observation contract', () => {
   it('keeps source quality states distinct', () => {
     expect(readQuality([read], at)).toBe('Within refresh window')

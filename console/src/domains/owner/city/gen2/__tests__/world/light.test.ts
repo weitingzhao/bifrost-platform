@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CORNERS, lightAt, lightOf, NEXT, PALETTE } from '@bifrost/ui/city/light'
 
-// 2026-11-19, the Owner: the town has day and night (dusk too), following the time; he may pin one.
+// 2026-11-19 (ISSUE-9): the town has day and night (dusk too), following the time; a viewer may pin one.
 const at = (h: number, m = 0) => new Date(2026, 10, 19, h, m)
 
 describe('light', () => {

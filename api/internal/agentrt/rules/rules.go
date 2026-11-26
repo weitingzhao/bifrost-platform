@@ -34,7 +34,7 @@ const (
 // (store/planresult.go), a plan change's, a plan import's and a recorder
 // import's card (planproposal.go, planimportcard.go, recorderimport.go), and
 // historical mission cards. TD-393
-// (the Owner 2026-10-20 「STG 上所有种类的运行时卡都归规则管」) added all but the
+// (决定 2026-10-20: on STG every kind of runtime card is the rules') added all but the
 // first two; a rule answers a card with its recommendation, or with the
 // option that changes nothing when it has none or its AI assessment differs
 // (before assessment: veto, a card with none took its assessment's option).
@@ -82,13 +82,13 @@ type PlanStanding struct {
 
 // CardAuto lets the platform answer a card the runtime asked, once it has
 // been open AfterSeconds unanswered, when the card is of one of Kinds and
-// its mission does not need the Owner (TD-390, the Owner 2026-10-20 「STG 用
-// A」: STG only; PROD has no such rule; TD-393: in seconds, every kind).
+// its mission does not need the Owner (TD-390, 决定 2026-10-20
+// option A: STG only; PROD has no such rule; TD-393: in seconds, every kind).
 type CardAuto struct {
 	AfterSeconds int
 	Kinds        []string
 	// AssessmentVeto: the rule says assessment: veto (review 489 A1 on T12,
-	// the coordinating thread 2026-10-22 for the Owner: A1). A card's AI
+	// 决定 2026-10-22: A1). A card's AI
 	// assessment may then only keep the rule from the card's recommendation,
 	// never give it an option of its own: a card that recommends nothing is
 	// answered with the option that changes nothing, and left to the Owner

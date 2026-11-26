@@ -350,7 +350,7 @@ describe('Owner Console entries', () => {
       'Look at the goal cards'])
     expect(yours).not.toHaveTextContent('✎')
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
-    // 2026-11-19, the Owner: what needs his hands outside the system is its own kind; the secondary slot is only a notice.
+    // 2026-11-19 (ISSUE-6): what needs the Owner's hands outside the system is its own kind; the secondary slot is only a notice.
     expect(screen.getByRole('region', { name: 'Needs your hands' })).toHaveTextContent('Nothing needs your hands right now.')
     const worth = screen.getByRole('region', { name: 'For your information' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)

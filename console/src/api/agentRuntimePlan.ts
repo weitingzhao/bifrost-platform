@@ -310,7 +310,7 @@ export async function postStepSignoff(node: string, ref: string, token: string, 
 
 /**
  * A step's title as one line of plain text: the ledger's markdown (** and __ emphasis, backticks) taken out, its first
- * line only, spaces collapsed (2026-10-21: the Owner saw "**" on the plan page and could not tell steps apart).
+ * line only, spaces collapsed (事故 2026-10-21: the plan page showed "**" and steps could not be told apart).
  */
 export function plainTitle(title: string): string {
   const first = title.split('\n').find(line => line.trim() !== '') ?? ''

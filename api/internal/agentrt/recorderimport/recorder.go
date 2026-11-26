@@ -3,7 +3,7 @@
 // body, a space, and the body, a canonical JSON object whose prev_sha256 is
 // the line before's digest) into the form the runtime keeps and imports as
 // the stream legacy:recorder:<work> (v5 §5.3 T32 「经导入」, the recorder's
-// half; CUT-gate-b-2026-10-19.md §2 item 3 A, Owner 2026-10-19 「都照建议」).
+// half; CUT-gate-b-2026-10-19.md §2 item 3 A, 决定 2026-10-19).
 // It reads and writes nothing but its arguments.
 //
 // The chain is checked on the lines as the recorder wrote them. A line with a

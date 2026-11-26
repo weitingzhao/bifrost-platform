@@ -16,7 +16,7 @@ import (
 // decides changes the snapshot in the same commit, and the diff of that file
 // is the plain list of what now comes out differently: which requests build a
 // card, which are refused and why, what can be withdrawn or replaced. Origin:
-// the Owner's rule (10:10, 2026-11-15) that what reaches him is a change to a
+// LAW-6 (2026-11-15): what reaches the Owner is a change to a
 // rule, shown as what it changes. Update with UPDATE_SNAPSHOT=1.
 
 const snapshotPath = "testdata/decision_snapshot.txt"

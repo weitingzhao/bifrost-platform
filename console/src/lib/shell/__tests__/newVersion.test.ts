@@ -1,5 +1,5 @@
-// 2026-11-23 箭10: the Owner's tablet keeps the Console open; after a deploy it kept the old bundle (UI / Console saw
-// index-BtAdWEWW on PROD while the server served index-CMxX5eLY), so his view of our changes was simply old. The frame
+// 事故 2026-11-23 (箭10): a tablet keeps the Console open; after a deploy it kept the old bundle (UI / Console saw
+// index-BtAdWEWW on PROD while the server served index-CMxX5eLY), so the view of our changes was simply old. The frame
 // now says "New version · Reload" and an idle page reloads itself; a page in use does not, and the decision page keeps
 // its own rule.
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -55,7 +55,7 @@ describe('useIdleReloadWhenStale', () => {
   })
 })
 
-// 2026-11-24 the Owner's phone could not open ops.bifrost.lan after a deploy: while a rollout splits requests between
+// 事故 2026-11-24: a phone could not open ops.bifrost.lan after a deploy: while a rollout splits requests between
 // old and new replicas, the new page's script can 502 and a reload lands on a white page. A reload waits until the
 // newer build's script answers 200; otherwise the working page stays.
 describe('reload only when the newer build loads', () => {

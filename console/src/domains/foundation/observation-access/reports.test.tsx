@@ -26,7 +26,7 @@ function Reader({report}:{report:ObservationReport}) {
   const [selected,onSelect]=useState('')
   return <ObservationReportView report={report} selected={selected} onSelect={onSelect} at={received}/>
 }
-// Owner: one provider-independent reader must preserve both CI and plugin facts.
+// ISSUE-33: one provider-independent reader must preserve both CI and plugin facts.
 it('reads distinct provider schemas with original values, times and unknowns',()=>{
   const ci=ciReport
   const view=render(<Reader report={ci}/>)

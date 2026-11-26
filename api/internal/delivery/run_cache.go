@@ -167,7 +167,7 @@ type cacheReaders struct {
 // calling it) keeps every route on its list. earned are the routes that start
 // trusted: the caller computes them from the routes' own side-by-side
 // readings (bifrost_bus_readers_compared/mismatch over the last days), not a
-// hand-kept list (the Owner, 2026-11-17); nil starts every route comparing.
+// hand-kept list (ISSUE-18); nil starts every route comparing.
 func (s *Service) SetRunCache(c RunCache, earned map[string]bool) {
 	if c == nil {
 		s.readers.Store(nil)

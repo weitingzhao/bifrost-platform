@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DICTIONARY, encode, metaphor, rulerOf, rulersKey, setRuler, STANDARD_PARTS } from '@bifrost/ui/city/library/dictionary'
 import { deviceSprite, type Form, type Levels } from '@bifrost/ui/city/devices'
 
-// 2026-11-19, the Owner: the point is that metrics show naturally; which metaphor shows which metric
+// 2026-11-19 (ISSUE-9): the point is that metrics show naturally; which metaphor shows which metric
 // is a standard, kept as data. And size must show capacity — the GPU box and a mini PC looked the
 // same size, which shows nothing.
 describe('the metaphor dictionary', () => {
@@ -24,7 +24,7 @@ describe('the metaphor dictionary', () => {
     expect(encode('mem.total', 128e9)!).toBeGreaterThan(encode('mem.total', 24e9)!)
     expect(encode('disk.total', 2e12)!).toBeGreaterThan(encode('disk.total', 500e9)!)
   })
-  // 2026-11-19, the Owner: capacity as standard parts, one size city-wide, so a glance compares
+  // 2026-11-19 (ISSUE-9): capacity as standard parts, one size city-wide, so a glance compares
   // machines — 16 cores against 32, 16 GB against 24, a node's disk against the NAS.
   it('standard parts: counted in one fixed size each, whatever machine they are on', () => {
     expect(encode('core.machines', 16)).toBe(16)

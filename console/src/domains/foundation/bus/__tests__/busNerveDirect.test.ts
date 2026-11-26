@@ -40,7 +40,7 @@ const listening: BusListening = {
 }
 
 describe('layerPositions', () => {
-  // 2026-11-17, the Owner on PROD: a disc in a circle read as a roulette
+  // 事故 2026-11-17, on PROD: a disc in a circle read as a roulette
   // wheel; then the big bang: the base is the core, the tiers open out from
   // it as a cone, distance from the core is the tier; no two clouds run into
   // one another (coordination and compute overlapped seen from the side).

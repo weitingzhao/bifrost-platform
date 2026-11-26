@@ -24,9 +24,9 @@ func scopeLine(s Scope) string {
 }
 
 // Which modules run is read off the declaration, by comparing the keys of two
-// commits. Origin: the Owner's 2026-11-13 rule that CI knows nothing of how a
+// commits. Origin: ISSUE-22 (2026-11-13): CI knows nothing of how a
 // project is divided (a changes task that spelled "console/" and "api/" was
-// written and reverted that night, infra 562f9538), and his example that a
+// written and reverted that night, infra 562f9538), and a
 // change to the back end alone should not wait for the console's tests.
 func TestScopeFollowsTheDeclaration(t *testing.T) {
 	baseFiles, baseUI := planFiles()

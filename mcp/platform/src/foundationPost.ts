@@ -1,6 +1,6 @@
 /**
  * foundation-post: Foundation's two readings from a machine to the bus
- * (2026-11-21, the Owner: Foundation's state goes on the coordination bus).
+ * (决定 2026-11-21: Foundation's state goes on the coordination bus).
  *
  *   npx tsx mcp/platform/src/foundationPost.ts guard-blocks [--log PATH]
  *   npx tsx mcp/platform/src/foundationPost.ts acceptance FILE.json

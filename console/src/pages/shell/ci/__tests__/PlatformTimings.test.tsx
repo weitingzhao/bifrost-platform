@@ -11,8 +11,8 @@ vi.mock('@/api/ciTimings',()=>({fetchCITimings:vi.fn()}))
 vi.mock('@/api/delivery',()=>({fetchCompare:vi.fn(),fetchPipelineRunLogs:vi.fn()}))
 afterEach(()=>{cleanup();vi.resetAllMocks()})
 function renderPage(){render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><PlatformTimings /></QueryClientProvider>)}
-// Origin: relay F brief, 2026-11-15: Owner must see seconds, scope, selected
-// packages, reuse and missing history on a phone, without triggering writes.
+// Origin: relay F brief, 2026-11-15 (ISSUE-29): seconds, scope, selected
+// packages, reuse and missing history are seen on a phone, without triggering writes.
 it('shows source scope and timing and reads logs only on request',async()=>{
   vi.mocked(fetchCITimings).mockResolvedValue({as_of:'2026-11-15T20:04:00Z',retained:1,limit:60,runs:[timingRun()]})
   vi.mocked(fetchCompare).mockResolvedValue({files:['api/a.go'],reachability:'ok'} as Awaited<ReturnType<typeof fetchCompare>>)
@@ -56,7 +56,7 @@ it('follows a delivery commit to its CI scope',async()=>{
   expect(screen.getByText(/1 matching runs loaded/)).toBeInTheDocument()
 })
 
-// Origin: Owner 2026-11-15 could not identify the live step; completed tasks
+// Origin: 事故 2026-11-15: the live step could not be identified; completed tasks
 // previously filled the timeline while a run had no final duration.
 it('surfaces all parallel active steps without inventing a progress percentage', async () => {
   const run = {...timingRun(), status:'Unknown', reason:'Running', completion_time:undefined, tasks:[

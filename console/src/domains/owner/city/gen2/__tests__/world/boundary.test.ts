@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 
-// 2026-11-19, the Owner: the frame is a framework (like Bootstrap); the places and their business are
+// 2026-11-19 (ISSUE-55): the frame is a framework (like Bootstrap); the places and their business are
 // plug-ins, each upgrading on its own. So the frame imports nothing but itself, React and Phaser:
 // never the content, never the Console. Moving it to its own package later is then a copy, not a cut.
 // The frame lives in @bifrost/ui now (2026-11-20): read its source through the console's link to the package.

@@ -6,7 +6,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 
 /**
  * What the subscriptions cover, and what an upgrade would add. The planned
- * column is the placeholder the Owner asked for: option trades and quotes are
+ * column is a placeholder (ISSUE-76): option trades and quotes are
  * not gone, they wait for the existing data to be fully used first.
  */
 export function SubscriptionCoveragePanel() {

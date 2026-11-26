@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { deviceOf, frameOf, inside, overlaps, swapRects, type Frame } from '@bifrost/ui/city/viewport'
 
-// 2026-11-19, the Owner: the frame must feel right on phone, tablet and computer before anything is
+// 2026-11-19 (ISSUE-9): the frame must feel right on phone, tablet and computer before anything is
 // built on it. On the first greybox the summary ran under the minimap at 375 px wide; these hold the
 // corners apart at every common size.
 const SIZES: [string, number, number][] = [
@@ -10,7 +10,7 @@ const SIZES: [string, number, number][] = [
   ['laptop', 1280, 800], ['desktop', 1440, 900], ['wide', 1920, 1080], ['narrow window', 700, 900],
 ]
 
-// 2026-11-19, the Owner: the three levels get a control of their own (under the minimap); it must clear every corner too.
+// 2026-11-19 (ISSUE-9): the three levels get a control of their own (under the minimap); it must clear every corner too.
 const corners = (f: Frame) => ({ summary: f.summary, mini: f.mini, levels: f.levels, alerts: f.alerts, menu: f.menu, search: f.search,
   ...(f.docks ? { dockLeft: f.docks.left, dockRight: f.docks.right } : {}), ...(f.peek ? { peek: f.peek } : {}) })
 
@@ -40,7 +40,7 @@ describe('frameOf', () => {
     expect(deviceOf(1440, 900)).toBe('desktop')
   })
 
-  // 2026-11-19, the Owner: tables and charts beside the 2.5D middle; a rail where the screen is wide, a drawer elsewhere.
+  // 2026-11-19 (ISSUE-9): tables and charts beside the 2.5D middle; a rail where the screen is wide, a drawer elsewhere.
   it('docks the panels in the bottom corners on wide screens and a drawer on upright ones', () => {
     expect(frameOf(1440, 900).docks).not.toBeNull()
     expect(frameOf(1180, 820).docks).not.toBeNull()
@@ -64,7 +64,7 @@ describe('frameOf', () => {
     expect(overlaps({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false)
   })
 
-  // 2026-11-19, the Owner: the trail repeated the levels and the minimap; notices go up by the minimap, as in a game.
+  // 2026-11-19 (ISSUE-9): the trail repeated the levels and the minimap; notices go up by the minimap, as in a game.
   it('keeps the right column in order: minimap, levels, alerts', () => {
     for (const [, w, h] of SIZES) {
       const f = frameOf(w, h)
@@ -82,7 +82,7 @@ describe('frameOf', () => {
   })
 })
 
-// 2026-11-19, the Owner: a panel may take the middle; the map then sits where the panel was.
+// 2026-11-19 (ISSUE-9): a panel may take the middle; the map then sits where the panel was.
 describe('swapRects', () => {
   for (const [name, w, h] of SIZES) {
     it(`${name}: the map and the panel stay on screen, apart, clear of the corners`, () => {

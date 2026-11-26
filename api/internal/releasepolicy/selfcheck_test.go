@@ -38,7 +38,7 @@ func newSelfCheckFixture(t *testing.T, edit func(doc map[string]any)) *fixture {
 	return f
 }
 
-// Owner 2026-11-15: no second reader; the author proves a judge change with
+// LAW-9: no second reader; the author proves a judge change with
 // machine facts (must-refuse set, decision snapshots). The positive control
 // of every case below: a trust-anchor change whose commit has a Succeeded CI
 // run and whose diff leaves the owner-only paths alone.
@@ -62,7 +62,7 @@ func TestASelfCheckedTrustAnchorChangeIsCovered(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: no second reader; the author proves a judge change with
+// LAW-9: no second reader; the author proves a judge change with
 // machine facts (must-refuse set, decision snapshots). Each case is the
 // covered release with one thing wrong.
 func TestASelfCheckWithOneThingWrongWaits(t *testing.T) {
@@ -135,7 +135,7 @@ func TestASelfCheckWithOneThingWrongWaits(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: no second reader; the author proves a judge change with
+// LAW-9: no second reader; the author proves a judge change with
 // machine facts (must-refuse set, decision snapshots). The policy signed on
 // 2026-11-15 carries trust_anchor_reviewed, reviewable_repos and
 // trust_anchor_ignore_tests. None of them is read any more: a trust-anchor
@@ -177,7 +177,7 @@ func TestThePolicySignedForReviewsRefusesATrustAnchorChange(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: no second reader; the author proves a judge change with
+// LAW-9: no second reader; the author proves a judge change with
 // machine facts (must-refuse set, decision snapshots). Test files are left
 // out of the trust-anchor hits only when the policy says so, and only where
 // the self-check applies.

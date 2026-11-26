@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { assign, decodePlan, defaultPlan, encodePlan, fitsBudget, GRID, mergePlot, moveTo, planFor, plotAt, plotsOf, splitPlot, streetsOf, turnPlot, joinPlots, leavesBuiltLand, type Item, type Placed, type Plan, type Shape } from '@bifrost/ui/city/grid'
 
-// 2026-11-19, the Owner: the ground is divided into plots he can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
+// 2026-11-19 (ISSUE-9): the ground is divided into plots a person can cut and join (1×1, 2×2, 4×4, 4×8, 8×8…),
 // the streets follow the plots, and a thing stands in a plot of its own, not every plot a 4×4.
 const items = (...shapes: (Shape | 1 | 2 | 4 | 8)[]): Item[] => shapes.map((s, i) => ({ id: `i${i}`, shape: typeof s === 'number' ? `${s}x${s}` as Shape : s }))
 const tiles = (plan: Plan) => plotsOf(plan).reduce((a, p) => a + p.w * p.h, 0)
@@ -23,7 +23,7 @@ describe('plans', () => {
     for (const p of plotsOf(plan)) expect([1, 2]).toContain(Math.max(p.w, p.h) / Math.min(p.w, p.h))
     expect(tiles(plan)).toBe(GRID * GRID)
   })
-  // 2026-11-20, the Owner: the unit is 4×4, sixteen to a sheet; no plot is cut smaller.
+  // 2026-11-20 (ISSUE-9): the unit is 4×4, sixteen to a sheet; no plot is cut smaller.
   it('cuts down to 4×4 and no further', () => {
     expect(splitPlot(defaultPlan(), plotsOf(defaultPlan())[0].id)).toBeNull()
     expect(splitPlot(defaultPlan(), 'nowhere')).toBeNull()
@@ -44,7 +44,7 @@ describe('plans', () => {
 })
 
 describe('streets follow the plots', () => {
-  // 2026-11-19, the Owner: corridor, street and highway all one width, so the picture stays regular.
+  // 2026-11-19 (ISSUE-9): corridor, street and highway all one width, so the picture stays regular.
   it('the first cut is the avenue; a ring runs round; every street is one width', () => {
     const s = streetsOf(defaultPlan())
     expect(s.filter(x => x.kind === 'avenue')).toHaveLength(1)
@@ -97,7 +97,7 @@ describe('things in plots', () => {
   })
 })
 
-// 2026-11-20, the Owner: three sizes, small 4×4, medium 4×8, large 8×8.
+// 2026-11-20 (ISSUE-9): three sizes, small 4×4, medium 4×8, large 8×8.
 describe('oblong things', () => {
   it('a 4×8 lies along its plot’s long side, and does not fit a 4×4', () => {
     const plan = splitPlot(defaultPlan(8), 'aa')!
@@ -120,10 +120,10 @@ describe('oblong things', () => {
   })
 })
 
-// 2026-11-20, the Owner: a 4×8 has a direction, lengthwise or across; and the land comes first: a building goes
-// only onto a plot that fits it (the auto-join on drop tried the same day was taken out at his word).
+// 2026-11-20 (ISSUE-9): a 4×8 has a direction, lengthwise or across; and the land comes first: a building goes
+// only onto a plot that fits it (the auto-join on drop tried the same day was taken out, 决定 2026-11-20).
 describe('a long plot lies either way', () => {
-  // The Owner, the same day: the land is shaped empty; turning or joining must never bend built land to a building.
+  // The same day (ISSUE-9): the land is shaped empty; turning or joining must never bend built land to a building.
   it('refuses a change that would move or reshape any plot a building stands on', () => {
     const plan = splitPlot(defaultPlan(8), plotsOf(defaultPlan(8))[0].id)!
     const plots = plotsOf(plan)

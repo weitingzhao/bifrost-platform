@@ -36,7 +36,7 @@ afterEach(() => {
 })
 
 describe('shell layout', () => {
-  // Origin (2026-11-23): the Owner's Fire HD 10 upright (800 wide) drew the phone's tab bar; the
+  // Origin (事故 2026-11-23): a Fire HD 10 upright (800 wide) drew the phone's tab bar; the
   // UI line moved the rail from 1024 down to 768 so a tablet either way up gets the rail.
   it('tabs on an iPhone, the rail on a Fire HD 10 either way up, the side nav on a desktop', () => {
     const cases: [number, string][] = [[390, 'tabs'], [767, 'tabs'], [768, 'rail'], [800, 'rail'], [1023, 'rail'], [1024, 'rail'], [1280, 'rail'], [1439, 'rail'], [1440, 'side'], [1920, 'side']]

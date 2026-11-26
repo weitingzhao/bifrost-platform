@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Where CI runs go (the Owner, 2026-11-18: move the CI on ubt-k3s-05 to 07, the
+// Where CI runs go (决定 2026-11-18: the CI on ubt-k3s-05 moves to 07, the
 // slow disk only as the fallback). A CI run is created by the Gitea webhook's
 // trigger, not by the platform, so the platform keeps the current choice in a
 // TriggerBinding the trigger reads: each new run is pinned whole to the node

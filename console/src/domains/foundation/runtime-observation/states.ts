@@ -120,7 +120,7 @@ export function workloadPanels(workloads: BusStates | undefined, readout: Readou
 }
 
 /**
- * Argo's two words the engine's table does not hold, decided by 箭10 (2026-11-23, default, the Owner may veto):
+ * Argo's two words the engine's table does not hold, decided by 箭10 (2026-11-23, a default open to veto):
  * OutOfSync is warn (look at it), Progressing is info (a deploy under way is activity, not a judgement; the
  * Console counts running as info too). Everything else goes through the engine's statusOfWord. The engine's
  * table gets no new word; Argo's own words stay in the sentence and the tooltip.

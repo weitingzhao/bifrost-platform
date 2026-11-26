@@ -10,8 +10,8 @@ import (
 )
 
 // Origin: 2026-11-16, the review of the foundation code found the base's
-// core packages tested from the inside only; the Owner's rule the same day is
-// that a domain is judged against its contract. These are canon's promises
+// core packages tested from the inside only; by ISSUE-34 a domain is
+// judged against its contract. These are canon's promises
 // to the packages that hash with it (the ledger, evidence, the actors), from
 // outside the package: what the package comment says, held.
 

@@ -8,8 +8,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// The Ops run view (Owner, 2026-11-13: he accepts what the page shows, and
-// the page's data is read from the source). Origin of the cases: the three
+// The Ops run view (ISSUE-29, ISSUE-33: what the page shows is what is accepted,
+// and the page's data is read from the source). Origin of the cases: the three
 // kinds of run seen on 2026-11-14 after the changes task began to write
 // run-modules: a landing's run that left a module out (ci-platform-nw2jm), the
 // run of main's push that reused it, and a daily full run; and a merge run,

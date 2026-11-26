@@ -12,9 +12,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 )
 
-// The approval records, counted. Origin: 2026-11-14, the Owner: what the Ops
+// The approval records, counted. Origin: 2026-11-14, ISSUE-79: what the Ops
 // page shows is what the system measured; that day the coordinator had told
-// him by word how many cards he was asked for and how many bought nothing,
+// the Owner by word how many cards he was asked for and how many bought nothing,
 // and the page showed none of it. The cases are the kinds of request that
 // day had: approved in seconds and done (#535), approved and it changed
 // nothing that mattered (a restart that did not fix the fault: the record

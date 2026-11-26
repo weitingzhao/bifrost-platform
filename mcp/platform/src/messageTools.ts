@@ -120,7 +120,7 @@ export async function ack(input: { message_ids: string[] }, d: RuntimeDeps = def
 /** Where statuses go: the platform's status board reads them (api coord.StatusBoard). */
 export const STATUS_BOARD = 'controller'
 
-/** A seat's own status: the five things the Owner asks of a line (2026-11-17). */
+/** A seat's own status: the five things a line reports (ISSUE-14). */
 export interface SeatStatusInput {
   goal: string; doing: string; percent: number; percent_basis: string; waiting_on?: string; next: string
   /** The seat this session is: its charter's file name, without .md. */

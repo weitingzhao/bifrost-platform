@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { depthTag, layoutTree, type TechTree } from '@bifrost/ui/city/techTree'
 
-// 2026-11-20, the Owner: the DAG of who stands on whom goes in a tech tree, not on the map (districts are
+// 2026-11-20 (ISSUE-9): the DAG of who stands on whom goes in a tech tree, not on the map (districts are
 // moved by hand, the edges hold the ports, the streets are the bus), and the frame lays it out from the real
 // graph by itself. These pin the layout on the platform's measured graph of that day (platform main 9d9fd3e2:
 // every domain on foundation, delivery -> owner, owner -> coordination), a loop that must not stop it, and

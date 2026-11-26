@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ROOM_STANDARDS } from '@bifrost/ui/city/units/standards'
 
-// 2026-11-19, the Owner: the standards formed in making the CPU room are the standards every room is
+// 2026-11-19 (ISSUE-9): the standards formed in making the CPU room are the standards every room is
 // designed against. Each says how a room is held to it and where it came from.
 describe('the room standards', () => {
   it('each has a rule, its practice, its origin and how it is checked; ids unique', () => {

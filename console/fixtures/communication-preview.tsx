@@ -14,7 +14,7 @@ const members: Member[] = ([
 const times=['22:42:00','22:42:04','22:42:08','22:42:12','22:42:16']
 function Demo(){
   const [look,setLook]=useState(()=>window.location.hash.includes('console')?'console':'agents')
-  // ?select=message:demo-m-014&through=<ISO> reproduces a request arriving pinned before the letter (the Owner's 2026-11-24 phone case).
+  // ?select=message:demo-m-014&through=<ISO> reproduces a request arriving pinned before the letter (事故 2026-11-24, seen on a phone).
   const query=new URLSearchParams(window.location.search)
   const [selected,setSelected]=useState<string|undefined>(()=>query.get('select')??undefined)
   const [through,setThrough]=useState(()=>query.get('through')??'')

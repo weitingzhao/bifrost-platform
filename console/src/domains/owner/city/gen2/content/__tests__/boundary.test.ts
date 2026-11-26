@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 
-// 2026-11-20, the Owner: the world offers the things and their rules; the platform only binds its state to
+// 2026-11-20 (ISSUE-55): the world offers the things and their rules; the platform only binds its state to
 // them, the way a player picks a character, and never draws. So the content may use the frame's catalogue and
 // its types, never its drawing stock (the kit, the parts, the landmarks' strokes).
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')

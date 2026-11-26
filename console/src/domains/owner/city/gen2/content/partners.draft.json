@@ -1,7 +1,7 @@
 {
   "what": "Draft: whom each domain declares as its partners, up to 3 in and 3 out (frame/links.ts Partners). A draft for the evaluation to come; not wired into the city yet (the city's districts are still the Console's menu).",
   "why": "(ISSUE-9) the rules first; detect before judging. The named ports are the partners a domain declares; traffic with anyone undeclared goes to Other. This draft is read from what exists, so the gap between it and what each domain says it wants is the first thing to judge.",
-  "drafted_by": "the city line (cockpit), 2026-11-20, for the Owner; each domain's line confirms or changes its own row",
+  "drafted_by": "the city line (cockpit), 2026-11-20; each domain's line confirms or changes its own row",
   "read_from": [
     "bifrost-platform/config/domain-ownership.json (contracts and their consumers, measured_at 2e93ae09 / d8dc802c)",
     "bifrost-platform/api/internal/bus/registry/rocket.yaml (event publisher domain and consumers)",

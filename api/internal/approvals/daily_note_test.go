@@ -10,7 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
-// 2026-11-25, Owner issues ISSUE-4/ISSUE-5 (relayed by 0 Legislation): cards
+// 2026-11-25, ISSUE-4/ISSUE-5: cards
 // that are neither law tickets nor six-class kept reaching his phone (27 daily
 // cards #722–#767 after LAW-6 二 took effect, none carried owner_class). The
 // requesting thread is told at create time, in the answer it reads back.

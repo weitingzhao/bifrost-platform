@@ -94,7 +94,7 @@ function LineItem({ r }: { r: LineRow }) {
  * Work → Activity: where every line stands. The seat sends doing, waiting
  * on, next, goal and percent as a status message (report_status); the platform adds what it
  * counts: cards waiting for the Owner, how far the line's commits got, and
- * the session's heartbeat (2026-11-17, the Owner: he asks for progress
+ * the session's heartbeat (2026-11-17, ISSUE-1: progress is asked for
  * because Ops does not show it).
  */
 export function LinesNow() {

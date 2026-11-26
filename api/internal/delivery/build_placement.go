@@ -7,7 +7,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Where a delivery's image builds run (the Owner, 2026-11-18: builds go to the
+// Where a delivery's image builds run (决定 2026-11-18: builds go to the
 // fast node, and to the slower one when it is full). The choice is compute's
 // (api/internal/placement, moved there 2026-11-19 at the CI line's ask); delivery
 // only says what its tasks need and writes the chosen node into the run. It

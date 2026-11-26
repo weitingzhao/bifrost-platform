@@ -104,7 +104,7 @@ func TestHeadsThatMoveDuringADeliveryMakeOneMoreDelivery(t *testing.T) {
 	if out.Commits["revision"] != "d" || w.starts != 2 {
 		t.Fatalf("after the run: %v, %d starts", out.Commits, w.starts)
 	}
-	// Owner 2026-11-13: a start leaves a trace that can be judged later:
+	// ISSUE-61: a start leaves a trace that can be judged later:
 	// the CI run it was judged green by and what the environment ran before.
 	if out.Evidence["bifrost-platform"] != "ci-d" || out.PreviousRun != first.Run || out.Previous["revision"] != "a" {
 		t.Fatalf("the trace of a start: evidence %v previous %s %v", out.Evidence, out.PreviousRun, out.Previous)
@@ -190,7 +190,7 @@ func TestOnlyAGreenHeadIsReleasedAndAFailedOneNotTwice(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-13: the structure holds the hardest case from the start. A
+// ISSUE-35 (2026-11-13): the structure holds the hardest case from the start. A
 // deliverable of several repositories is one set of heads: it is released
 // when every one is green, once, and a move of any of them is a new set.
 func TestADeliverableOfSeveralHeadsIsReleasedAsOneSet(t *testing.T) {

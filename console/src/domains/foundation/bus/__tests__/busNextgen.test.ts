@@ -45,7 +45,7 @@ describe('contract graph', () => {
   })
 })
 
-// 2026-11-18, the Owner's "first make problems visible": a drill proves a
+// 2026-11-18 (ISSUE-33, problems are made visible first): a drill proves a
 // channel's event can be written, a real run proves it ran. The page must say
 // which, and an older platform with no drill count reads as none.
 describe('problem channel proof', () => {

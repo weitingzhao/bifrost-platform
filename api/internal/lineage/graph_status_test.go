@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Origin: 2026-11-22, the Owner (relayed by the CI line): the commit graph drew
+// Origin: 2026-11-22, ISSUE-66: the commit graph drew
 // agentd attempts whose task another attempt had already landed as if they were
 // pending work (16 of platform's land/prod/* lanes that day), so merged work and
 // orphans were not told apart. These pin the kinds the graph now gives each branch.

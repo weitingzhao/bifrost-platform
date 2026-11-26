@@ -1,5 +1,5 @@
-// 2026-11-23, the chief of staff's brief (2026-11-22): the Owner could see what each line did only on the Console's
-// Commit lineage, never on the City. These cases pin that the City counts a line the way that page does (merged =
+// 2026-11-23, the chief of staff's brief (2026-11-22, ISSUE-61): what each line did could be seen only on the
+// Console's Commit lineage, never on the City. These cases pin that the City counts a line the way that page does (merged =
 // landed, PROD = a deploying prod release contained it), that moving and quiet lines read apart at a glance, and
 // that a district says plainly when the roster (thread → domain) is not read instead of guessing.
 import { describe, expect, it } from 'vitest'

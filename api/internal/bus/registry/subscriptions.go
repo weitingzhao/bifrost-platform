@@ -89,8 +89,8 @@ func (r Subscription) InEnv(env string) bool {
 // Client is one declared user of the bus: a reader of the gate (its name is
 // the receipt consumer, gate:<route>:<client>) or a durable consumer. A
 // client that has not come for longer than LostAfter is shown as lost; a
-// name that comes without being declared is shown as new (2026-11-16, the
-// Owner: the bus must recognise users coming and going).
+// name that comes without being declared is shown as new (2026-11-16,
+// ISSUE-34: the bus recognises users coming and going).
 type Client struct {
 	Name      string `yaml:"name"`
 	Kind      string `yaml:"kind"`

@@ -63,9 +63,9 @@ func count0049(ctx context.Context, t *testing.T, conn *pgx.Conn, stream string)
 	return events, streams
 }
 
-// Origin: 2026-11-25, the legislation thread. The first backfill of the Owner's
-// words kept a database password in three records of one transcript; the
-// Owner: 「好，删」. 0049 deletes that one stream and nothing else, and the table
+// Origin: 2026-11-25, the legislation thread. The first backfill of
+// owner_said kept a database password in three records of one transcript
+// (事故 2026-11-25; 决定 2026-11-25: delete them). 0049 deletes that one stream and nothing else, and the table
 // is append only again after it.
 func TestPurge0049DeletesTheOneStreamOnly(t *testing.T) {
 	t.Parallel()

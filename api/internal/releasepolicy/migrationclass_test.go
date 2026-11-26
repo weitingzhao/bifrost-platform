@@ -7,7 +7,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // Every statement kind of the class, alone and together in one file.
 func TestClassifyMigrationInClass(t *testing.T) {
@@ -55,7 +55,7 @@ func TestClassifyMigrationInClass(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-15: a migration that cannot destroy rows reaches PROD without
+// LAW-6: a migration that cannot destroy rows reaches PROD without
 // a card; the platform runs it (cards #493 #554 #558 were Owner-run Jobs).
 // What is never in the class, each named by the kind that put it out. The
 // refusal is of the whole file, whatever else it holds.

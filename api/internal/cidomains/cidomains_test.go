@@ -8,7 +8,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/domainscore"
 )
 
-// Origin of every case in this file — 2026-11-16: the Owner read Work → CI and
+// Origin of every case in this file — 2026-11-16, ISSUE-29: a reader of Work → CI
 // could not tell what was running, who depends on whom, or what a change pulls
 // in; this page and its two routes replace it. Each case says below what of
 // the two answers it guards.
@@ -61,8 +61,8 @@ func TestGraphNodesEdgesAndSharedPackages(t *testing.T) {
 	if !reflect.DeepEqual(got.Domains, wantDomains) {
 		t.Fatalf("domains: %+v", got.Domains)
 	}
-	// Origin of base and pairs: 2026-11-16 22:4x, the Owner read the page and asked "does
-	// foundation depend on the other packages, or do they depend on it": an edge alone did
+	// Origin of base and pairs: 2026-11-16 22:4x (ISSUE-29): the page did not tell whether
+	// foundation depends on the other packages or they depend on it; an edge alone did
 	// not say it. The answer names the base and, under each edge, who uses whom.
 	if got.Base != "foundation" {
 		t.Fatalf("base: %q", got.Base)
@@ -202,7 +202,7 @@ func TestParseTableRefusesWhatDoesNotRead(t *testing.T) {
 	}
 }
 
-// 2026-11-17, the Owner via the coordinator: the Bus page stands each domain
+// 决定 2026-11-17: the Bus page stands each domain
 // on its tier's floor, read from the ownership table through this graph. A
 // declared tier is carried; a domain with none has none (the page says
 // "untiered"; it does not guess).

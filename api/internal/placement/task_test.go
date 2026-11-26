@@ -45,7 +45,7 @@ func placementNode(host string, ready, cordoned bool, cpu string) *corev1.Node {
 	}
 }
 
-// 2026-11-18, the Owner: builds go to the fast node, and to the slower one when
+// 决定 2026-11-18: builds go to the fast node, and to the slower one when
 // it is full. #598's soft preference sent 11 of 13 deliveries to 05, where the
 // same build takes twice as long. The latencies are the 7-day readings of that
 // day. Whatever the nodes say, a release must not wait for one of them.

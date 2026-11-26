@@ -492,7 +492,7 @@ func kanikoInInfra(t *testing.T, pipe *unstructured.Unstructured) bool {
 	return kaniko
 }
 
-// 2026-11-17, Owner approved proposal B (duty/proposal-ci-w1-2026-11-17-kaniko-gate-list.md):
+// 决定 2026-11-17, proposal B (duty/proposal-ci-w1-2026-11-17-kaniko-gate-list.md):
 // the hand-kept list missed bifrost-build-research-pine and bifrost-ci-finance,
 // both kaniko builds, and named bifrost-deliver-platform-prod, which builds
 // nothing. Read from infra's declarations, the three come out right, and the
@@ -681,7 +681,7 @@ func TestAStartPinsOnlyThePlacedPipeline(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner: CI on 05 moves to 07, the slow disk only as a fallback.
+// 决定 2026-11-18: CI on 05 moves to 07, the slow disk only as a fallback.
 // A CI run is created by the webhook's trigger, so the platform writes the choice
 // into the binding it reads; only a change is written, and a binding that is not
 // there is no error. Positive control: writing on every pass fails the count of

@@ -19,7 +19,7 @@ func items(passes int) []string {
 	return out
 }
 
-// Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the
+// Origin: 决定 2026-11-21, Foundation's state goes on the bus; the
 // decoupling acceptance lived only in the Foundation seat's notes (no system
 // archive, LAW-8), and its ruler changed three times that day, so a reading
 // carries its version. A reading whose score matches its items passes the

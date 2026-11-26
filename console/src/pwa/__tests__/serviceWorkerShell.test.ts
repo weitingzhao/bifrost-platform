@@ -1,4 +1,4 @@
-// 2026-11-24 the Owner's phone showed a blank page on ops.bifrost.lan after a deploy. sw.js v1 fell back to the
+// 事故 2026-11-24: a phone showed a blank page on ops.bifrost.lan after a deploy. sw.js v1 fell back to the
 // cached old index.html on a network error after it had dropped the old hashed assets, handed a 502 page through,
 // and had no answer when an asset fetch threw. These run the real public/sw.js against a fake network and cache.
 // Control: against v1 sw.js five of the first six fail; only the offline-after-deploy case passed there too.
@@ -138,7 +138,7 @@ describe('sw.js: a shell is bound to its build', () => {
   })
 })
 
-// 2026-11-24 the Owner's phone was on a Wi-Fi that skipped the VPN and was not on 192.168.10.x: the page request
+// 事故 2026-11-24: a phone was on a Wi-Fi that skipped the VPN and was not on 192.168.10.x: the page request
 // never answered and the screen stayed white with the progress bar stuck. A page waits 4 s, then the last good
 // version answers and says so; with nothing cached it says it cannot reach Bifrost Ops and which network to use.
 describe('sw.js: a page request that does not answer', () => {

@@ -16,7 +16,7 @@ const lawTable = "# Owner 定的法\n\n| 栏 | 写什么 |\n|---|---|\n| 1 | 不
 	"| 1 | 2026-11-14 | 能不能自己做，看有没有后悔药 | `a|b` §5 | 签名规则 | 未落 | — |\n" +
 	"| 2 | 2026-11-14 | 先找不用卡的路 | §5 | 只有文字 | 已落 | 「旧」 |\n"
 
-// 2026-11-23, Owner: a ticket for a law changes a real record of the law in
+// 2026-11-23, LAW-6: a ticket for a law changes a real record of the law in
 // the system. The table parses (a pipe inside backticks is text; the 「栏」
 // table above 「## 登记」 is not a law).
 func TestParseLawTable(t *testing.T) {
@@ -225,7 +225,7 @@ func TestLawFrameRecorded(t *testing.T) {
 	}
 }
 
-// 2026-11-24, Owner: a repealed law must not linger in the system as poison.
+// 2026-11-24, ISSUE-24: a repealed law must not linger in the system as poison.
 // Repealing a law drops the steps not done of its plan item, so it is no
 // longer measured; the view does not show it; a card citing it is refused.
 func TestRepealedLawLeavesThePlan(t *testing.T) {

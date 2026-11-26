@@ -50,7 +50,7 @@ function selfHealthEnvSignal(
 /**
  * Rocket cell for a column — Control + GitOps only.
  * Deliver / STG smoke live on Launch Pad + Promote, not on Fleet Rocket
- * (Owner: Rocket board is platform health, not the release pipeline lane).
+ * (the Rocket board is platform health, not the release pipeline lane).
  */
 export function buildRocketCell(input: {
   env: FleetEnvColumn

@@ -47,8 +47,8 @@ func scopeTrees(t *testing.T, commits map[string]map[string]string) unitexec.Tre
 }
 
 // The configuration view's answer: what the declaration says, counted from
-// the plan CI computes. Origin: the Owner's rule of 2026-11-13 that he accepts
-// what he can see on the Ops page, with the data computed from the source CI
+// the plan CI computes. Origin: ISSUE-29 (2026-11-13): what is accepted is
+// what can be seen on the Ops page, with the data computed from the source CI
 // reads; and acceptance sentence 1: a project with no declaration shows as
 // one block that runs whole.
 func TestUnitConfig(t *testing.T) {

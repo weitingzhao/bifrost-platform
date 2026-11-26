@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Origin of every case in this file — Owner 2026-11-16: CI scores every
+// Origin of every case in this file — ISSUE-20 (2026-11-16): CI scores every
 // repository that uses it, and its users score CI; only what is measured is
 // an item (pass, fail or unmeasured with the raw number), and the overall
 // verdict is the worst item.

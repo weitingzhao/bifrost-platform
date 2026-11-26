@@ -1,5 +1,5 @@
 // 2026-11-25: Agents read a frozen copy of seats.yaml, so every session opened after it showed as a raw thread id
-// "Not in the seat roster" (the Owner's phone review, 2026-11-24). The map line now serves the roster
+// "Not in the seat roster" (事故 2026-11-24, phone review). The map line now serves the roster
 // (GET /api/v1/catalog/seats, platform 3f804e06; the engine's read=seats). Rows below are STG's, 2026-11-25 19:37Z.
 import { expect, it } from 'vitest'
 import { membersOfRoster, seatSource, withRoster, type SeatRoster } from '../seatRoster'

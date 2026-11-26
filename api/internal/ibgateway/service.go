@@ -459,7 +459,7 @@ func (s *Service) readSlots() []SlotStatus {
 			continue
 		}
 		slot := SlotStatus{Slot: h.Slot, ClientID: h.ClientID, Reach: probe.ReachUnknown}
-		// Account identity is the IB account number (Owner, 2026-09-06). A
+		// Account identity is the IB account number (决定 2026-09-06). A
 		// gateway still configured with a TWS login name must not have it
 		// relayed out through this API.
 		if ibAccountID.MatchString(h.AccountID) {

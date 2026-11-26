@@ -97,7 +97,7 @@ func TestHeadWorldStartSplitsTheRevisionAndSaysWhyNotNow(t *testing.T) {
 	}
 }
 
-// Owner 2026-11-13: the loop asks nobody, so every decision leaves a record
+// LAW-6: the loop asks nobody, so every decision leaves a record
 // that says what a start brings and whose it is. The message is the shape
 // lineage.sh leaves (platform main 688c63eb's own trailer block): the thread
 // is the Claude-Session trailer, and a commit without one (a merger's) is

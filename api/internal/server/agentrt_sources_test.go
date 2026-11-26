@@ -40,7 +40,7 @@ type downApprovals struct{ fakeApprovals }
 
 func (downApprovals) Observations() ([]approvals.Approval, error) { return nil, errors.New("down") }
 
-// 2026-11-23, the closed loop (Owner: only a change of law opens a ticket):
+// 2026-11-23, the closed loop (LAW-6: only a change of law opens a ticket):
 // the plan reads only executed law_amend cards that read, with their
 // standards; a pending one, another action and an unreadable one are not
 // laws.

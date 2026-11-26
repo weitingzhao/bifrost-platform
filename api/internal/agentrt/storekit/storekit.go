@@ -17,7 +17,7 @@
 // packages found 249 that test one domain but borrow another's functions to
 // set up state, and three production functions of store (CreateMission,
 // CreatePlanNode, MoveMission) that no binary calls yet 179 live tests use
-// as fixtures; the Owner's rule of that day is that every test belongs to a
+// as fixtures; by LAW-10 every test belongs to a
 // domain and tests reach other domains only through what those publish.
 // CreateMission and MoveMission came here on 2026-11-17 with their
 // behaviour unchanged. CreatePlanNode is still in store: it calls store's

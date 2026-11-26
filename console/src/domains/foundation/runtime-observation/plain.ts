@@ -2,7 +2,7 @@ import type { ObservationPanel } from '@bifrost/ui/city/observation'
 import { statusOfWord, type StatusWord } from '@bifrost/ui/city/world'
 
 /**
- * A failed read in words the Owner reads (2026-11-23, 箭10: every domain card showed
+ * A failed read in plain words (2026-11-23, 箭10: every domain card showed
  * "SyntaxError: Unexpected token '<'"). The card says unknown and why in plain English;
  * the source's own text stays in the evidence drawer (ReadEvidence.detail), never dropped.
  * The reason classifies the failure only; it does not judge the source's health.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { geoOf, GUTTER } from '@bifrost/ui/city/geo'
 import { defaultPlan, GRID, plotsOf } from '@bifrost/ui/city/grid'
 
-// 2026-11-19, the Owner: a thing keeps its true size; outside it, a buffer then the way, the same
+// 2026-11-19 (ISSUE-9): a thing keeps its true size; outside it, a buffer then the way, the same
 // on every level — not a road dug into the plot that shrinks the thing (a 1×1 had no room left).
 describe('the picture: true sizes, gutters between plots', () => {
   const plots = plotsOf(defaultPlan())

@@ -41,11 +41,11 @@ var oldPrincipals = []string{"", "viewer", "reporter", "operator", "admin", "tra
 // this walk reaches the guarded handler, not the controller operation; the
 // handler-level approval refusal is checked by TestFixedIPWriteMatchesFirewallApprovalBoundary.
 var intendedRouteAdditions = map[string][]string{
-	// 2026-11-25 (the Owner chose automatic collection of what he says): the
+	// 2026-11-25 (ISSUE-104, collected automatically): the
 	// session hook posts with a reporter token; every reader reads.
 	"POST /api/v1/agentrt/owner-said": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-said":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	// 2026-11-25 (the Owner's issues live in the law system; LAW-1): the
+	// 2026-11-25 (ISSUE-104: issues live in the law system; LAW-1): the
 	// legislation line records issues; every reader reads.
 	"POST /api/v1/agentrt/owner-issues": {"reporter", "operator", "admin", "trade-satellite"},
 	"GET /api/v1/agentrt/owner-issues":  {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
@@ -70,7 +70,7 @@ var intendedRouteAdditions = map[string][]string{
 	// status message, for everyone who reads the
 	// runtime (read-only; a status is written with POST /messages).
 	"GET /api/v1/agentrt/seats": {"viewer", "reporter", "operator", "admin", "trade-satellite", "agentd:h1"},
-	// 2026-11-17 (the Owner cannot see what the bus's work does): the
+	// 2026-11-17 (ISSUE-29: what the bus's work does was not visible): the
 	// effect readings, read-only, for the Bus page's readers.
 	"GET /api/v1/bus/effect": {"viewer", "reporter", "operator", "admin", "trade-satellite"},
 	// 2026-11-18 (LAW-8): the problem loop's cases and counts, read-only, for the Bus page's readers.

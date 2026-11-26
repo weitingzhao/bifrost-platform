@@ -143,7 +143,7 @@ func toolNames(tools []MCPTool) []string {
 	return out
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // The whole answer from a small copy of the real shapes: each field derived as the register and the files say.
 func TestReportReadsLawsSkillsAndTools(t *testing.T) {
 	r := readNow(t, New(newFake()))
@@ -194,7 +194,7 @@ func TestReportReadsLawsSkillsAndTools(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // .mcp.json holds credentials next to the names: the answer carries the name and the transport only. The
 // positive control is that the sentinel really is in the file the answer was built from.
 func TestServersCarryNameAndTransportOnly(t *testing.T) {
@@ -220,7 +220,7 @@ func TestServersCarryNameAndTransportOnly(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // A repository that cannot be read leaves its sources empty and named, and the other repository's stand.
 func TestUnreadSourceIsEmptyAndDoesNotStopTheOthers(t *testing.T) {
 	f := newFake()
@@ -247,7 +247,7 @@ func TestUnreadSourceIsEmptyAndDoesNotStopTheOthers(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // The short cache serves only complete answers: after it ends, or after a failed read, nothing older is shown.
 func TestKeptAnswerIsShortAndNeverOutlivesAFailure(t *testing.T) {
 	f := newFake()
@@ -274,7 +274,7 @@ func TestKeptAnswerIsShortAndNeverOutlivesAFailure(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // Malformed items are named, and what can still be shown is.
 func TestMalformedItemsAreReported(t *testing.T) {
 	f := newFake()
@@ -303,7 +303,7 @@ func TestMalformedItemsAreReported(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // What counts as citing a law, and the words that only look like it (做法 2 is "the way, 2").
 func TestCitedLaws(t *testing.T) {
 	for text, want := range map[string][]string{
@@ -324,7 +324,7 @@ func TestCitedLaws(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // A law links a skill it names; a path that merely shares the name does not.
 func TestNamesSkill(t *testing.T) {
 	for text, want := range map[string]bool{
@@ -342,7 +342,7 @@ func TestNamesSkill(t *testing.T) {
 	}
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // A failed read tells a viewer neither Gitea's address nor what the credential lookup said.
 func TestPublicErrorHidesAddressAndCredentialLookup(t *testing.T) {
 	addr := &url.Error{Op: "Get", URL: "http://gitea.internal:3000/api", Err: errors.New("connection refused")}
@@ -375,7 +375,7 @@ func realSources(t *testing.T) map[string]string {
 	return out
 }
 
-// 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+// 2026-11-18, ISSUE-36: laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
 // The scanner over the real server source finds exactly the tools stdioToolNames.ts lists, each with a
 // description. The positive control removes one registration: the comparison must then see a difference.
 func TestScanFindsTheRealToolsOfThePlatformServer(t *testing.T) {

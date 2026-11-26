@@ -8,7 +8,7 @@ import { crashReport, isChunkLoadError } from '@/pwa/consoleCrash'
 
 // Origin (2026-11-23): the Console had no root error boundary, so one render error
 // or one lazy chunk removed by a newer deploy left a white page with no evidence
-// (2026-11-17 STG roster status; 2026-11-23 Owner's white preview, cause uncaptured).
+// (2026-11-17 STG roster status; 事故 2026-11-23 white preview, cause uncaptured).
 
 function Throws({ error }: { error: Error }): never {
   throw error
@@ -113,7 +113,7 @@ describe('index.html boot watchdog', () => {
     vi.advanceTimersByTime(9_000)
     expect(document.getElementById('console-boot-report')).toBeNull()
   })
-  // 2026-11-24 the Owner's phone could not open ops.bifrost.lan after a deploy: mid-rollout the new build's script
+  // 事故 2026-11-24: a phone could not open ops.bifrost.lan after a deploy: mid-rollout the new build's script
   // answered 502 and the page stayed white with no way out but knowing to reload. A failed script is said at once,
   // with a Reload; the page retries by itself, at most twice per tab, so a broken build cannot loop forever.
   describe('when a script of the page failed to load', () => {

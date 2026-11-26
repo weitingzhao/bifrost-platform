@@ -99,7 +99,7 @@ func TestPinnedReleaseMustShipWhatTheSourceShipped(t *testing.T) {
 	wantWait(t, f.decide(pinned(newSHA, newLib)), "no Succeeded ci run")
 }
 
-// Owner 2026-11-15: a card must not go stale because STG moved on (#568
+// ISSUE-3 (2026-11-15): a card must not go stale because STG moved on (#568
 // waited 5h31m and every lane stopped). A pinned release is vouched for by
 // any successful record of the source pipeline that shipped exactly its
 // commits, not by the newest record alone.

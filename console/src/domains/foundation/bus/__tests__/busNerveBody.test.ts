@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildBody } from '../busNerveBody'
 import { nerveModel } from '../busNerve'
 
-// Origin: 2026-11-17, the Owner on STG: the map opened with every detail
+// Origin: 事故 2026-11-17, on STG: the map opened with every detail
 // showing. Folded, the body is the bus and one cloud per domain, each cloud
 // carrying its parts and its last day's events; opening coordination brings
 // out its seats, and nothing else of the other domains.

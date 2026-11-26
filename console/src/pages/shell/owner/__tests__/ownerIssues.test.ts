@@ -7,7 +7,7 @@ const issue = (over: Partial<OwnerIssue>): OwnerIssue => ({
   first_at: '2026-11-01T00:00:00Z', last_at: '2026-11-25T00:00:00Z', version: 1, by: 'exec:claude', at: '2026-11-25T00:00:00Z', ...over,
 })
 
-// Origin: 2026-11-25, the Owner: his complaints need a place (「你第三轮扫出来的那些吐槽需要有一个去处」); the page says
+// Origin: 2026-11-25 (ISSUE-104): the Owner's complaints need a place; the page says
 // how many issues, how they go, and whether one came back after the law that answers it.
 describe('Owner issues', () => {
   it('says how many, how they go and how many came back', () => {

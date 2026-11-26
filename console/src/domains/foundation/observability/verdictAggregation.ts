@@ -5,7 +5,7 @@ import { TENANT_ATTENTION_OWNERS } from '@/domains/tenant/observability/displayP
  * Rules:
  * - Only required signals affect overall / domain verdicts
  * - EXPECTED OFF is neutral
- * - Optional-contract NOT OBSERVED is neutral (Owner decision 2026-07-21):
+ * - Optional-contract NOT OBSERVED is neutral (决定 2026-07-21):
  *   signals without a reliable runtime contract yet must not pin a domain to UNKNOWN
  * - UNKNOWN / NOT OBSERVED never masquerade as HEALTHY
  * - CRITICAL > DEGRADED > UNKNOWN > NOT OBSERVED > HEALTHY

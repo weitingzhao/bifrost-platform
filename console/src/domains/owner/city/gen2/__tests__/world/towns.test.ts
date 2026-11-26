@@ -3,7 +3,7 @@ import { cellsOf, townSprite } from '@bifrost/ui/city/library/towns'
 import { nuclearCore } from '@bifrost/ui/city/library/landmarks'
 import { portsFor } from '@bifrost/ui/city/links'
 
-// 2026-11-20, the Owner: a district on the city may be 4×4, 4×8 or 8×8; its town must grow with it, not
+// 2026-11-20 (ISSUE-9): a district on the city may be 4×4, 4×8 or 8×8; its town must grow with it, not
 // stretch one picture (Utilities at 4×8 showed its plant in one half and bare ground in the other), and its
 // gates must stand where the streets meet it.
 describe('a district’s town grows with its size', () => {

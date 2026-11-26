@@ -144,7 +144,7 @@ func TestOwnerInterruptions(t *testing.T) {
 	}
 }
 
-// LAW-6 (the Owner, 2026-11-21, relayed by the coordinator): privilege uses
+// LAW-6: privilege uses
 // are the fixed before-and-after reference. Until something writes
 // owner.privilege.used to the ledger every window is unmeasured, not 0: a
 // zero nobody counted would read as "he never had to step in". Once the start

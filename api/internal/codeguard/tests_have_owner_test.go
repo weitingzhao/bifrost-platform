@@ -61,7 +61,7 @@ type testFile struct {
 // The domain is one of those the package's row names. The file is then no
 // longer without an owner, and it is counted apart (declared in a shared
 // package) until it moves to a package of that domain. A new test in a
-// shared package lands this way: the Owner's rule is that a test names its
+// shared package lands this way: LAW-10 asks that a test name its
 // domain, not that nothing may be added before the shared packages are split.
 const ownerMark = "//bifrost:owner"
 
@@ -84,8 +84,8 @@ func ownerRefusal(o ownership, f testFile) string {
 	}
 	switch {
 	case o.domainOf(f.Pkg) != "mixed" && name == o.domainOf(f.Pkg):
-		// The line repeats what the table says. Allowed since 2026-11-21 (the
-		// Owner's ruling of 2026-11-21, option 1): when delivery became one domain, three of
+		// The line repeats what the table says. Allowed since 2026-11-21 (决定
+		// 2026-11-21, option 1): when delivery became one domain, three of
 		// its test files with this line were trust-anchored and may not be
 		// edited; the line says nothing false, so it is not refused.
 		return ""
@@ -424,8 +424,8 @@ func controlOwnership(t *testing.T) ownership {
 	return o
 }
 
-// The positive control of TestEveryTestHasAnOwner (2026-11-16, the ruling
-// above; LAW-10): on a made-up tree a test added to a shared package beyond its
+// The positive control of TestEveryTestHasAnOwner (LAW-10; the ruling of
+// 2026-11-16 above): on a made-up tree a test added to a shared package beyond its
 // baseline is named with what to do; tests in one domain's package, in a
 // package with no row and in a file with a declaration that holds are not;
 // a baseline that is too high, or of a package that is gone, is named.
@@ -471,7 +471,7 @@ func TestOwnerCheckSeesATestAddedToASharedPackage(t *testing.T) {
 // above): each declaration that does not hold is refused with its reason,
 // and one that holds in a shared package's directory cannot exist, because
 // the file would import the shared package.
-// Origin: 2026-11-16, the Owner's rule the same evening: a test that is added names its domain. A file in a shared
+// Origin: 2026-11-16, LAW-10: a test that is added names its domain. A file in a shared
 // package that says which of the package's domains answers for it is owned (the server's handler tests live in the
 // shared server package until it is split, and every lane adds some); what it may not do is name a domain the package
 // is not shared by, name none, or sit in a package that already has one domain. The first file is the control: the
@@ -486,7 +486,7 @@ func TestATestInASharedPackageMayNameItsDomain(t *testing.T) {
 		file("mine_test.go", "api/internal/both", "//bifrost:owner plan"),
 		file("other_test.go", "api/internal/both", "//bifrost:owner tenant"),
 		file("empty_test.go", "api/internal/both", "//bifrost:owner"),
-		// Origin: 2026-11-21, the Owner's ruling (option 1): in a package of one domain, a
+		// Origin: 决定 2026-11-21 (option 1): in a package of one domain, a
 		// line naming that domain holds (same_test.go); one naming another
 		// domain is still refused (single_test.go, the control).
 		file("same_test.go", "api/internal/plan", "//bifrost:owner plan"),

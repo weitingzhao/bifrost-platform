@@ -3,7 +3,7 @@
  * Pages are network-first (a fresh deploy always wins online); the last good
  * index.html and its hashed assets answer when offline. /api is never cached.
  *
- * 2026-11-24 the Owner's phone showed a blank page on ops.bifrost.lan after a deploy. v1 fell back to the
+ * 事故 2026-11-24: a phone showed a blank page on ops.bifrost.lan after a deploy. v1 fell back to the
  * cached old index.html on a network error but had already dropped the old hashed assets when it saw the new
  * index, so the old page asked for scripts that no longer existed; a 502 page was handed through as it came;
  * an asset fetch that threw had no answer at all. v2 binds a shell to its build:

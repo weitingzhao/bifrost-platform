@@ -36,7 +36,7 @@ export const MEMORY_UNIT: UnitSpec = {
     { id: 'pressure', label: 'Waiting for memory', meaning: 'How much of the time some task waited because memory was short (pressure).', query: 'rate(node_pressure_memory_waiting_seconds_total[5m])', unit: 'share', per: 'unit', known: 'system' },
     { id: 'oom', label: 'Programs killed for memory', meaning: 'How many programs the system stopped because memory ran out, since it started.', query: 'node_vmstat_oom_kill', unit: 'count', per: 'unit', known: 'system' },
   ],
-  // Details confirmed 2026-11-19, then narrowed the same day (the Owner: seven colours on the bench are
+  // Details confirmed 2026-11-19, then narrowed the same day (决定 2026-11-19: seven colours on the bench are
   // noise unless each can be read apart and keyed; better plain). Three that add up to what is installed,
   // read on Linux and macOS alike: in use (installed − available), can be cleared (available − empty),
   // empty. Kernel, compressed and waiting-to-be-written are splits inside those three: out. Swap and

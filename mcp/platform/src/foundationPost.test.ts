@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { acceptanceBody, blocksSince, machineName, shipBlocks, shipBlocksLocked } from './foundationPost.js'
 import type { RuntimeDeps } from './runtimeTools.js'
 
-// Origin: 2026-11-21, the Owner wanted Foundation's state on the bus; the guard's
+// Origin: 决定 2026-11-21, Foundation's state goes on the bus; the guard's
 // refusals were only in one Mac's local log. Each whole line after the offset is
 // one block, posted once: the offset moves past whole lines only, so a line the
 // guard is still writing waits for the next run (the control: a half line).

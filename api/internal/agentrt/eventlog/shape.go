@@ -13,9 +13,9 @@ import (
 // the ledger to a domain's tables stays that domain's SQL and may use these
 // columns, as they are described, and no others.
 //
-// It is the shared-storage form of a domain's contract (the Owner's rule of
-// 2026-11-16: domains speak through contracts; the coordinator's ruling the
-// same day on the review's third finding). A column is added, removed,
+// It is the shared-storage form of a domain's contract (ISSUE-34: domains
+// speak through contracts; the coordinator's ruling of 2026-11-16 on the
+// review's third finding). A column is added, removed,
 // retyped or given another meaning only with ReadShapeVersion raised, and
 // the packages that read it told: eventlog's own tests hold the declaration
 // to the table the migrations build, and to the fingerprint recorded for the

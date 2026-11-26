@@ -4,8 +4,8 @@ import { RuntimeWorld, type ObservationSnapshot } from '@bifrost/ui/city/observa
 import { controlRoomOf, type ControlRoomInput } from '../controlRoom'
 import { NO_ADDRESS } from '../read'
 
-// 2026-11-24: the Owner saw PROD Signals on a phone ("a wall of cards; no signal shows; I want a power plant's big
-// screen"). 箭10 approved the control room prototype with corrections: count only what needs attention (fail, warn),
+// 2026-11-24 (ISSUE-9): PROD Signals on a phone was a wall of cards where no signal showed; Signals is a power plant's
+// big screen. 箭10 approved the control room prototype with corrections: count only what needs attention (fail, warn),
 // "can't be read" apart, devices with no address and lights not measured by plan are boundary and quiet, and nothing
 // read is dropped (the card wall stays behind "All signals").
 const at = '2026-11-24T06:30:00.000Z'
@@ -89,7 +89,7 @@ it('shows the control room first: what needs attention counted apart from what c
   expect(lamps[0]).toMatch(/^fail/)
   expect(lamps.some(l => /win11|assembly/.test(l))).toBe(false) // boundary stays off the annunciator
   expect(screen.getByText('no history read')).toBeTruthy() // the all-unread trend says unknown, draws no line
-  // 2026-11-24 Owner: one lamp group per module, one lamp per state; the red one is seen at once.
+  // 2026-11-24 (ISSUE-9): one lamp group per module, one lamp per state; the red one is seen at once.
   const node = screen.getByRole('button', { name: 'node-a: warn' })
   expect([...node.querySelectorAll('.cr-l')].map(l => l.className)).toEqual(['cr-l cr-ok', 'cr-l cr-warn'])
   expect(screen.getByRole('button', { name: 'win11: boundary' }).querySelector('.cr-l.cr-boundary')).toBeTruthy()

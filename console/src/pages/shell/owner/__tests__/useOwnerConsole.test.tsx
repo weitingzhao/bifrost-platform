@@ -106,7 +106,7 @@ describe('useOwnerConsole', () => {
     expect(api.backup).not.toHaveBeenCalled()
   })
 
-  // 2026-11-19, the Owner via the coordinator: the IB slot without TWS is a notice, not work waiting on him.
+  // 决定 2026-11-19: the IB slot without TWS is a notice, not work waiting on the Owner.
   it('does not count the IB slot without TWS as his once the alerts are read', async () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })
     const { result } = run()

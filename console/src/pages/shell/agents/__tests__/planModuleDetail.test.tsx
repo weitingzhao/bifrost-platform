@@ -437,7 +437,7 @@ describe('Work → Plan with a module address', () => {
   })
 
   it("shows the Sign off on the card of a step its own address names, with nothing to unfold (11-05)", async () => {
-    // 11-05: the Owner opened R5:5.13-3's own address, read "You sign off …" under Done when and found no button. The
+    // 事故 2026-11-05: R5:5.13-3's own address read "You sign off …" under Done when, with no button. The
     // address a step's link gives must carry its Sign off; the card reads that step alone, GET /plan/{id}, not the plan.
     const raw = r5Raw()
     const gated = raw.nodes.find(n => n.plan_node_id === 'R5:5.1-4')!

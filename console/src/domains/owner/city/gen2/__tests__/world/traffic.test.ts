@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { along, lengthOf, tripAt, VEHICLES, type Trip } from '@bifrost/ui/city/traffic'
 
-// 2026-11-21, the Owner: the communication line first, the first kind of vehicle on the roads (no railway;
+// 2026-11-21 (ISSUE-9): the communication line first, the first kind of vehicle on the roads (no railway;
 // the kind of vehicle says the kind of talk). These pin where a trip is driven at a level's grain (between two
 // children; one child's business is not driven here) and the point a vehicle stands at along its road.
 const trip = (from: string[], to: string[]): Trip => ({ id: 't', kind: 'event', from, to, what: 'git.main.advanced → headrelease' })

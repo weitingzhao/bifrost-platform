@@ -153,8 +153,8 @@ export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
 
 /**
  * A recorder log's import request (recorderimport.Format; agentrt-plan-import
- * recorder writes it): the same route takes it by its format (W-31 2.3, the
- * Owner's 2.3 第 4 条 A, 2026-10-21).
+ * recorder writes it): the same route takes it by its format (W-31 2.3,
+ * 决定 2026-10-21: item 4 of 2.3, option A).
  */
 export const RECORDER_IMPORT_FORMAT = 'agentrt.recorder_import/v1'
 
@@ -426,7 +426,7 @@ export async function getLaws(d: RuntimeDeps = defaultRuntimeDeps()): Promise<un
 export async function getOwnerIssues(input: { to?: string }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return note(await d.get(input.to ? `${BASE}/owner-issues?to=${id(input.to)}` : `${BASE}/owner-issues`))
 }
-/** GET /owner-said?since=&limit=: what the Owner said, as his session transcripts hold it (ISSUE-新). */
+/** GET /owner-said?since=&limit=: what the Owner said, as his session transcripts hold it (ISSUE-104). */
 export async function getOwnerSaid(input: { since?: string; limit?: number }, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   const q = new URLSearchParams()
   if (input.since) q.set('since', input.since)

@@ -35,7 +35,7 @@ const stat = (label: string) => screen.getByText(label).parentElement
 afterEach(() => { cleanup(); clients.splice(0).forEach(c => c.clear()); vi.unstubAllGlobals() })
 
 describe('Crew: laws, skills and tools', () => {
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
   it('shows the counts and every table from the answer', async () => {
     show(answer)
     await screen.findByRole('table', { name: 'Skills' })
@@ -61,7 +61,7 @@ describe('Crew: laws, skills and tools', () => {
     expect(screen.queryByRole('table', { name: 'Laws' })).not.toBeInTheDocument()
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
   it('searches tools by name and description', async () => {
     show(answer)
     const search = await screen.findByRole('searchbox', { name: 'Search tools' })
@@ -70,8 +70,8 @@ describe('Crew: laws, skills and tools', () => {
     expect(screen.queryByText('get_plan')).not.toBeInTheDocument()
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
-  // Owner rule 2026-11-17: pages show data, explanations go behind the "?".
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
+  // ISSUE-53: pages show data, explanations go behind the "?".
   it('keeps the explanation behind the help button', async () => {
     show(answer)
     await screen.findByRole('table', { name: 'Skills' })
@@ -80,7 +80,7 @@ describe('Crew: laws, skills and tools', () => {
     expect(screen.getByText(/actually invoked a Skill is not recorded yet/)).toBeInTheDocument()
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
   // An empty list beside an unread source is not a count of zero; the positive control is the "0" with nothing unread.
   it('shows unread sources plainly and does not count what was not read', async () => {
     show({ ...answer, skills: [], commits: { ...answer.commits, infra: '' }, unread: [{ source: 'bifrost-trade-infra:agent-config/claude/skills', error: 'gitea: HTTP 500' }] })
@@ -93,7 +93,7 @@ describe('Crew: laws, skills and tools', () => {
     expect(stat('skills')).toHaveTextContent('0')
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
   it('reports a refused read and an answer of another shape, and shows no table', async () => {
     show({ error: 'no' }, 502)
     expect(await screen.findByRole('alert')).toHaveTextContent('Instruments')
@@ -103,7 +103,7 @@ describe('Crew: laws, skills and tools', () => {
     expect(parseInstruments(answer)).toEqual(answer)
   })
 
-  // 2026-11-18, the Owner asked to audit laws, Skills and MCP tools on Ops; agents forgot rules that existed.
+  // 2026-11-18 (ISSUE-36): laws, Skills and MCP tools are audited on Ops; agents forgot rules that existed.
   it('is reachable from the Crew navigation at its own section', () => {
     expect(resolveConsoleHash('crew?section=instruments').canonical).toBe('#crew?section=instruments')
     render(<DomainNav entry="crew" />)

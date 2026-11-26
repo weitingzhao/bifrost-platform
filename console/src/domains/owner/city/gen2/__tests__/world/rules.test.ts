@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Place } from '@bifrost/ui/city/places'
 import { rulesBroken } from '@bifrost/ui/city/rules'
 
-// 2026-11-19, the Owner: the ground and its rules are the frame's; a domain that uses this look must
+// 2026-11-19 (ISSUE-9): the ground and its rules are the frame's; a domain that uses this look must
 // keep them and cannot change them. Before this, only the Console content's own test held them, so a
 // second domain could have been drawn broken.
 const p = (id: string, kind: Place['kind'], shape: string, children: Place[] = [], fn?: string): Place =>
@@ -21,7 +21,7 @@ describe('the frame holds its rules on any content', () => {
     const t = good(); t.children[0].shape = '3x3' as Place['shape']
     expect(rulesBroken({ tree: t }).join()).toMatch(/3x3 is not one of/)
   })
-  // 2026-11-20, the Owner: the unit is 4×4; nothing is smaller.
+  // 2026-11-20 (ISSUE-9): the unit is 4×4; nothing is smaller.
   it('any thing under one unit is refused', () => {
     const u = good(); u.children[0].children[0].children[0].shape = '2x2'
     expect(rulesBroken({ tree: u }).join()).toMatch(/smallest thing is 4×4/)
@@ -52,7 +52,7 @@ describe('the frame holds its rules on any content', () => {
     expect(all).toMatch(/share this id/)
     expect(all).toMatch(/function nope/)
   })
-  // 2026-11-19, the Owner: nothing on the screen is made up, nor written in once from a measurement and left.
+  // 2026-11-19 (ISSUE-33): nothing on the screen is made up, nor written in once from a measurement and left.
   it('a number with no read behind it is refused; an unread meter may say why in words', () => {
     const t = good()
     const room = t.children[0].children[0].children[0]
