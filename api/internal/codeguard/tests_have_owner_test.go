@@ -341,11 +341,14 @@ func TestEveryTestHasAnOwner(t *testing.T) {
 		t.Fatalf("the walk found %d test files with %d test functions", len(files), total)
 	}
 	without, flows, refused := testOwners(o, files)
+	// Report only (walls review 2026-11-25, wall [150]; 决定 2026-11-25 #783,
+	// LAW-9, LAW-17): "every test names its domain" is not a merge gate.
+	// To restore the gate: turn these two t.Logf back into t.Error.
 	for _, msg := range refused {
-		t.Error(msg)
+		t.Logf("would fail: %s", msg)
 	}
 	for _, msg := range ownerBaselineErrors(without, testsWithoutOwner, pkgs) {
-		t.Error(msg)
+		t.Logf("would fail: %s", msg)
 	}
 	logTestOwnership(t, o, files, without, flows)
 }
