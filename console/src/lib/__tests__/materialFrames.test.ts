@@ -7,7 +7,7 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SELF = fileURLToPath(import.meta.url)
 
 /**
- * The 1a material (@bifrost/ui 0.5.0, design Rev .59–.74; Owner ruling
+ * The 1a material (@bifrost/ui 0.5.0, design Rev .59–.74; 决定
  * 2026-09-25: Ops adopts it, no framed legacy look kept). Groups are
  * `--card-fill` with a transparent `--card-border`, rules inside a group are
  * `--table-rule`, tags are a currentColor capsule, controls and fields are

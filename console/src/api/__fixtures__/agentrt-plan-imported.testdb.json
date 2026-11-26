@@ -2042,7 +2042,7 @@
    },
    {
     "evidence": {
-     "line": "        - [x] （你）确认 v5 和 §7 八条｜10-14 00:30：Owner「确认 v5」",
+     "line": "        - [x] （你）确认 v5 和 §7 八条｜10-14 00:30：确认 v5",
      "line_no": 18,
      "mark": "x",
      "marked_at": "2026-10-14 00:30"
@@ -2167,9 +2167,9 @@
    },
    {
     "evidence": {
-     "line": "      - 2.2b 第一版拉通（Owner 2026-10-15 18:1x 确认「草案 2」；`work/PLAN.md`）",
+     "line": "      - 2.2b 第一版拉通（2026-10-15 18:1x 确认草案 2；`work/PLAN.md`）",
      "line_no": 25,
-     "note": "Owner 2026-10-15 18:1x 确认「草案 2」；`work/PLAN.md`"
+     "note": "2026-10-15 18:1x 确认草案 2；`work/PLAN.md`"
     },
     "id": "R2:2.2b",
     "kind": "item",

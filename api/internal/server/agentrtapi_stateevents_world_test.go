@@ -169,9 +169,9 @@ func (f *stateFuzz) validRoutes(t *testing.T, s *httptest.Server, ok func(key, c
 	ok("PUT artifacts/{id}", "operator", "PUT", "artifacts/"+artifactID(extSpec), extSpec, "X-Artifact-Kind", "other")
 	ext := ok("POST external-work", "operator", "POST", "external-work", map[string]any{"idempotency_key": "ext", "root": "R2", "plan_node_id": "R2:1-1", "source_run_key": "fuzz-run", "artifact_id": artifactID(extSpec)})
 	ok("POST external-work/{id}/events", "operator", "POST", "external-work/"+ext["external_work_id"].(string)+"/events", map[string]any{"idempotency_key": "ext-start", "seq": 1, "type": "started"})
-	// What the Owner said, posted by the session hook (2026-11-25).
+	// An owner_said message, posted by the session hook.
 	ok("POST owner-said", "operator", "POST", "owner-said", map[string]any{"messages": []any{map[string]any{"message_id": "11111111-1111-4111-8111-111111111111",
-		"transcript": "7274b722-9792-4ba2-bd5c-2dd8aff76cb5", "said_at": "2026-11-25T13:00:00Z", "text": "我觉得B好，需要自动收集"}}})
+		"transcript": "7274b722-9792-4ba2-bd5c-2dd8aff76cb5", "said_at": "2026-11-25T13:00:00Z", "text": "a sample message"}}})
 	// Where the Owner's complaints go (2026-11-25).
 	ok("POST owner-issues", "operator", "POST", "owner-issues", map[string]any{"issues": []any{ownerIssueFuzz("ISSUE-1")}})
 	// Without a seq the server gives the next one; a heartbeat may name the commits pushed so far.
