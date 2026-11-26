@@ -73,6 +73,12 @@ func TestWallsAreFoundByStructureAndJudgedByTheirDeclaration(t *testing.T) {
 	if w3, _ := s.walls(map[string]bool{"LAW-5": true}); w3.Total != 6 {
 		t.Errorf("an unchanged commit is not read again: %+v", w3.WallCounts)
 	}
+	old, _ := json.Marshal(keptWalls{Rule: WallsRule - 1, Repo: "infra", Commit: "c-infra", Points: []WallPoint{}, Decls: []WallDecl{}})
+	_ = s.kept().Write(keptWallsPrefix+"infra", old)
+	s.keepWalls("infra", tree("infra"), now)
+	if w4, _ := s.walls(map[string]bool{"LAW-5": true}); w4.Total != 5 {
+		t.Errorf("a reading of another rule is read again on the same commit: %+v", w4.WallCounts)
+	}
 }
 
 // STG 11-26 02:16Z: before any line declared itself the scan counted 38

@@ -34,6 +34,11 @@ import (
 
 const keptWallsPrefix = "walls-"
 
+// WallsRule is the version of how points and declarations are read: a kept
+// reading of another rule is read again even when the commit is the same
+// (11-26: the first rule's false declarations stayed on an unchanged infra).
+const WallsRule = 2
+
 // WallLookback is how many lines above a point a declaration may stand.
 const WallLookback = 8
 
@@ -75,6 +80,7 @@ type WallPoint struct {
 }
 
 type keptWalls struct {
+	Rule   int         `json:"rule"`
 	Repo   string      `json:"repo"`
 	Commit string      `json:"commit"`
 	At     time.Time   `json:"at"`
@@ -263,7 +269,7 @@ func (s *Scanner) keepWalls(repo string, t Tree, now time.Time) {
 	}
 	if raw, err := s.kept().Read(keptWallsPrefix + repo); err == nil && raw != nil {
 		var k keptWalls
-		if json.Unmarshal(raw, &k) == nil && k.Commit == t.Commit {
+		if json.Unmarshal(raw, &k) == nil && k.Commit == t.Commit && k.Rule == WallsRule {
 			return
 		}
 	}
@@ -276,7 +282,7 @@ func (s *Scanner) keepWalls(repo string, t Tree, now time.Time) {
 		}
 		return ""
 	}
-	k := keptWalls{Repo: repo, Commit: t.Commit, At: now.UTC(), Points: []WallPoint{}, Decls: []WallDecl{}, DeclDomains: map[string]string{}}
+	k := keptWalls{Rule: WallsRule, Repo: repo, Commit: t.Commit, At: now.UTC(), Points: []WallPoint{}, Decls: []WallDecl{}, DeclDomains: map[string]string{}}
 	for _, f := range t.Files {
 		under := false
 		for _, r := range roots {
