@@ -221,6 +221,7 @@ modules:
       api/internal/outsideinput: ["api", "scripts/ci", "bifrost-trade-infra:k8s/cicd", "bifrost-trade-infra:scripts/release"]
       api/internal/ownerexec: ["api/internal/ownerexec"]
       api/internal/ownerexec/mustrefuse: ["api/internal/ownerexec/mustrefuse"]
+      api/internal/hostrecipe: ["api/internal/hostrecipe"]
       api/internal/patrol: ["api/internal/patrol", "config/patrol-skills"]
       api/internal/probe: ["api/internal/probe", "config/trade-api-domains.yaml"]
       api/internal/questions: ["api/internal/questions", "api/internal/server", "api/internal/owner/assembly"]

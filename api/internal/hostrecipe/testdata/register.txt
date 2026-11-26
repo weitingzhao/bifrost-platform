@@ -1,0 +1,6 @@
+recipe gpu-strata-status read-only gpu-server 9c74659c2ff1dfaf87aa40f54e8f0e1c955f8e4b86485b07b494ce83fd25ac96
+recipe gpu-models read-only gpu-server 42774c3aed1cbb96a33041cb05692df146f3a2cc2b19f21e2e76ae265ed29598
+recipe gpu-strata-profile reversible gpu-server 8977a95febc13346941524e2c779434d22a931ea391c529089bd40bd1ac743e3 MODEL=^(iq3|q4)$ CTX=^(32768|65536|131072|262144)$
+runtime 0cbca2ff7d674afc53ec05c0ed59fbf9a32d0f910f731262b38a34a1ee86e9a8
+image 192.168.10.73:30500/bifrost-research@sha256:8cd0b34bbff05e1c6bc21b555e9d196813c484f6d49514583a78def32b4b83c5
+deadline-max 900

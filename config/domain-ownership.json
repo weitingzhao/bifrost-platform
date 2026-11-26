@@ -1069,6 +1069,13 @@
       "status": "assigned",
       "basis": "Owner-domain charter and read-model extraction"
     },
+    "api/internal/hostrecipe": {
+      "domains": [
+        "approvals"
+      ],
+      "status": "assigned",
+      "basis": "2026-11-26: recognises an execution card that is exactly a registered node-run host recipe (LAW-6 七 ①); used by approvals and the execution port, register kept by the compute line"
+    },
     "api/internal/agentrt/coord": {
       "domains": [
         "coordination"
