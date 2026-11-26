@@ -28,7 +28,7 @@ describe('lines on the City', () => {
     ], 'map')]) }, {}, now)
     const t = blocks[1]
     expect(t.kind === 'table' && t.rows[0].cells.slice(2)).toEqual([2, 2, 1])
-    expect(t.kind === 'table' && t.rows[0].cells[1]).toEqual({ text: '2 h ago', tone: 'ok' })
+    expect(t.kind === 'table' && t.rows[0].cells[1]).toEqual({ text: '2h', title: '2 h ago', tone: 'ok' })
   })
 
   it('puts the line picked in the Console first, marked', () => {

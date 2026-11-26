@@ -60,10 +60,14 @@ export function stopLabel(hash: string): string {
   return page ? `Console · ${page}` : 'Console'
 }
 
-/** The frame's return slot: the previous stop of this journey, or nothing when the view was opened directly. */
-export function backOf(stops: readonly string[]): { label: string; href: string } | undefined {
-  const last = stops.at(-1)
+/**
+ * The frame's return slot: the previous stop of this journey, or nothing when the view was opened directly. A stop
+ * that is where you are now is no way back (2026-11-25, PROD at 390: a page loaded afresh at #observation kept a
+ * trail ending in #observation and offered "Return to Signals" on Signals itself).
+ */
+export function backOf(stops: readonly string[], here = ''): { label: string; href: string } | undefined {
+  const last = [...stops].reverse().find(s => s !== here)
   return last ? { label: stopLabel(last), href: last } : undefined
 }
 
-export const useJourneyBack = () => backOf(useJourneyTrail())
+export const useJourneyBack = () => backOf(useJourneyTrail(), typeof window === 'undefined' ? '' : window.location.hash)

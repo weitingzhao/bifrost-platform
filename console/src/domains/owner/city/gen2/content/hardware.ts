@@ -109,7 +109,10 @@ const roomShape = (unit: 'cores' | 'bytes', of: number | null): Shape => {
 const at = (pts: PromPoint[] | null, key: string, value: string) => pts?.find(p => p.labels?.[key] === value)?.value ?? null
 
 /** The district from what was read. A device the topology does not list is not drawn (RULES.md §2.2). */
-export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', units?: UnitReads, maxSheets: Sheets = 1): Place {
+// maxSheets: the land the caller has for it. Only the City has a limit (sheetsTheTownGives); a view that lists the
+// devices (Signals' power yard) gives none, so every device stands and nothing folds into Other (2026-11-25, PROD:
+// with the old default of one sheet Signals showed "Other · 2" in place of two machines).
+export function hardwareDistrict(r: HardwareReads, fn = 'system', when = '', units?: UnitReads, maxSheets: Sheets = 4): Place {
   const P = r.prom
   const nodeOfIp = new Map((P.nodeIp ?? []).map(p => [p.labels?.internal_ip ?? '', p.labels?.node ?? '']))
   const zones = new Map<string, Zone>()

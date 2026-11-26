@@ -171,6 +171,15 @@ describe('more devices than one ground holds', () => {
     }
   })
 
+  // 2026-11-25, PROD: Signals lists the devices with no land to fit (read.ts calls without a limit) and, with a default
+  // of one sheet, showed "Other · 2" in place of two machines. Without a limit every device stands.
+  it('without a limit from the caller, every device stands and nothing folds into Other', () => {
+    const more = withExtra(3)
+    const all = hardwareDistrict(more)
+    expect(all.children.some(b => b.id === OTHER_DEVICES)).toBe(false)
+    expect(all.children.map(b => b.id).sort()).toEqual(more.topology!.map(n => n.id).sort())
+  })
+
   it('the land the town gives: 4 sheets with room for an 8×8, 2 for a 4×8, else 1', () => {
     expect([sheetsTheTownGives(0), sheetsTheTownGives(12), sheetsTheTownGives(13), sheetsTheTownGives(14), sheetsTheTownGives(15)]).toEqual([4, 4, 2, 2, 1])
   })

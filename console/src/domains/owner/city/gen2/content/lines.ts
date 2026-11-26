@@ -36,8 +36,12 @@ export type LinesRead = { data?: LineageResponse; error?: unknown }
 export type RosterRead = { data?: RosterSeat[]; error?: unknown }
 
 /** How long since a line moved: moving (ok) or quiet (boundary: not a fault, the line's own pace; never unknown, which means not read). */
-export const paceOf = (l: LineActivity): { text: string; tone: Tone } =>
-  l.quietHours == null ? { text: 'unknown', tone: 'unknown' } : { text: quietLabel(l.quietHours), tone: l.movingToday ? 'ok' : 'boundary' }
+// Written short ("<1h", "5h", "3d"), the words in its title (2026-11-25, PROD at 390: "within the hour" took three
+// lines and pushed the PROD column off the card).
+export const paceOf = (l: LineActivity): { text: string; tone: Tone; title?: string } =>
+  l.quietHours == null ? { text: 'unknown', tone: 'unknown' } : { text: shortPace(l.quietHours), title: quietLabel(l.quietHours), tone: l.movingToday ? 'ok' : 'boundary' }
+
+const shortPace = (h: number): string => h < 1 ? '<1h' : h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`
 
 /** The domains a session sits, by the roster (a session may sit two seats, so two domains). */
 export function domainsOf(roster: readonly RosterSeat[], session: string): string[] {
@@ -57,7 +61,7 @@ function table(rows: LineActivity[], focus?: string, domainCol?: (r: LineActivit
   const ordered = focus ? [...rows.filter(r => r.session === focus), ...rows.filter(r => r.session !== focus)] : rows
   return {
     kind: 'table',
-    head: [{ label: 'Line' }, { label: 'Moved' }, ...(domainCol ? [{ label: 'Domain' }] : []), { label: 'Merged', num: true }, { label: 'STG', num: true }, { label: 'PROD', num: true }],
+    head: [{ label: 'Line' }, { label: 'Moved' }, ...(domainCol ? [{ label: 'Domain' }] : []), { label: 'Main', num: true }, { label: 'STG', num: true }, { label: 'PROD', num: true }],
     empty: `No line committed in the last ${LINES_DAYS} days`,
     rows: ordered.map(r => ({
       key: r.session,

@@ -25,6 +25,9 @@ describe('the journey trail every frame reads', () => {
 
   it('has no Return for a view opened directly, nor inside one place', () => {
     expect(backOf([])).toBeUndefined()
+    // 2026-11-25, PROD at 390: a page loaded afresh kept a trail ending where it stands and offered to return to itself.
+    expect(backOf(['#city', '#observation'], '#observation')).toEqual({ label: 'City', href: '#city' })
+    expect(backOf(['#observation'], '#observation')).toBeUndefined()
     step('#city?at=a', '#city?at=b')
     expect(trail()).toEqual([])
   })

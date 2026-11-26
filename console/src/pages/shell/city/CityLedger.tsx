@@ -56,14 +56,18 @@ export default function CityLedger() {
           </span>
         ))}
       </nav>
-      <DenseDataTable>
+      {/* On a phone: the place (its size under the name, its source in the title), its kind and its state; the table
+          fits the screen (2026-11-25, PROD at 390: five columns at 560px cut the names to "Foundatio" and pushed the
+          state off). The table fits its frame (no sideways scroll: Console's phone rule sets 560px on scrolling tables);
+          Console mounts no LayoutProvider, so the table's own compact mode does not apply here. */}
+      <DenseDataTable scrollX={false}>
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead>Place</DenseTableHead>
             <DenseTableHead>Kind</DenseTableHead>
             <DenseTableHead>Now</DenseTableHead>
-            <DenseTableHead>Size</DenseTableHead>
-            <DenseTableHead>Read from</DenseTableHead>
+            <DenseTableHead className="max-sm:hidden">Size</DenseTableHead>
+            <DenseTableHead className="max-sm:hidden">Read from</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
@@ -74,16 +78,17 @@ export default function CityLedger() {
             return (
               <DenseTableRow key={r.path.join('/')} data-picked={picked || undefined}
                 className={cn(!wired && 'opacity-45', picked && 'bg-muted shadow-[inset_3px_0_0_var(--primary)]')}>
-                <DenseTableCell>
+                <DenseTableCell className="max-sm:whitespace-normal" title={r.place.meter?.source}>
                   <span style={{ paddingLeft: `${r.depth * 1.25}rem` }} className="inline-flex items-center gap-1 font-mono-tabular" data-domain-name={glyphOf(r.place) ? r.place.id : undefined}>
                     {glyphOf(r.place) ? <span className="shrink-0 text-muted-foreground" aria-hidden><Glyph name={glyphOf(r.place)!} size={14} /></span> : null}
                     {r.depth === 0 ? <b className="font-semibold">{r.place.label}</b> : <a href={href} className="text-inherit hover:text-foreground">{r.place.label}</a>}
                   </span>
+                  <span className="block font-mono-tabular text-[var(--muted-foreground)] sm:hidden" style={{ paddingLeft: `${r.depth * 1.25}rem` }}>{r.place.shape.replace('x', '×')}</span>
                 </DenseTableCell>
                 <DenseTableCell>{KIND[r.place.kind]}</DenseTableCell>
                 <DenseTableCell className={cn('font-mono-tabular', r.place.state === 'down' && 'text-[var(--destructive)]')}>{nowOf(r.place)}</DenseTableCell>
-                <DenseTableCell className="font-mono-tabular">{r.place.shape.replace('x', '×')}</DenseTableCell>
-                <DenseTableCell className="max-w-[24rem] truncate font-mono-tabular text-[var(--muted-foreground)]" title={r.place.meter?.source}>{r.place.meter?.source ?? '—'}</DenseTableCell>
+                <DenseTableCell className="font-mono-tabular max-sm:hidden">{r.place.shape.replace('x', '×')}</DenseTableCell>
+                <DenseTableCell className="max-w-[24rem] truncate max-sm:hidden font-mono-tabular text-[var(--muted-foreground)]" title={r.place.meter?.source}>{r.place.meter?.source ?? '—'}</DenseTableCell>
               </DenseTableRow>
             )
           })}
