@@ -121,6 +121,8 @@ type StatusInputs struct {
 	Namespaces func(ctx context.Context) ([]string, bool)
 	// Actions is the ids of the actions this platform serves.
 	Actions func() []string
+	// LawCodes are the laws in force (LAW-k, CORE-k); false when not read.
+	LawCodes func(ctx context.Context) (map[string]bool, bool)
 }
 
 // Light is one light of one domain.
@@ -173,7 +175,11 @@ type Status struct {
 	// Criteria are the plan's completion criteria for the map as numbers
 	// (Criteria).
 	Criteria *Criteria `json:"criteria,omitempty"`
-	Note     string    `json:"note,omitempty"`
+	// Walls are the enforcement points with their declarations, Policies
+	// the standards declared in code (walls.go).
+	Walls    *WallsReading `json:"walls,omitempty"`
+	Policies *WallsReading `json:"policies,omitempty"`
+	Note     string        `json:"note,omitempty"`
 }
 
 // RepoCount is one repository's (or the cluster's) equation.
@@ -655,6 +661,15 @@ func (s *Scanner) KeepStatus(ctx context.Context, in StatusInputs) {
 			c := s.criteria(domains, st.Inventory)
 			st.Criteria = &c
 		}
+	}
+	var laws map[string]bool
+	if in.LawCodes != nil {
+		if codes, ok := in.LawCodes(ctx); ok {
+			laws = codes
+		}
+	}
+	if w, p := s.walls(laws); w.Measured {
+		st.Walls, st.Policies = &w, &p
 	}
 	raw, err := json.Marshal(st)
 	if err != nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/eventlog"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planstore"
 	"github.com/weitingzhao/bifrost-platform/api/internal/bus/catalogusers"
 	"github.com/weitingzhao/bifrost-platform/api/internal/catalog"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ciscore"
@@ -386,6 +387,23 @@ func (s *Server) catalogStatusInputs() catalog.StatusInputs {
 			defer func() { _ = tx.Rollback(ctx) }()
 			counts, err := eventlog.TypeCounts(ctx, tx, time.Now().Add(-7*24*time.Hour))
 			return counts, err == nil
+		}
+		// The laws in force, for the walls' declarations (stale when theirs is not).
+		in.LawCodes = func(ctx context.Context) (map[string]bool, bool) {
+			if s.agentRuntime.late == nil || !s.agentRuntime.late.Ready() {
+				return nil, false
+			}
+			laws, err := planstore.LawsView(ctx, s.agentRuntime.late)
+			if err != nil {
+				return nil, false
+			}
+			codes := map[string]bool{}
+			for _, l := range laws {
+				if l.Code != "" && l.State == "现行" {
+					codes[l.Code] = true
+				}
+			}
+			return codes, true
 		}
 	}
 	if s.telemetry != nil {

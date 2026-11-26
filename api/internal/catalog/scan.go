@@ -232,6 +232,7 @@ func (s *Scanner) ScanOnce(ctx context.Context, repo string) (Pool, error) {
 				s.keepRules(repo, t)
 				s.keepRepoRegistry(repo, t)
 				s.keepSelf(repo, t)
+				s.keepWalls(repo, t, now)
 			}
 			if repo != DatabaseRepo {
 				s.keepRepoRefs(repo, t, now)
