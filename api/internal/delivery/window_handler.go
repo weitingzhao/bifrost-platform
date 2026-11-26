@@ -110,13 +110,12 @@ func (h *Handler) HandleDeleteReleaseWindow(w http.ResponseWriter, r *http.Reque
 	if strings.TrimSpace(body.Who) == "" {
 		body.Who = strings.TrimSpace(r.URL.Query().Get("who"))
 	}
-	force := r.URL.Query().Get("force") == "1" || r.URL.Query().Get("force") == "true"
 	cs, _, err := h.svc.cluster.KubernetesClient()
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	err = deleteReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), body.Who, force, time.Now().UTC())
+	err = deleteReleaseWindow(windowContext(r.Context(), h.svc.windowRecorder), cs, h.svc.PipelinesNamespace(), body.Who, time.Now().UTC())
 	if err != nil {
 		if _, ok := err.(*WindowChanged); ok {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})

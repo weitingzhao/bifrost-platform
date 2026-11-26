@@ -262,7 +262,7 @@ func getReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns string, n
 	return rec, true, nil
 }
 
-func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who string, force bool, now time.Time) error {
+func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who string, now time.Time) error {
 	cm, err := cs.CoreV1().ConfigMaps(ns).Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
@@ -271,7 +271,10 @@ func deleteReleaseWindow(ctx context.Context, cs kubernetes.Interface, ns, who s
 		return err
 	}
 	rec, ok := parseWindowCM(cm)
-	if ok && rec.live(now) && !force && rec.Who != strings.TrimSpace(who) {
+	// Only the holder releases a live window. Clearing someone else's was
+	// removed (walls review wall:104, LAW-2 二): a dead holder's window ends by
+	// itself within its ttl, and clearing a live one collides with its release.
+	if ok && rec.live(now) && rec.Who != strings.TrimSpace(who) {
 		attempt := rec
 		attempt.Who = strings.TrimSpace(who)
 		attempt.StartedAt = now.UTC().Format(time.RFC3339)

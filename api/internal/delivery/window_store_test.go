@@ -74,14 +74,14 @@ func TestReleaseWindowRenewAndForeignDelete(t *testing.T) {
 	if renewed.ExpiresAt == first.ExpiresAt {
 		t.Fatal("renewal did not move expires_at")
 	}
-	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "bob@host", false, now.Add(time.Minute)); err == nil {
+	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "bob@host", now.Add(time.Minute)); err == nil {
 		t.Fatal("a non-holder deleted the window")
 	}
 	got, open, err := getReleaseWindow(context.Background(), cs, "cicd", now.Add(time.Minute))
 	if err != nil || !open || got.Who != "ada@host" {
 		t.Fatalf("window after refused delete: open=%v who=%s err=%v", open, got.Who, err)
 	}
-	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "ada@host", false, now.Add(time.Minute)); err != nil {
+	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "ada@host", now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if _, open, err := getReleaseWindow(context.Background(), cs, "cicd", now.Add(time.Minute)); err != nil || open {
@@ -110,11 +110,9 @@ func TestExpiredWindowIsEmptyAndReplaceable(t *testing.T) {
 	if err != nil || !open || got.Who != "bob@host" {
 		t.Fatalf("replacement: open=%v who=%s err=%v", open, got.Who, err)
 	}
-	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "ada@host", true, later); err != nil {
-		t.Fatal(err)
-	}
-	if _, open, err := getReleaseWindow(context.Background(), cs, "cicd", later); err != nil || open {
-		t.Fatalf("force delete left the window open: open=%v err=%v", open, err)
+	// The replaced window is bob's; ada can no longer clear it (wall:104).
+	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "ada@host", later); err == nil {
+		t.Fatal("a non-holder cleared a live window")
 	}
 }
 
@@ -189,7 +187,7 @@ func TestReleaseWindowReadsAndReleasesWithoutDeleting(t *testing.T) {
 
 	held := windowRecord{Who: "a@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
 	cs = seed(held)
-	if err := deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now); err != nil {
+	if err := deleteReleaseWindow(ctx, cs, "cicd", "a@host", now); err != nil {
 		t.Fatal(err)
 	}
 	cm, err := cs.CoreV1().ConfigMaps("cicd").Get(ctx, releaseWindowConfigMap, metav1.GetOptions{})
@@ -203,7 +201,7 @@ func TestReleaseWindowReadsAndReleasesWithoutDeleting(t *testing.T) {
 	cs = seed(held)
 	taken := windowRecord{Who: "b@host", What: "repo", ExpiresAt: now.Add(time.Minute).Format(time.RFC3339)}
 	replaceWindowBeforeUpdate(t, cs, taken)
-	err = deleteReleaseWindow(ctx, cs, "cicd", "a@host", false, now)
+	err = deleteReleaseWindow(ctx, cs, "cicd", "a@host", now)
 	if _, ok := err.(*WindowChanged); !ok {
 		t.Fatalf("expected window changed, got %v", err)
 	}

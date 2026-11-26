@@ -151,7 +151,7 @@ func TestReservationBlocksOthersAndAdmitsHead(t *testing.T) {
 	_, cs := queueHandler(t)
 	hold(t, cs, "seat-a", queueNow)
 	queueUp(t, cs, "seat-b", "thread:local_b", 30, queueNow)
-	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "seat-a", false, queueNow.Add(time.Minute)); err != nil {
+	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "seat-a", queueNow.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	// A plain PUT on the free window reserves it for the head and is refused.
@@ -332,7 +332,7 @@ func TestQueueSurvivesReleaseAndExpiry(t *testing.T) {
 	_, cs := queueHandler(t)
 	hold(t, cs, "seat-a", queueNow)
 	queueUp(t, cs, "seat-b", "", 60, queueNow)
-	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "seat-a", false, queueNow.Add(time.Minute)); err != nil {
+	if err := deleteReleaseWindow(context.Background(), cs, "cicd", "seat-a", queueNow.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if r := rawWindow(t, cs); len(r.Queue) != 1 || r.EndedAt == "" {

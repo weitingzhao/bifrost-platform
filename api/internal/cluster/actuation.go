@@ -172,7 +172,11 @@ func (s *Service) Scale(ctx context.Context, req ScaleRequest) (ActuationRespons
 	if err != nil {
 		return ActuationResponse{OK: false, Action: "scale", Target: req.Target(), Message: err.Error(), GeneratedAt: now}, err
 	}
-	return ActuationResponse{OK: true, Action: "scale", Target: req.Target(), Changed: changed, Message: fmt.Sprintf("deployment scaled to %d replicas", req.Replicas), GeneratedAt: now}, nil
+	// The message is what the audit record keeps: the replicas before are the
+	// way back (decision #783, wall:106: scaling is tier B because it is
+	// undone by scaling back).
+	return ActuationResponse{OK: true, Action: "scale", Target: req.Target(), Changed: changed,
+		Message: fmt.Sprintf("deployment scaled from %d to %d replicas; undo: scale back to %d", current, req.Replicas, current), GeneratedAt: now}, nil
 }
 
 func (s *Service) DeletePod(ctx context.Context, namespace, name string) (ActuationResponse, error) {

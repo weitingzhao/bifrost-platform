@@ -25,7 +25,7 @@ func TestSessionWindowEvents(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("renewal emitted an event: %+v", events)
 	}
-	if err = deleteReleaseWindow(ctx, cs, "cicd", input.Who, false, now.Add(2*time.Minute)); err != nil {
+	if err = deleteReleaseWindow(ctx, cs, "cicd", input.Who, now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if len(events) != 2 || events[0].Action != "held" || events[1].Action != "released" {

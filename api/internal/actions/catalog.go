@@ -131,17 +131,10 @@ var catalog = []Action{
 	},
 	{
 		ID: "release_window_release", Tier: TierB,
-		Description: "Release the window. The holder calls it directly. force=1 is tier C and clears a window held by someone else.",
+		Description: "Release the window. Only the holder releases it; a window someone else holds ends by itself when its ttl runs out (clearing another holder's window was removed, walls review wall:104).",
 		Method:      "DELETE", Pattern: "/api/v1/delivery/release-window",
 		Params: []Param{
 			{Name: "who", Type: "string", Required: true, In: "body"},
-			{Name: "force", Type: "boolean", In: "query"},
-		},
-		Classify: func(_ context.Context, params map[string]any) Tier {
-			if b, ok := asBool(params["force"]); ok && b {
-				return TierC
-			}
-			return TierB
 		},
 	},
 	{

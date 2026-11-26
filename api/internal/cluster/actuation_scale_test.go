@@ -211,3 +211,23 @@ func TestScaleAccountSyncAllowedFromZero(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
+
+// Decision 2026-11-25 #783 (wall:106): scaling is tier B because it is undone
+// by scaling back, so the record (the response message the audit keeps)
+// names the replicas before as the way back.
+func TestScaleRecordsTheReplicasBefore(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "bifrost-dev"},
+		Spec:       appsv1.DeploymentSpec{Replicas: int32Ptr(3)},
+	}
+	clientset := fake.NewSimpleClientset(deploy)
+	svc := NewService(nil)
+	svc.clientFactory = func() (kubernetes.Interface, string, error) { return clientset, "fake", nil }
+	resp, err := svc.Scale(t.Context(), ScaleRequest{Namespace: "bifrost-dev", Kind: "Deployment", Name: "api", Replicas: 1})
+	if err != nil || !resp.OK {
+		t.Fatalf("scale: %v %+v", err, resp)
+	}
+	if !strings.Contains(resp.Message, "from 3 to 1") || !strings.Contains(resp.Message, "undo: scale back to 3") {
+		t.Fatalf("message = %q, want the replicas before and the way back", resp.Message)
+	}
+}
