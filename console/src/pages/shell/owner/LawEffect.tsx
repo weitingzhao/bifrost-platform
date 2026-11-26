@@ -11,8 +11,8 @@ export function effectLine(effects: readonly Effect[]): string {
 const perWeek = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '—')
 
 /**
- * Command → Law effect: whether the complaints under each law eased after it went in force (ISSUE-79:
- * 「提供一个新的法下吐槽是否可以缓解和解决的地方。不要混在一起」). Apart from the laws and from the issues: a law
+ * Command → Law effect: whether the complaints under each law eased after it went in force (ISSUE-79), in a place
+ * of its own, apart from the laws and from the issues: a law
  * never names an issue; each issue names the laws that answer it, and the platform groups them (by_law).
  */
 export function LawEffect() {

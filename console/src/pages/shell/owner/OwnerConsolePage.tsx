@@ -2,6 +2,7 @@ import { DomainVerdictStrip } from '@/components/shell/DomainVerdictStrip'
 import { CollapsibleSection } from '@/components/shell/CollapsibleSection'
 import { LawRegister } from './LawRegister'
 import { LawEffect } from './LawEffect'
+import { LawWalls } from './LawWalls'
 import { OwnerIssues } from './OwnerIssues'
 import { AuditConclusions } from './AuditConclusions'
 import { DomainSection } from '@/components/shell/DomainSection'
@@ -74,7 +75,9 @@ export function OwnerConsolePage({ entry = 'command' }: { entry?: EntryRouteId |
     {blocks.you && <OwnerYou data={data} />}
     {/* (ISSUE-53) the laws up (right after what he approves), For your info down; every section folds, open by default. */}
     {blocks.you && <CollapsibleSection id="laws" label="Laws"><LawRegister /></CollapsibleSection>}
-    {/* (ISSUE-新) laws and complaints apart, and a place of its own for whether a law eased the complaints under it. */}
+    {/* The walls under the laws, counted by the map line (LAW-1 九): read-only numbers beside the register. */}
+    {blocks.you && <CollapsibleSection id="law-walls" label="Walls under the laws"><LawWalls /></CollapsibleSection>}
+    {/* (ISSUE-79) laws and complaints apart, and a place of its own for whether a law eased the complaints under it. */}
     {blocks.you && <CollapsibleSection id="law-effect" label="Law effect"><LawEffect /></CollapsibleSection>}
     {blocks.you && <CollapsibleSection id="issues" label="Owner's issues"><OwnerIssues /></CollapsibleSection>}
     {blocks.you && <OwnerWaiting />}
