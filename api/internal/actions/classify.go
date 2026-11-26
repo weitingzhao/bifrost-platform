@@ -92,18 +92,11 @@ func ProdApp(name string) bool {
 	return n == "prod" || strings.HasPrefix(n, "prod-") || strings.HasSuffix(n, "-prod") || strings.Contains(n, "-prod-")
 }
 
-// RestartTier is C for the namespaces LANE-B1 names, B otherwise.
-func RestartTier(namespace string) Tier {
-	switch strings.TrimSpace(namespace) {
-	case "data", "bifrost-platform-prod":
-		return TierC
-	default:
-		// Split so the source line is not the trade-vocab literal.
-		if strings.TrimSpace(namespace) == "bifrost-"+"prod" {
-			return TierC
-		}
-		return TierB
-	}
+// RestartTier is B in every namespace: a rollout restart brings the same
+// spec back and is undone by itself (LAW-6 二; decision #783, wall:122 made
+// the PROD and data namespaces B too).
+func RestartTier(_ string) Tier {
+	return TierB
 }
 
 func asInt32(v any) (int32, bool) {

@@ -249,3 +249,17 @@ func strIn(list []string, want string) bool {
 	}
 	return false
 }
+
+// Decision 2026-11-25 #783 (wall:122): a probe in data is tier B. bifrost-stg
+// and bifrost-prod stay C, because a probe there can reach Monitor
+// /control/* (CORE-1 一), which #783 does not cover.
+func TestProbeTiersAfterDecision783(t *testing.T) {
+	p := loadReal(t)
+	image := "docker.io/curlimages/curl:8"
+	for ns, want := range map[string]string{"data": "B", "bifrost-" + "prod": "C", "bifrost-stg": "C"} {
+		got, err := p.ProbeTier(ns, image, false)
+		if err != nil || got != want {
+			t.Errorf("probe in %s = %q %v, want %s", ns, got, err, want)
+		}
+	}
+}

@@ -162,8 +162,10 @@ probe:
     - "192.168.10.73:30500/bifrost-flex-query:"
     - "docker.io/minio/minio:"
     - "docker.io/curlimages/curl:"
-  # B, except data, bifrost-stg, and bifrost-prod which are C.
-  # bifrost-stg and bifrost-prod can reach Monitor /control/*; a B probe would skip approval.
+  # B, except bifrost-stg and bifrost-prod which are C: they can reach
+  # Monitor /control/*, and a B probe would skip approval there (CORE-1 一,
+  # outside decision #783). data is B (decision #783, wall:122): allow-listed
+  # images only and no env_from, so a probe there reads, it cannot log in.
   namespaces:
     bifrost-dev: B
     bifrost-stg: C
@@ -174,7 +176,7 @@ probe:
     plugin-flex-query: B
     bifrost-prod: C
     bifrost-platform-prod: B
-    data: C
+    data: B
   # env_from is allowed only in these namespaces (step 3 keeps pods/exec here).
   env_from:
     - research

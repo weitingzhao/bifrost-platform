@@ -95,7 +95,7 @@ func ByID(id string) (Action, bool) {
 const (
 	prodPipelineNote = "bifrost-deliver-prod, bifrost-deliver-platform-prod, and bifrost-deliver-research are tier C because they roll out or gitops-sync a production workload. Image-build, CI, and staging deliver pipelines are tier B (call them directly)."
 	prodAppNote      = "Argo applications whose name is prod, starts with prod-, ends with -prod, or contains -prod- are tier C; others are tier B."
-	restartNote      = "Namespaces data, bifrost-prod and bifrost-platform-prod are tier C; other namespaces are tier B."
+	restartNote      = "Tier B in every namespace, PROD and data included (decision #783): a restart brings the same spec back."
 )
 
 var catalog = []Action{
@@ -285,13 +285,12 @@ var catalog = []Action{
 	},
 	{
 		ID: "gitops_rollback_app", Tier: TierB,
-		Description: "Roll an Argo CD application back to a previous revision. " + prodAppNote,
+		Description: "Roll an Argo CD application back to a previous revision. Tier B for every application, PROD included (decision #783): a rollback is the way back itself.",
 		Method:      "POST", Pattern: "/api/v1/gitops/apps/{name}/rollback",
 		Params: []Param{
 			{Name: "name", Type: "string", Required: true, In: "path"},
 			{Name: "revision", Type: "string", In: "body"},
 		},
-		Classify: classifyApp,
 	},
 	{
 		ID: "rollout_restart_deployment", Tier: TierB,
@@ -547,7 +546,7 @@ var catalog = []Action{
 	},
 	{
 		ID: "run_probe_pod", Tier: TierB,
-		Description: "Run a short-lived probe Job from an allow-listed image. The data namespace is tier C. env_from is limited to the namespaces in the actuation policy.",
+		Description: "Run a short-lived probe Job from an allow-listed image. The data namespace is tier B (decision #783); bifrost-stg and bifrost-prod stay C (CORE-1 一). env_from is limited to the namespaces in the actuation policy.",
 		Method:      "POST", Pattern: "/api/v1/actuation/probes",
 		Params: []Param{
 			{Name: "namespace", Type: "string", Required: true, In: "body"},

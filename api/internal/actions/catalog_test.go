@@ -96,11 +96,20 @@ func TestPipelineAndAppTiers(t *testing.T) {
 	if !ProdApp("trade-prod") || !ProdApp("prod-trade") || ProdApp("trade-stg") {
 		t.Fatal("prod app rule")
 	}
-	if RestartTier("data") != TierC || RestartTier("bifrost-"+"prod") != TierC || RestartTier("bifrost-platform-prod") != TierC {
-		t.Fatal("restart C namespaces")
+	// Decision 2026-11-25 #783 (wall:122): a restart is B everywhere, the
+	// PROD and data namespaces included.
+	for _, ns := range []string{"data", "bifrost-" + "prod", "bifrost-platform-prod", "bifrost-stg"} {
+		if RestartTier(ns) != TierB {
+			t.Fatalf("restart in %s = %s, want B", ns, RestartTier(ns))
+		}
 	}
-	if RestartTier("bifrost-stg") != TierB {
-		t.Fatal("other namespace should be B")
+	// Decision 2026-11-25 #783 (wall:123): a rollback is B for every
+	// application; syncing a PROD application stays C.
+	if rb, _ := ByID("gitops_rollback_app"); rb.Tier != TierB || rb.Classify != nil {
+		t.Fatalf("gitops_rollback_app = %s, want plain B", rb.Tier)
+	}
+	if sync, _ := ByID("gitops_sync_app"); sync.Classify == nil || sync.Classify(t.Context(), map[string]any{"name": "bifrost-" + "prod"}) != TierC {
+		t.Fatal("syncing a PROD application must stay C")
 	}
 }
 
