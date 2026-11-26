@@ -21,19 +21,28 @@ import (
 
 func TestDirectCDRequiresApproval(t *testing.T) {
 	h := newPlatform(t)
-	// C: backup. D: drain. Both must refuse without an executed approval.
+	// D: drain and the network. They refuse without an executed approval.
 	for _, tc := range []struct {
 		method, path, body, action, token string
 	}{
-		{http.MethodPost, "/api/v1/cluster/postgres/backup", "", "trigger_cnpg_backup", "operator-test-token"},
 		{http.MethodPost, "/api/v1/cluster/nodes/node-a/drain", `{"force":true}`, "drain_node", "admin-test-token"},
-		{http.MethodPost, "/api/v1/cluster/workloads/scale", `{"namespace":"bifrost-dev","kind":"Deployment","name":"api","replicas":2}`, "scale_deployment", "operator-test-token"},
 		{http.MethodPost, "/api/v1/network/firewall/apply", `{}`, "unifi_firewall_apply", "operator-test-token"},
 		{http.MethodPost, "/api/v1/network/clients/fixed-ip", `{"mac":"68:1d:ef:5f:29:dd","ip":"192.168.10.80","name":"ubt-k3s-07"}`, "unifi_client_fixed_ip", "operator-test-token"},
 	} {
 		rec := call(t, h, tc.method, tc.path, tc.body, tc.token)
 		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"error":"approval required"`) || !strings.Contains(rec.Body.String(), tc.action) {
 			t.Fatalf("%s %s = %d %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+	// Decision 2026-11-25 #783 (wall:106, wall:110): an on-demand backup and
+	// scaling anything but daemon are tier B; they go to their handler, not
+	// to an approval.
+	for _, tc := range []struct{ path, body string }{
+		{"/api/v1/cluster/postgres/backup", ""},
+		{"/api/v1/cluster/workloads/scale", `{"namespace":"bifrost-dev","kind":"Deployment","name":"api","replicas":2}`},
+	} {
+		if rec := call(t, h, http.MethodPost, tc.path, tc.body, "operator-test-token"); strings.Contains(rec.Body.String(), "approval required") {
+			t.Fatalf("%s asked for an approval: %d %s", tc.path, rec.Code, rec.Body.String())
 		}
 	}
 	// ib_mode is C. ib_self_heal is B (PROD already runs that loop).

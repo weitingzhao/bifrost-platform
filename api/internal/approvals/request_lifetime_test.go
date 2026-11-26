@@ -65,7 +65,7 @@ func lifetimeService(t *testing.T) (*Service, *decisionHookBackend) {
 
 func lifetimeApproval(t *testing.T, s *Service) Approval {
 	t.Helper()
-	c := s.create(context.Background(), "request-lifetime", "trigger_cnpg_backup", "backup", "", nil)
+	c := s.create(context.Background(), "request-lifetime", "ib_maintenance", "backup", "", nil)
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}

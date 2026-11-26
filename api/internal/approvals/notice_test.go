@@ -131,10 +131,10 @@ func TestUnknownPushFailureIsRecorded(t *testing.T) {
 func TestNotExecutedBeforeTheDeadlinePushes(t *testing.T) {
 	f := relay(t)
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	actions.RegisterExecutor("trigger_cnpg_backup", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_maintenance", func(context.Context, map[string]any) (any, error) {
 		return nil, actions.Transient("REFUSED: no release window for x")
 	})
-	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
+	c := svc.create(context.Background(), "s", "ib_maintenance", "backup", "", nil)
 	svc.approve(context.Background(), c.Approval.ID, "chat")
 	got, _ := svc.get(c.Approval.ID)
 	after := got.Execution.Deadline.Add(time.Second)

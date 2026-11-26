@@ -13,10 +13,10 @@ import (
 // who decided: only channel=console, absent on rejections.
 func TestDecidedBySaysWhoDecided(t *testing.T) {
 	s, _ := lifetimeService(t)
-	actions.RegisterExecutor("trigger_cnpg_backup", func(context.Context, map[string]any) (any, error) { return nil, nil })
-	t.Cleanup(func() { actions.RegisterExecutor("trigger_cnpg_backup", nil) })
+	actions.RegisterExecutor("ib_maintenance", func(context.Context, map[string]any) (any, error) { return nil, nil })
+	t.Cleanup(func() { actions.RegisterExecutor("ib_maintenance", nil) })
 	mk := func() Approval {
-		c := s.create(context.Background(), "sess-d", "trigger_cnpg_backup", "backup", "", nil)
+		c := s.create(context.Background(), "sess-d", "ib_maintenance", "backup", "", nil)
 		if c.Status != http.StatusCreated {
 			t.Fatalf("create = %d %v", c.Status, c.Body)
 		}

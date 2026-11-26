@@ -13,7 +13,7 @@ import (
 // track so the Console can give law_amend its own entry.
 func TestListSplitsLawFromDailyCards(t *testing.T) {
 	s, _ := lifetimeService(t)
-	daily := s.create(context.Background(), "track", "trigger_cnpg_backup", "backup", "", nil)
+	daily := s.create(context.Background(), "track", "ib_maintenance", "backup", "", nil)
 	law := s.create(context.Background(), "track", "law_amend", "law", "", map[string]any{
 		"op": "repeal", "law": "1", "before": "old text", "revert": "add it again",
 	})
@@ -33,7 +33,7 @@ func TestListSplitsLawFromDailyCards(t *testing.T) {
 	if _, l := list("track=law"); len(l) != 1 || l[0]["action"] != "law_amend" || l[0]["track"] != TrackLaw {
 		t.Fatalf("track=law = %v", l)
 	}
-	if _, d := list("track=daily"); len(d) != 1 || d[0]["action"] != "trigger_cnpg_backup" || d[0]["track"] != TrackDaily {
+	if _, d := list("track=daily"); len(d) != 1 || d[0]["action"] != "ib_maintenance" || d[0]["track"] != TrackDaily {
 		t.Fatalf("track=daily = %v", d)
 	}
 	if code, _ := list("track=other"); code != http.StatusBadRequest {

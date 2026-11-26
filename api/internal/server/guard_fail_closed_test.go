@@ -32,13 +32,13 @@ func TestGuardFailsClosed(t *testing.T) {
 		req  func() *http.Request
 		code int
 	}{
-		{"missing required param on a tier C action", s.guardUntraced("ensure_bifrost_namespaces", next),
+		{"missing required param on a tier C action", s.guardUntraced("ib_mode", next),
 			func() *http.Request {
-				return httptest.NewRequest(http.MethodPost, "/api/v1/cluster/namespaces/ensure-bifrost", strings.NewReader(`{}`))
+				return httptest.NewRequest(http.MethodPost, "/api/v1/plugins/ib-gateway/control/mode", strings.NewReader(`{}`))
 			}, http.StatusBadRequest},
-		{"unreadable body", s.guardUntraced("ensure_bifrost_namespaces", next),
+		{"unreadable body", s.guardUntraced("ib_mode", next),
 			func() *http.Request {
-				r := httptest.NewRequest(http.MethodPost, "/api/v1/cluster/namespaces/ensure-bifrost", nil)
+				r := httptest.NewRequest(http.MethodPost, "/api/v1/plugins/ib-gateway/control/mode", nil)
 				r.Body = failingBody{}
 				return r
 			}, http.StatusBadRequest},
@@ -64,7 +64,7 @@ func TestGuardFailsClosed(t *testing.T) {
 	// Positive control: a named, catalogued tier C call still stops at the
 	// approval, which shows the 400s above come from the new checks.
 	rec := httptest.NewRecorder()
-	s.guardUntraced("ensure_bifrost_namespaces", next)(rec, httptest.NewRequest(http.MethodPost, "/api/v1/cluster/namespaces/ensure-bifrost", strings.NewReader(`{"names":["bifrost-bus"]}`)))
+	s.guardUntraced("ib_mode", next)(rec, httptest.NewRequest(http.MethodPost, "/api/v1/plugins/ib-gateway/control/mode", strings.NewReader(`{"mode":"paper"}`)))
 	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "approval required") || hits != 0 {
 		t.Errorf("positive control: code=%d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}

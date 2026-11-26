@@ -38,7 +38,7 @@ func lookupDaemon(ctx context.Context, namespace string) (int32, bool) {
 // the result is X so the caller does not replace the D10 gate with an approval check.
 func ScaleTier(name string, requested, current int32, known bool) Tier {
 	if strings.TrimSpace(name) != "daemon" {
-		return TierC
+		return TierB
 	}
 	if known && requested <= current {
 		return TierC

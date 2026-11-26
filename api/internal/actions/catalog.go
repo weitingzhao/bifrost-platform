@@ -307,8 +307,8 @@ var catalog = []Action{
 		},
 	},
 	{
-		ID: "scale_deployment", Tier: TierC,
-		Description: "Scale a Deployment. Tier C. Increasing replicas of the Deployment named daemon is tier X (D10) and cannot be requested; the direct endpoint still runs the TD-222 scale-up gate.",
+		ID: "scale_deployment", Tier: TierB,
+		Description: "Scale a Deployment. Tier B (LAW-6 二, decision #783: undone within a minute by scaling back; the record keeps the replicas before). Increasing replicas of the Deployment named daemon is tier X (D10) and cannot be requested; the direct endpoint still runs the TD-222 scale-up gate.",
 		Method:      "POST", Pattern: "/api/v1/cluster/workloads/scale",
 		Params: []Param{
 			{Name: "namespace", Type: "string", Required: true, In: "body"},
@@ -363,8 +363,8 @@ var catalog = []Action{
 		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
 	},
 	{
-		ID: "trigger_cnpg_backup", Tier: TierC,
-		Description: "Create an on-demand CNPG backup. Tier C.",
+		ID: "trigger_cnpg_backup", Tier: TierB,
+		Description: "Create an on-demand CNPG backup. Tier B (LAW-6 二, decision #783: it only adds a backup).",
 		Method:      "POST", Pattern: "/api/v1/cluster/postgres/backup",
 		Params: []Param{},
 	},
@@ -375,8 +375,8 @@ var catalog = []Action{
 		Params: []Param{},
 	},
 	{
-		ID: "trigger_data_clone", Tier: TierC,
-		Description: "Clone bifrost_prod into a non-prod database. Tier C.",
+		ID: "trigger_data_clone", Tier: TierB,
+		Description: "Clone bifrost_prod into a non-prod database. Tier B, as the clone schedule (LAW-6 七 ③, decision #783); a PROD database is never a target.",
 		Method:      "POST", Pattern: "/api/v1/cluster/data-clone",
 		Params: []Param{
 			{Name: "source", Type: "string", Required: true, In: "body"},
@@ -448,8 +448,8 @@ var catalog = []Action{
 		Params: []Param{},
 	},
 	{
-		ID: "ensure_bifrost_namespaces", Tier: TierC,
-		Description: "Create the named namespaces that do not exist yet; existing ones are left as they are. names is required and every name must be listed under bifrost_namespaces in this platform's config (bifrost-trade-infra k8s/overlays/platform-*/config/clusters.yaml), which also carries legacy names nobody uses. Tier C: the Owner approves the card on the Console and the platform runs it, because the execution card may not create a Namespace (2026-11-16, the bus's own namespace).",
+		ID: "ensure_bifrost_namespaces", Tier: TierB,
+		Description: "Create the named namespaces that do not exist yet; existing ones are left as they are. names is required and every name must be listed under bifrost_namespaces in this platform's config (bifrost-trade-infra k8s/overlays/platform-*/config/clusters.yaml), which also carries legacy names nobody uses. Tier B (LAW-6 二, decision #783: it only adds a declared namespace, deleted back to undo); the platform runs it, because the execution card may not create a Namespace.",
 		Method:      "POST", Pattern: "/api/v1/cluster/namespaces/ensure-bifrost",
 		Params: []Param{{Name: "names", Type: "string[]", Required: true, In: "body"}},
 	},

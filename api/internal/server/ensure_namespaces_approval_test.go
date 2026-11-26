@@ -3,7 +3,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -14,15 +13,17 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
 // 2026-11-16, card #585: the Owner approved ensure_bifrost_namespaces and it
-// failed at once with "no executor". This walks the path a card takes after
-// approval (create → approve → registered executor → guarded handler) against
-// a fake cluster and checks that the missing namespace exists afterwards.
+// failed at once with "no executor". Decision 2026-11-25 #783 (wall:116) made
+// it tier B: a card is refused ("call directly") and the registered executor
+// runs it. This checks both against a fake cluster: the missing namespace
+// exists afterwards and nothing else is created.
 func TestApprovedEnsureBifrostNamespacesCreatesTheNamespace(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	if _, err := clientset.CoreV1().Namespaces().Create(t.Context(), nsObj("data"), metav1.CreateOptions{}); err != nil {
@@ -38,28 +39,11 @@ func TestApprovedEnsureBifrostNamespacesCreatesTheNamespace(t *testing.T) {
 
 	h := serveApprovals(approvals.New(filepath.Join(t.TempDir(), "approvals"), nil))
 	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"ensure_bifrost_namespaces","reason":"bus namespace","params":{"names":["bifrost-bus"]}}`)
-	if created.Code != http.StatusCreated {
-		t.Fatalf("create = %d %s", created.Code, created.Body.String())
+	if created.Code != http.StatusBadRequest || !strings.Contains(created.Body.String(), "call directly") {
+		t.Fatalf("create = %d %s, want call directly", created.Code, created.Body.String())
 	}
-	var row struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(created.Body.Bytes(), &row); err != nil || row.ID == "" {
-		t.Fatalf("created id: %v %s", err, created.Body.String())
-	}
-	var opened struct {
-		ApprovalLine string `json:"approval_line"`
-		ParamsHash   string `json:"params_hash"`
-	}
-	got := doApproval(h, http.MethodGet, "/approvals/"+row.ID, "")
-	if err := json.Unmarshal(got.Body.Bytes(), &opened); err != nil || opened.ApprovalLine == "" {
-		t.Fatalf("get = %d %s", got.Code, got.Body.String())
-	}
-	body, _ := json.Marshal(map[string]any{"channel": "console", "approval_line": opened.ApprovalLine, "params_hash": opened.ParamsHash})
-	approved := doApproval(h, http.MethodPost, "/approvals/"+row.ID+"/approve", string(body))
-	text := approved.Body.String()
-	if approved.Code != http.StatusOK || !strings.Contains(text, `"status":"executed"`) || strings.Contains(text, "no executor") {
-		t.Fatalf("approve = %d %s", approved.Code, text)
+	if _, err := actions.Execute(t.Context(), "ensure_bifrost_namespaces", map[string]any{"names": []any{"bifrost-bus"}}); err != nil {
+		t.Fatalf("execute: %v", err)
 	}
 	if _, err := clientset.CoreV1().Namespaces().Get(t.Context(), "bifrost-bus", metav1.GetOptions{}); err != nil {
 		t.Fatalf("bifrost-bus not created after approval: %v", err)

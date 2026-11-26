@@ -384,14 +384,14 @@ func TestTransientRefusalKeepsTheApproval(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	calls := 0
 	refuse := true
-	actions.RegisterExecutor("trigger_cnpg_backup", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_maintenance", func(context.Context, map[string]any) (any, error) {
 		calls++
 		if refuse {
 			return nil, actions.Transient("REFUSED: release window held by someone else (who=x what=bifrost-trade-core)")
 		}
 		return map[string]any{"ok": true}, nil
 	})
-	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
+	c := svc.create(context.Background(), "s", "ib_maintenance", "backup", "", nil)
 	out := svc.approve(context.Background(), c.Approval.ID, "chat")
 	if out.Status != http.StatusAccepted || out.Body["status"] != StatusApproved || out.Body["last_refusal"] == "" {
 		t.Fatalf("approve during a held window = %d %v", out.Status, out.Body)
@@ -428,10 +428,10 @@ func TestTransientRefusalKeepsTheApproval(t *testing.T) {
 
 func TestApprovedExpiresAtTheExecutionDeadline(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
-	actions.RegisterExecutor("trigger_cnpg_backup", func(context.Context, map[string]any) (any, error) {
+	actions.RegisterExecutor("ib_maintenance", func(context.Context, map[string]any) (any, error) {
 		return nil, actions.Transient("REFUSED: no release window for x")
 	})
-	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
+	c := svc.create(context.Background(), "s", "ib_maintenance", "backup", "", nil)
 	svc.approve(context.Background(), c.Approval.ID, "chat")
 	got, _ := svc.get(c.Approval.ID)
 	after := got.Execution.Deadline.Add(time.Second)
@@ -484,7 +484,7 @@ func TestTierDChatApprovalIsRefused(t *testing.T) {
 	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	ok := func(context.Context, map[string]any) (any, error) { return map[string]any{"ok": true}, nil }
 	actions.RegisterExecutor("repair_cnpg_wal_store", ok)
-	actions.RegisterExecutor("trigger_cnpg_backup", ok)
+	actions.RegisterExecutor("ib_maintenance", ok)
 
 	d := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
 	out := svc.approveWith(context.Background(), d.Approval.ID, withLine(d.Approval, approveInput{Channel: "chat"}))
@@ -511,7 +511,7 @@ func TestTierDChatApprovalIsRefused(t *testing.T) {
 		t.Fatalf("tier D over phone = %d %v", out.Status, out.Body)
 	}
 
-	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
+	c := svc.create(context.Background(), "s", "ib_maintenance", "backup", "", nil)
 	if out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "chat"})); out.Body["status"] != StatusExecuted {
 		t.Fatalf("tier C over chat = %d %v", out.Status, out.Body)
 	}

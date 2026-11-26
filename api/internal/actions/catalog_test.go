@@ -53,8 +53,10 @@ func TestScaleTierDoesNotWeakenDaemonScaleUp(t *testing.T) {
 	if got := ScaleTier("daemon", 0, 0, false); got != TierC {
 		t.Fatalf("scale to zero with unknown current = %s, want C", got)
 	}
-	if got := ScaleTier("api", 3, 1, true); got != TierC {
-		t.Fatalf("non-daemon = %s, want C", got)
+	// Decision 2026-11-25 #783 (wall:106): scaling anything but daemon is
+	// undone within a minute, so it is tier B.
+	if got := ScaleTier("api", 3, 1, true); got != TierB {
+		t.Fatalf("non-daemon = %s, want B", got)
 	}
 }
 
@@ -186,5 +188,21 @@ func TestEffectMarksOnlyTrialsAsNone(t *testing.T) {
 		if v.Effect != want {
 			t.Fatalf("%s effect = %q, want %q", a.ID, v.Effect, want)
 		}
+	}
+}
+
+// Decision 2026-11-25 #783 (wall:110, wall:112, wall:116; LAW-6 二): an
+// on-demand backup only adds one, a data clone matches the clone schedule
+// (already B), and ensuring declared namespaces only adds them. They are
+// tier B; moving them is a change of the referee and needs the Owner.
+func TestUndoableActionsFromDecision783AreTierB(t *testing.T) {
+	for _, id := range []string{"trigger_cnpg_backup", "trigger_data_clone", "ensure_bifrost_namespaces"} {
+		if a, ok := ByID(id); !ok || a.Tier != TierB {
+			t.Errorf("%s = %+v %v, want tier B", id, a.Tier, ok)
+		}
+	}
+	// Positive control: an action #783 does not cover stays where it was.
+	if a, _ := ByID("repair_cnpg_wal_store"); a.Tier != TierD {
+		t.Errorf("repair_cnpg_wal_store = %s, want D", a.Tier)
 	}
 }

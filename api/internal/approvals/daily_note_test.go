@@ -27,13 +27,13 @@ func TestADailyCardTellsItsRequesterItShouldNotReachTheOwner(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &out)
 		return out
 	}
-	daily := create(`{"action":"trigger_cnpg_backup","reason":"backup"}`)
+	daily := create(`{"action":"ib_maintenance","reason":"backup"}`)
 	if daily["track"] != TrackDaily || daily["to_owner"] != DailyCardNote {
 		t.Fatalf("daily card answer = %v", daily)
 	}
 	// Positive control for the case above: the same action claimed as one
 	// of the six carries no note.
-	six := create(`{"action":"trigger_cnpg_backup","reason":"backup","owner_class":"H3"}`)
+	six := create(`{"action":"ib_maintenance","reason":"backup","owner_class":"H3"}`)
 	if six["owner_class"] != "H3" || six["to_owner"] != "" {
 		t.Fatalf("six-class answer = %v", six)
 	}

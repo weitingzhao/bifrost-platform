@@ -14,7 +14,7 @@ func TestWriteAuditAnnouncesTheCard(t *testing.T) {
 	s := New(filepath.Join(t.TempDir(), "approvals"), nil)
 	var got []Transition
 	s.Announce = func(ts []Transition) { got = append(got, ts...) }
-	res := s.create(context.Background(), "s", "ensure_bifrost_namespaces", "why", "how", map[string]any{"names": []any{"bifrost-bus"}})
+	res := s.create(context.Background(), "s", "ib_maintenance", "why", "how", nil)
 	if res.Approval.ID == "" || res.Approval.Number == 0 {
 		t.Fatalf("create: %d %v", res.Status, res.Body)
 	}
@@ -25,7 +25,7 @@ func TestWriteAuditAnnouncesTheCard(t *testing.T) {
 			last = tr
 		}
 	}
-	want := Transition{AuditAction: "approval.reject", ID: res.Approval.ID, Action: "ensure_bifrost_namespaces", Status: StatusRejected, Number: res.Approval.Number}
+	want := Transition{AuditAction: "approval.reject", ID: res.Approval.ID, Action: "ib_maintenance", Status: StatusRejected, Number: res.Approval.Number}
 	if last != want {
 		t.Fatalf("announced %+v, want %+v (all: %+v)", last, want, got)
 	}
