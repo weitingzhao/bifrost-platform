@@ -40,10 +40,10 @@ type Subscription struct {
 	ID    string   `yaml:"id"`
 	On    []string `yaml:"on"`
 	Match string   `yaml:"match"`
-	// Except: an event whose subject holds it is not this row's, though it
-	// matches the rest (2026-11-19, LAW-12: a line's own alerts wake that
-	// line, not the duty row that hears every alert).
-	Except    string            `yaml:"except"`
+	// Except: an event whose subject holds any of these is not this row's,
+	// though it matches the rest (2026-11-19, LAW-12: a line's own alerts wake
+	// that line, not the duty row that hears every alert). One value or a list.
+	Except    Substrings        `yaml:"except"`
 	Change    string            `yaml:"change"`
 	Deliver   string            `yaml:"deliver"`
 	To        string            `yaml:"to"`
@@ -359,4 +359,36 @@ func TaskResults(detail string) (task string, names []string, ok bool) {
 		names = append(names, n)
 	}
 	return m[1], names, true
+}
+
+// Substrings is a row field written as one string or a list of them
+// (2026-11-26: the duty row needed a second exception beside ComputePain).
+type Substrings []string
+
+// UnmarshalYAML takes a scalar as a one-item list.
+func (s *Substrings) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		if n.Value == "" {
+			*s = nil
+		} else {
+			*s = Substrings{n.Value}
+		}
+		return nil
+	}
+	var list []string
+	if err := n.Decode(&list); err != nil {
+		return err
+	}
+	*s = list
+	return nil
+}
+
+// In reports whether text holds any of them.
+func (s Substrings) In(text string) bool {
+	for _, sub := range s {
+		if sub != "" && strings.Contains(text, sub) {
+			return true
+		}
+	}
+	return false
 }

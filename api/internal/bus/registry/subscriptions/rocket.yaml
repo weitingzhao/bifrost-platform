@@ -153,7 +153,10 @@ subscriptions:
     on: [alert.rule.fired]
     # LAW-12's pain crossings wake the compute line alone (row below); the
     # duty seat sees them on the Bus page's stream (compute, 2026-11-19).
-    except: ComputePain
+    # The IB gateway's second path is left down on purpose (决定 2026-11-12):
+    # its alert keeps the Owner page's notice but asks no one for a verdict
+    # (metrics, 2026-11-26). Take it out when the second path is to be fixed.
+    except: [ComputePain, BifrostIBGatewaySecondaryDisconnected]
     change: firing
     deliver: wake
     to: thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a

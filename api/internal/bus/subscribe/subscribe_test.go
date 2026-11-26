@@ -402,7 +402,12 @@ func TestPainAlertsWakeComputeAloneAndGuestLoadNoOne(t *testing.T) {
 		{"ComputePainDbDiskFlush", false, true},
 		{"ComputePainProdThrottle", false, true},
 		{"ComputePainDbGuestLoad", false, false},
-		{"KubePodNotReady", true, false}, // positive control: other alerts still reach duty
+		// 2026-11-26 (metrics): the second IB path is down on purpose; its
+		// alert fired every day and asked the duty seat for a verdict no one
+		// needed (Foundation answered one, ev-220105).
+		{"BifrostIBGatewaySecondaryDisconnected", false, false},
+		{"BifrostIBGatewayDisconnected", true, false}, // positive control: the primary path still reaches duty
+		{"KubePodNotReady", true, false},              // positive control: other alerts still reach duty
 	} {
 		if got := Matches(duty, fired(c.alert)); got != c.duty {
 			t.Errorf("%s to duty: %v, want %v", c.alert, got, c.duty)
