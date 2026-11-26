@@ -9,9 +9,10 @@ import (
 )
 
 // The kinds of card the runtime asks, as the card-auto-answer rule tells
-// them apart, and the option of each that changes nothing (TD-393, the Owner
-// 2026-10-20 「STG 上所有种类的运行时卡都归规则管；给不出推荐或规则和 AI 评估不一致
-// 时，STG 上选不改变任何东西的那项」):
+// them apart, and the option of each that changes nothing (TD-393, 决定
+// 2026-10-20: on STG every kind of runtime card is the rule's; with no
+// recommendation, or when the rule and the AI assessment disagree, STG takes
+// the option that changes nothing):
 //   - blocked, a blocked task's card: b, "Do not do this task";
 //   - plan_question, a planner's question: the option it recommends, which
 //     the work goes on with meanwhile (nothing reads the answer, and a

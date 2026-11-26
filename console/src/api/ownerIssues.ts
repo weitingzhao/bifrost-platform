@@ -1,7 +1,7 @@
 import { viewerRead } from '@/api/approvals'
 /**
- * GET /api/v1/agentrt/owner-issues — where the Owner's complaints, pains and needs go (planstore ownerissue.go; Owner
- * 2026-11-25: 「需要有一个地方放用户的吐槽，痛点，需求就应该放在这里」): each issue drawn from what he said, how often,
+ * GET /api/v1/agentrt/owner-issues — where the Owner's complaints, pains and needs go (planstore ownerissue.go; LAW-1
+ * 七、八): each issue drawn from what he said, how often,
  * where it goes, and — once a law answers it — whether he said it again after the law. Read-only.
  */
 export type OwnerIssue = {
