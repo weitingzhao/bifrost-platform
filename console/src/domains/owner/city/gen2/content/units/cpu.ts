@@ -65,7 +65,7 @@ export const CPU_UNIT: UnitSpec = {
     { id: 'clock', label: 'Clock, against its top', from: ['freq', 'freq.max'], how: 'average', row: 'core.freq' },
     { id: 'temp', label: 'Chip temperature', from: ['temp'], how: 'maximum', row: 'sensor.temp' },
   ],
-  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  // When each stage was confirmed, and the issue it answers (ISSUE-9): kept as data (confirmed.json), not in the source.
   confirmed: CONFIRMED.cpu,
 }
 

@@ -61,7 +61,7 @@ export const MEMORY_UNIT: UnitSpec = {
     { detail: 'compressed', thing: 'IN USE BY KIND on the console: compressed', shows: 'The middle amber: packed tighter to make room. The lightest is programs and the rest of what is in use.', where: 'memory console' },
     { detail: 'available', thing: 'IN USE on the console desk', shows: 'How full the freezers are with goods in use, as a share: the same lit folds as the CPU console, the percent on its plate.', where: 'memory console' },
   ],
-  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  // When each stage was confirmed, and the issue it answers (ISSUE-9): kept as data (confirmed.json), not in the source.
   confirmed: CONFIRMED.memory,
 }
 

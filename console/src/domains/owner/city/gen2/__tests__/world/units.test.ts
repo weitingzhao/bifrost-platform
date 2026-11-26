@@ -12,11 +12,11 @@ describe('the unit process', () => {
   })
   it('one stage is open at a time: the first not confirmed; later ones wait', () => {
     expect(stagesOf(base).map(s => s.state)).toEqual(['open', 'waiting', 'waiting', 'waiting', 'waiting'])
-    const one = { ...base, chosen: ['a'], confirmed: { details: { on: '2026-11-19', words: 'ok' } } }
+    const one = { ...base, chosen: ['a'], confirmed: { details: { on: '2026-11-19', words: 'ISSUE-9' } } }
     expect(stagesOf(one).map(s => s.state)).toEqual(['confirmed', 'open', 'waiting', 'waiting', 'waiting'])
   })
   it('a stage cannot be confirmed over an earlier one', () => {
-    expect(unitRulesBroken({ ...base, confirmed: { inside: { on: '2026-11-19', words: 'ok' } } }).join()).toMatch(/before an earlier stage/)
+    expect(unitRulesBroken({ ...base, confirmed: { inside: { on: '2026-11-19', words: 'ISSUE-9' } } }).join()).toMatch(/before an earlier stage/)
   })
   it('the room places every chosen detail, and nothing that is not chosen', () => {
     const u = { ...base, chosen: ['a'], inside: [] }

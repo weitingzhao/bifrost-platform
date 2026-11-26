@@ -67,7 +67,7 @@ export const DISK_UNIT: UnitSpec = {
     { detail: 'used', thing: 'USED on the console desk', shows: 'How full all the volumes are together, as a share: the same lit folds, the percent on its plate.', where: 'disk console' },
     { detail: 'busy', thing: 'BUSY on the console', shows: 'The drives’ average busy, on the standard instrument.', where: 'disk console' },
   ],
-  // When the Owner confirmed each stage, in his words: a record, kept as data (confirmed.json), not in the source.
+  // When each stage was confirmed, and the issue it answers (ISSUE-9): kept as data (confirmed.json), not in the source.
   confirmed: CONFIRMED.disk,
 }
 
