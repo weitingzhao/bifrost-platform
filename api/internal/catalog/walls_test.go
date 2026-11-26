@@ -74,3 +74,21 @@ func TestWallsAreFoundByStructureAndJudgedByTheirDeclaration(t *testing.T) {
 		t.Errorf("an unchanged commit is not read again: %+v", w3.WallCounts)
 	}
 }
+
+// STG 11-26 02:16Z: before any line declared itself the scan counted 38
+// policies and dozens of walls from prose and old references. A declaration
+// opens a comment line and its id has a dot. The control: the real form on
+// a comment line is read.
+func TestProseIsNotADeclaration(t *testing.T) {
+	lines := []string{
+		`// policy: delivery runs only on the platform's own images`,
+		`// round-3 list, wall: 106 (scale_deployment)`,
+		`msg := "policy: allowRepos must name a repository"`,
+		`x := 1 // see wall: preflight.shared for why`,
+		`  # wall: tekton.freeze law: LAW-9 三 guards: a run during a freeze revoke: never`,
+	}
+	got := declsIn("f", lines)
+	if len(got) != 1 || got[0].ID != "tekton.freeze" || got[0].Law != "LAW-9" || got[0].Line != 5 {
+		t.Fatalf("%+v", got)
+	}
+}

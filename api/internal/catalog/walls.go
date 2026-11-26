@@ -38,7 +38,12 @@ const keptWallsPrefix = "walls-"
 const WallLookback = 8
 
 var (
-	declRe       = regexp.MustCompile(`\b(wall|policy):\s*([A-Za-z0-9_.:/-]+)`)
+	// A declaration opens a comment line (or, in an auto-mode rule, stands in
+	// its text) and its id has a dot ("preflight.shared-worktree-add"): STG
+	// 11-26 02:16Z counted 38 "policies" and dozens of walls out of prose
+	// ("policy: delivery") and old references ("wall: 106").
+	declRe       = regexp.MustCompile(`(?:^\s*(?://+|#+|/\*+|\*+|--)\s*|^\s*|\s)(wall|policy):\s*([A-Za-z0-9_-]+\.[A-Za-z0-9_.:/-]*[A-Za-z0-9_-])`)
+	commentRe    = regexp.MustCompile(`^\s*(?://|#|/\*|\*|--)`)
 	declLawRe    = regexp.MustCompile(`\blaw:\s*((?:LAW|CORE)-\d+)`)
 	declDupRe    = regexp.MustCompile(`\bdup-of:\s*([A-Za-z0-9_.:/-]+)`)
 	preflightRe  = regexp.MustCompile(`deny:\s*true,\s*kind:\s*'([^']+)'`)
@@ -115,7 +120,8 @@ func (s *Scanner) wallRoots(repo string) []string {
 }
 
 func wallFile(f string) bool {
-	if strings.Contains(f, "node_modules/") || strings.Contains(f, "/testdata/") || strings.Contains(f, ".generated.") {
+	if strings.Contains(f, "node_modules/") || strings.Contains(f, "/testdata/") || strings.Contains(f, ".generated.") ||
+		strings.Contains(f, "/fixtures/") || strings.Contains(f, "__tests__/") {
 		return false
 	}
 	switch path.Ext(f) {
@@ -125,10 +131,16 @@ func wallFile(f string) bool {
 	return false
 }
 
-// declsIn reads the declarations of one file's lines.
-func declsIn(file string, lines []string) []WallDecl {
+// declsIn reads the declarations of one file's comment lines (rule says
+// the lines are rule texts, read whole).
+func declsIn(file string, lines []string) []WallDecl { return readDecls(file, lines, false) }
+
+func readDecls(file string, lines []string, rule bool) []WallDecl {
 	var out []WallDecl
 	for i, l := range lines {
+		if !rule && !commentRe.MatchString(l) {
+			continue
+		}
 		for _, m := range declRe.FindAllStringSubmatchIndex(l, -1) {
 			d := WallDecl{Kind: l[m[2]:m[3]], ID: strings.TrimRight(l[m[4]:m[5]], ".,;"), File: file, Line: i + 1}
 			rest := l[m[1]:]
@@ -173,7 +185,7 @@ func pointsIn(file string, raw []byte, lines []string) []WallPoint {
 					continue
 				}
 				p := WallPoint{Kind: "auto-mode", Name: list + "[" + itoa(i) + "]", File: file}
-				if d := declsIn(file, []string{text}); len(d) > 0 && d[0].Kind == "wall" {
+				if d := readDecls(file, []string{text}, true); len(d) > 0 && d[0].Kind == "wall" {
 					p.Decl = d[0].ID
 				}
 				out = append(out, p)
