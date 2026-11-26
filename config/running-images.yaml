@@ -9,6 +9,14 @@ lanes:
         deployments:
           - namespace: research
             name: research-api
+          # The research image's tiers as they run (walls review [71], 决定
+          # 2026-11-25 #783: the spread is read here, not ratcheted).
+          - namespace: research
+            name: research-mcp
+          - namespace: research
+            name: dagster-webserver
+          - namespace: research
+            name: dagster-daemon
   - lane: market-data
     envs:
       - env: prod

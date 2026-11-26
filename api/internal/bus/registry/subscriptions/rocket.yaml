@@ -59,6 +59,17 @@ subscriptions:
     params: {detail: "task-result:land/refusal"}
     guarantee: durable
     by: dispatcher
+  # The landing gave a commit the Change-Id it lacked and landed it under a new
+  # id (walls review [74], 决定 2026-11-25 #783); the pusher is told which.
+  - id: land-trailers-to-pusher
+    on: [ci.run.finished]
+    match: "land-"
+    deliver: wake
+    to: commit.session
+    repos: [bifrost-platform, bifrost-trade-infra]
+    params: {detail: "task-result:land/trailers,commit,branch", require: trailers}
+    guarantee: durable
+    by: dispatcher
   # 2026-11-17 (the coordinator's tripwire, CI line): a landing that touched
   # the paths deciding whether the release loop may ship to PROD (the land
   # task's result tripwire) wakes the CI line and the coordinator with the
