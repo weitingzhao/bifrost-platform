@@ -225,7 +225,14 @@ func describeApply(ctx context.Context, planID string) (string, string) {
 	}
 	line := fmt.Sprintf("%s · %d objects", where, sum.Objects)
 	if sum.Migrated > 0 {
-		warning := fmt.Sprintf(" · takes field ownership of %d cicd objects from kubectl client-side apply", sum.Migrated)
+		// The plan's own namespaces, not a fixed one: the apply pipeline takes
+		// over kubectl's field managers in monitoring too
+		// (#788, #789 read "cicd objects" while they were monitoring's).
+		in := ""
+		if len(sum.Namespaces) > 0 {
+			in = " in " + strings.Join(sum.Namespaces, ", ")
+		}
+		warning := fmt.Sprintf(" · takes field ownership of %d objects%s from kubectl client-side apply", sum.Migrated, in)
 		line = clip(line, summaryMax-len(warning)-len("…")) + warning
 	}
 	return env, line
